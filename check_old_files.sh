@@ -21,7 +21,7 @@ if [ "$2" ]; then
     found=$(find $1 -mmin +$2 -type f -not -name '.*' | wc -l)
     if [[ $found -gt 0 ]]; then
         echo "WARNING $found file found older than $2 minute"
-        exit 2
+        exit 1
     fi
 fi
 
