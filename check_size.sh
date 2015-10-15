@@ -7,6 +7,7 @@
 
 if ! [ "$1" ]; then
     echo "Usage: $0 path [warning_mib] [critical_mib]" >&2
+    exit 3
 fi
 
 msize=$(du -sm $1 | cut -f 1)

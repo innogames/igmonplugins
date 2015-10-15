@@ -7,6 +7,7 @@
 
 if ! [ "$1" ]; then
     echo "Usage: $0 path [warning_minute] [critical_minute]" >&2
+    exit 3
 fi
 
 if [ "$3" ]; then
