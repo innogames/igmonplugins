@@ -1,0 +1,37 @@
+#!/usr/bin/env python
+
+import os, MySQLdb as mdb
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-w', '--warning', help='Warning limit of seconds behind master', dest='WARN_SEC_BEHIND_MASTER', action='store', type='int', default=60)
+parser.add_option('-c', '--critical', help='Critical limit of seconds behind master', dest='CRIT_SEC_BEHIND_MASTER', action='store', type='int', default=120)
+(opts, args) = parser.parse_args()
+
+CONFIG="/etc/mysql/my.cnf"
+ERR={'CRITICAL':2, 'WARNING':1, 'OK':0}
+
+def get_server_status():
+    db = mdb.connect(user="root", read_default_file=CONFIG)
+    cur = db.cursor(mdb.cursors.DictCursor)
+    cur.execute("SHOW SLAVE STATUS")
+    res = cur.fetchall()
+    cur.close()
+    db.close()
+    return res[0]
+
+def check_server():
+    try:
+        s = get_server_status()
+    except Exception as e:
+        return ['CRITICAL', str(e.args)]
+    msg = "SLAVE IO Running: " + s['Slave_IO_Running'] + ", SLAVE SQL Running: " + s['Slave_SQL_Running'] + ", " + str(s['Seconds_Behind_Master']) + " secs behind Master"
+    if s['Slave_IO_Running'] != "Yes" or s['Slave_SQL_Running'] != "Yes" or s['Seconds_Behind_Master'] > opts.CRIT_SEC_BEHIND_MASTER:
+        return['CRITICAL', msg]
+    if s['Seconds_Behind_Master'] > opts.WARN_SEC_BEHIND_MASTER:
+        return['WARNING', msg]
+    return['OK', msg]
+
+status = check_server()
+print ": ".join(status)
+exit(ERR[status[0]])

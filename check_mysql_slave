@@ -1,0 +1,31 @@
+#!/usr/bin/env python
+
+import os, MySQLdb as mdb
+
+CONFIG="/etc/mysql/my.cnf"
+ERR={'CRITICAL':2, 'WARNING':1, 'OK':0}
+
+def get_server_status():
+    db = mdb.connect(user="root", read_default_file=CONFIG)
+    cur = db.cursor(mdb.cursors.DictCursor)
+    cur.execute("SHOW SLAVE STATUS")
+    res = cur.fetchall()
+    cur.close()
+    db.close()
+    return res[0]
+
+def check_server():
+    try:
+        s = get_server_status()
+    except Exception as e:
+        return ['CRITICAL', str(e.args)]
+
+    msg = "SLAVE IO Running: " + s['Slave_IO_Running'] + ", SLAVE SQL Running: " + s['Slave_SQL_Running']
+    if s['Slave_IO_Running'] != "Yes" or s['Slave_SQL_Running'] != "Yes":
+        return['CRITICAL', msg]
+    else:
+        return['OK', msg]
+
+status = check_server()
+print ": ".join(status)
+exit(ERR[status[0]])
