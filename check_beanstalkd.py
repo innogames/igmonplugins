@@ -38,7 +38,7 @@ checks = (
         ('current-tubes',          None,      None,      10000,      100000),
         ('current-waiting',        None,         1,          8,        None),
         ('current-workers',           0,         3,         10,          20),
-        ('job-timeouts',           None,      None,          1,        None),
+        ('job-timeouts',           None,      None,        100,        None),
     )
 
 def run_checks():
