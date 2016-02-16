@@ -44,20 +44,20 @@ def main():
         sys.exit(3)
 
 checks = (
-        #   Metric              Minimum     Minimum     Maximum     Maximum
-        #   Name                Critical    Warning     Warning     Critical
-        ('current-connections',    None,      None,        100,       10000),
-        ('current-jobs-buried',    None,      None,          1,         100),
-        ('current-jobs-delayed',   None,      None,         10,        1000),
-        ('current-jobs-reserved',  None,      None,         10,         100),
-        ('current-jobs-ready',     None,      None,     100000,     1000000),
-        ('current-jobs-urgent',    None,      None,          1,          10),
-        ('current-producers',      None,      None,         10,        1000),
-        ('current-tubes',          None,      None,      10000,      100000),
-        ('current-waiting',        None,         1,          8,        None),
-        ('current-workers',           0,         3,         10,          20),
-        ('job-timeouts',           None,      None,        100,        None),
-    )
+    #   Metric              Minimum     Minimum     Maximum     Maximum
+    #   Name                Critical    Warning     Warning     Critical
+    ('current-connections',    None,      None,        100,       10000),
+    ('current-jobs-buried',    None,      None,          1,         100),
+    ('current-jobs-delayed',   None,      None,         10,        1000),
+    ('current-jobs-reserved',  None,      None,         10,         100),
+    ('current-jobs-ready',     None,      None,     100000,     1000000),
+    ('current-jobs-urgent',    None,      None,          1,          10),
+    ('current-producers',      None,      None,         10,        1000),
+    ('current-tubes',          None,      None,      10000,      100000),
+    ('current-waiting',        None,         1,          8,        None),
+    ('current-workers',           0,         3,         10,          20),
+    ('job-timeouts',           None,      None,        100,        None),
+)
 
 def run_checks():
     """The main part of the program
@@ -93,20 +93,20 @@ def run_checks():
 
             if min_crit is not None and value <= min_crit:
                 criticals.append('{0} is {1} less than {2}'.format(
-                        metric, value, min_crit,
-                    ))
+                    metric, value, min_crit,
+                ))
             elif max_crit is not None and value >= max_crit:
                 criticals.append('{0} is {1} greater than {2}'.format(
-                        metric, value, max_crit,
-                    ))
+                    metric, value, max_crit,
+                ))
             elif min_warn is not None and value <= min_warn:
                 warnings.append('{0} is {1} less than {2}'.format(
-                        metric, value, min_warn,
-                    ))
+                    metric, value, min_warn,
+                ))
             elif max_warn is not None and value >= max_warn:
                 warnings.append('{0} is {1} greater than {2}'.format(
-                        metric, value, max_warn,
-                    ))
+                    metric, value, max_warn,
+                ))
         else:
             return 'UNKNOWN', 'Metric {0} couldn\'t found.'.format(metric)
 
