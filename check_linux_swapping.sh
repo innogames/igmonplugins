@@ -26,7 +26,7 @@
 # THE SOFTWARE.
 #
 
-statefile="/var/lib/nagios3/check_swapping.db"
+statefile="/tmp/check_linux_swapping.db"
 limit=2500 # Blocks written to swap
 out_new=0
 out_old=0
