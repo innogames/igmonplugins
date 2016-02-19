@@ -33,14 +33,14 @@ out_old=0
 
 [[ -r $statefile ]] && {
     out_old=$(<$statefile) || {
-        echo "CRITICAL - Error while reading '$statefile'!"
-        exit 2
+        echo "UNKNOWN - Error while reading '$statefile'!"
+        exit 3
     }
 }
 
 [[ -r /proc/vmstat ]] || {
-    echo "CRITICAL - Error - cant read '/proc/vmstat'!"
-    exit 2
+    echo "UNKNOWN - Error - cant read '/proc/vmstat'!"
+    exit 3
 }
 
 line=$( grep pswpout /proc/vmstat )
@@ -49,8 +49,8 @@ out_new=${line#* }
 [[ $out_old -eq 0 ]] && out_old=$out_new
 
 echo "$out_new" > $statefile || {
-	echo "CRITICAL - Error - cant write to '$statefile'!"
-	exit 2
+	echo "UNKNOWN - Error - cant write to '$statefile'!"
+	exit 3
 }
 
 [[ $out_new -gt $(($out_old + $limit)) ]] && {
