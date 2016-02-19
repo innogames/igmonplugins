@@ -27,7 +27,7 @@
 #
 
 statefile="/var/lib/nagios3/check_swapping.db"
-limit=2500 #// Blocks writen to swap
+limit=2500 # Blocks written to swap
 out_new=0
 out_old=0
 
@@ -54,7 +54,7 @@ echo "$out_new" > $statefile || {
 }
 
 [[ $out_new -gt $(($out_old + $limit)) ]] && {
-    echo "WARNING - System is swapping ($(( $out_new - $out_old )) blocks writen to swap since last check) !"
+    echo "WARNING - System is swapping ($(( $out_new - $out_old )) blocks written to swap since last check) !"
     exit 1
 }
 
