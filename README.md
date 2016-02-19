@@ -6,6 +6,14 @@ InnoGames.  We have packages for more complicated checks.  This
 repository is only for standalone simple scripts which don't worth
 having separate packages.  Please don't bloat it.
 
+Style Guide
+-----------
+
+The scripts are named with lower-case underscore notation.  The new
+ones should have the file prefixes.  The checks should be prefixed
+with "check\_".  Not portable ones should include the operating
+system they are working on in their names.
+
 License
 -------
 
