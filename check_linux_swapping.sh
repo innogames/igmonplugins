@@ -31,40 +31,46 @@ limit=2500 # Blocks written to swap
 out_new=0
 out_old=0
 
-[[ -r $statefile ]] && {
-    out_old=$(<$statefile) || {
+if [[ -r $statefile ]]; then
+    out_old=$(<$statefile)
+
+    if [[ $? -ne 0 ]]; then
         echo "UNKNOWN - Error while reading '$statefile'!"
         exit 3
-    }
-}
+    fi
+fi
 
-[[ -r /proc/vmstat ]] || {
+if [[ ! -r /proc/vmstat ]]; then
     echo "UNKNOWN - Error - cant read '/proc/vmstat'!"
     exit 3
-}
+fi
 
-line=$( grep pswpout /proc/vmstat )
+line=$(grep pswpout /proc/vmstat)
 out_new=${line#* }
 
-[[ $out_old -eq 0 ]] && out_old=$out_new
+if [[ $out_old -eq 0 ]]; then
+    out_old=$out_new
+fi
 
-echo "$out_new" > $statefile || {
+echo "$out_new" > $statefile
+
+if [[ $? -ne 0 ]]; then
 	echo "UNKNOWN - Error - cant write to '$statefile'!"
 	exit 3
-}
+fi
 
-[[ $out_new -gt $(($out_old + $limit)) ]] && {
-    echo "WARNING - System is swapping ($(( $out_new - $out_old )) blocks written to swap since last check) !"
+if [[ $out_new -gt $(($out_old + $limit)) ]]; then
+    echo "WARNING - System is swapping ($(($out_new - $out_old)) blocks written to swap since last check)!"
     exit 1
-}
+fi
 
 # Test if /etc/fstab has an entry 'swap' that doesn't start with a '#' (plus spaces)
 # AND test if 'swapon -s' will show more than the table header (<2 lines on error)
-[[ "$( grep -E '^[^# ]+.*swap' /etc/fstab | wc -l )" -gt 0 ]] &&
-[[ "$( swapon -s | wc -l )" -lt 2 ]] && {
+if [[ "$( grep -E '^[^# ]+.*swap' /etc/fstab | wc -l )" -gt 0 ]] &&
+   [[ "$( swapon -s | wc -l )" -lt 2 ]]; then
     echo "WARNING - Swap is disabled. Use 'swapon -a' to enable it!"
     exit 1
-} || {
-    echo "OK - No swap activity"
-    exit 0
-}
+fi
+
+echo "OK - No swap activity"
+exit 0
