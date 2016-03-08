@@ -73,7 +73,7 @@ def get_state(state, msg):
 			num_fds = len(os.listdir( piddir+ '/fd'))
 			with open(os.path.join(piddir + '/limits'), 'r') as f:
 				limits = f.readlines()
-		except OSError:
+		except (OSError, IOError):
 			continue
 
 		soft_limit, hard_limit = _get_fdlimits(limits)
