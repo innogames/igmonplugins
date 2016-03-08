@@ -27,27 +27,37 @@
 
 import os
 import sys
-
-# to be enabled in a better future
-'''import argparse
-parser = argparse.ArgumentParser(description='check all running processes for the nofile limit, will throw a warning if the limit is nearly reached and critical if the limit is reached')
-parser.add_argument('-w','--warning', metavar='warning', type=int, default=90, help="percentage of the limit which may be reached until a warning is thrown.\nIf -w is 99 and the nofile limit is at 1000 the warning will occure if 990 ore more files are opened.")
-args = parser.parse_args()
-
-warning = args.warning
-'''
+import argparse
 
 def main():
+    """The main program"""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            'Check all running processes for the nofile limit, will throw '
+            'a warning if the limit is nearly reached and critical, if '
+            'the limit is reached'
+        ),
+    )
+    parser.add_argument(
+        '-w',
+        '--warning',
+        metavar='warning',
+        type=int,
+        default=60,
+        help=(
+            'Percentage of the limit which may be reached until a warning is '
+            'thrown.  If -w is 99 and the nofile limit is at 1000 the warning '
+            'will occur, if 990 ore more files are opened.'
+        ),
+    )
+    args = parser.parse_args()
+
     if os.getuid() != 0:
         state = 3
         msg = 'I need to be run as root, really'
     else:
-        if len(sys.argv) == 3 and sys.argv[1] == '-w':
-            warning = int(sys.argv[2])
-        else:
-            warning = 60
-
-        state, msg = get_state(warning)
+        state, msg = get_state(args.warning)
 
         if state == 0:
             msg += 'OK'
