@@ -38,9 +38,9 @@ warning = args.warning
 '''
 
 if len(sys.argv) == 3 and sys.argv[1] == '-w':
-	warning = int(sys.argv[2])
+    warning = int(sys.argv[2])
 else:
-	warning = 60
+    warning = 60
 
 state = 3
 msg = ''
@@ -48,64 +48,64 @@ procdir = '/proc'
 
 
 def _get_procname(piddir):
-	# get procname and set to unknown if cmdline is empty or not availabe
-	try:
-		with open(piddir + '/cmdline', 'r') as f:
-			procname = f.readline().split('\x00')[0]
-	except OSError:
-		pass
-	if not procname:
-		procname = 'unknown'
-	return procname
+    # get procname and set to unknown if cmdline is empty or not availabe
+    try:
+        with open(piddir + '/cmdline', 'r') as f:
+            procname = f.readline().split('\x00')[0]
+    except OSError:
+        pass
+    if not procname:
+        procname = 'unknown'
+    return procname
 
 
 def _get_fdlimits(limits):
-	# parse output of /proc/PID/limits to get max open files
-	a,a,a,soft,hard,a = [ line.split() for line in limits if line.startswith('Max open files') ][0]
+    # parse output of /proc/PID/limits to get max open files
+    a,a,a,soft,hard,a = [ line.split() for line in limits if line.startswith('Max open files') ][0]
 
-	return int(soft), int(hard)
+    return int(soft), int(hard)
 
 
 def get_state(state, msg):
-	# comapre softlimits with openfiles for all pids
-	pids = [ pid for pid in os.listdir(procdir) if pid.isdigit() ]
-	for pid in pids:
-		piddir = os.path.join(procdir, pid)
-		try:
-			num_fds = len(os.listdir( piddir+ '/fd'))
-			with open(os.path.join(piddir + '/limits'), 'r') as f:
-				limits = f.readlines()
-		except (OSError, IOError):
-			continue
+    # comapre softlimits with openfiles for all pids
+    pids = [ pid for pid in os.listdir(procdir) if pid.isdigit() ]
+    for pid in pids:
+        piddir = os.path.join(procdir, pid)
+        try:
+            num_fds = len(os.listdir( piddir+ '/fd'))
+            with open(os.path.join(piddir + '/limits'), 'r') as f:
+                limits = f.readlines()
+        except (OSError, IOError):
+            continue
 
-		soft_limit, hard_limit = _get_fdlimits(limits)
+        soft_limit, hard_limit = _get_fdlimits(limits)
 
-		# solt_limit 0 means actually not set (during fork etc)
-		if soft_limit > num_fds or soft_limit == 0:
-			if state not in (1,2):
-				state = 0
+        # solt_limit 0 means actually not set (during fork etc)
+        if soft_limit > num_fds or soft_limit == 0:
+            if state not in (1,2):
+                state = 0
 
-		elif soft_limit <= num_fds:
-			state = 2
-			procname = _get_procname(piddir)
-			msg += 'PID {0} [{1}] reached its soft limit (open: {2}, limit {3})\n'.format(
-				pid,procname, num_fds, soft_limit)
+        elif soft_limit <= num_fds:
+            state = 2
+            procname = _get_procname(piddir)
+            msg += 'PID {0} [{1}] reached its soft limit (open: {2}, limit {3})\n'.format(
+                pid,procname, num_fds, soft_limit)
 
-		elif (soft_limit * warning / 100) <= num_fds:
-			if state != 2:
-				state = 1
-			procname = _get_procname(piddir)
-			msg += 'PID {0} [{1}] nearly reached its soft limit at {2} open fds\n'.format(
-				pid,procname,num_fds)
+        elif (soft_limit * warning / 100) <= num_fds:
+            if state != 2:
+                state = 1
+            procname = _get_procname(piddir)
+            msg += 'PID {0} [{1}] nearly reached its soft limit at {2} open fds\n'.format(
+                pid,procname,num_fds)
 
-	return state, msg
+    return state, msg
 
 
 if os.getuid() != 0:
     state = 3
     msg += 'I need to be run as root, really'
 else:
-	state, msg = get_state(state, msg)
+    state, msg = get_state(state, msg)
 
 if state == 0:
     msg += 'OK'
