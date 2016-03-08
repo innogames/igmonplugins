@@ -25,9 +25,9 @@
 # THE SOFTWARE.
 #
 
-from __future__ import print_function
-import os.path
+import os
 import sys
+
 # to be enabled in a better future
 '''import argparse
 parser = argparse.ArgumentParser(description='check all running processes for the nofile limit, will throw a warning if the limit is nearly reached and critical if the limit is reached')
@@ -36,8 +36,6 @@ args = parser.parse_args()
 
 warning = args.warning
 '''
-
-procdir = '/proc'
 
 def main():
     if os.getuid() != 0:
@@ -63,12 +61,12 @@ def get_state(warning):
     msg = ''
 
     # compare softlimits with openfiles for all pids
-    pids = [pid for pid in os.listdir(procdir) if pid.isdigit()]
+    pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
     for pid in pids:
-        piddir = os.path.join(procdir, pid)
+        piddir = '/proc/' + pid
         try:
             num_fds = len(os.listdir(piddir + '/fd'))
-            with open(os.path.join(piddir + '/limits'), 'r') as limits_file:
+            with open(piddir + '/limits', 'r') as limits_file:
                 limits = limits_file.readlines()
         except (OSError, IOError):
             continue
