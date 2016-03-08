@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 #
-# InnoGames Monitoring Plugins - limitcheck.py
+# InnoGames Monitoring Plugins - check_linux_ulimit.py
+#
+# Currently this script only checks the open file limit.
 #
 # Copyright (c) 2016, InnoGames GmbH
 #
