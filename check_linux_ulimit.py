@@ -2,7 +2,8 @@
 #
 # InnoGames Monitoring Plugins - check_linux_ulimit.py
 #
-# Currently this script only checks the open file limit.
+# This script intended to check user limits on Linux.  It is currently
+# only checking the open file limit.
 #
 # Copyright (c) 2016, InnoGames GmbH
 #
@@ -59,42 +60,51 @@ def main():
         state = ExitCodes.unknown
         msg = 'I need to be run as root, really'
     else:
-        state, msg = get_state(args.warning)
-
-        if state == ExitCodes.ok:
-            msg += 'OK'
+        state, msg = get_state(int(args.warning) / 100)
 
     print(msg)
     sys.exit(state)
 
-def get_state(warning):
+def get_state(warning_ratio):
 
-    state = ExitCodes.unknown
+    assert 0 <= warning_ratio <= 1
+
+    state = None # None is less than everything
     msg = ''
 
-    # compare softlimits with openfiles for all pids
-    pids = [pid for pid in list_proc_db() if pid.isdigit()]
-    for pid in pids:
-        num_fds = len(list_proc_db(pid, 'fd'))
+    for pid in list_proc_db():
+
+        # The are some other files under the proc file system.  If
+        # the directory name is not a digit, it cannot be a process.
+        if not pid.isdigit():
+            continue
+
         soft_limit = get_proc_ulimit(pid, 'Max open files')
 
         # soft_limit 0 means actually not set (during fork etc)
-        if soft_limit > num_fds or soft_limit == 0:
-            if state not in (ExitCodes.warning, ExitCodes.critical):
-                state = ExitCodes.ok
+        if soft_limit == 0:
+            continue
 
-        elif soft_limit <= num_fds:
+        num_fds = len(list_proc_db(pid, 'fd'))
+
+        if num_fds >= soft_limit:
             state = ExitCodes.critical
             msg += 'PID {0} [{1}] reached its soft limit (open: {2}, limit {3})\n'.format(
                 pid, get_proc_name(pid), num_fds, soft_limit
             )
-
-        elif (soft_limit * warning / 100) <= num_fds:
-            if state != ExitCodes.critical:
-                state = ExitCodes.warning
+        elif num_fds >= soft_limit * warning_ratio:
+            state = max(state, ExitCodes.warning)
             msg += 'PID {0} [{1}] nearly reached its soft limit at {2} open fds\n'.format(
                 pid, get_proc_name(pid), num_fds
             )
+        else:
+            state = max(state, ExitCodes.ok)
+
+    if state is None:
+        state = ExitCodes.unknown
+        msg += 'Nothing could be checked'
+    elif state == ExitCodes.ok:
+        msg += 'OK'
 
     return state, msg
 
