@@ -29,6 +29,8 @@ import os
 import sys
 import argparse
 
+from libigmonplugins.common import ExitCodes
+
 def main():
     """The main program"""
 
@@ -54,12 +56,12 @@ def main():
     args = parser.parse_args()
 
     if os.getuid() != 0:
-        state = 3
+        state = ExitCodes.unknown
         msg = 'I need to be run as root, really'
     else:
         state, msg = get_state(args.warning)
 
-        if state == 0:
+        if state == ExitCodes.ok:
             msg += 'OK'
 
     print(msg)
@@ -67,7 +69,7 @@ def main():
 
 def get_state(warning):
 
-    state = 3
+    state = ExitCodes.unknown
     msg = ''
 
     # compare softlimits with openfiles for all pids
@@ -78,18 +80,18 @@ def get_state(warning):
 
         # soft_limit 0 means actually not set (during fork etc)
         if soft_limit > num_fds or soft_limit == 0:
-            if state not in (1, 2):
-                state = 0
+            if state not in (ExitCodes.warning, ExitCodes.critical):
+                state = ExitCodes.ok
 
         elif soft_limit <= num_fds:
-            state = 2
+            state = ExitCodes.critical
             msg += 'PID {0} [{1}] reached its soft limit (open: {2}, limit {3})\n'.format(
                 pid, get_proc_name(pid), num_fds, soft_limit
             )
 
         elif (soft_limit * warning / 100) <= num_fds:
-            if state != 2:
-                state = 1
+            if state != ExitCodes.critical:
+                state = ExitCodes.warning
             msg += 'PID {0} [{1}] nearly reached its soft limit at {2} open fds\n'.format(
                 pid, get_proc_name(pid), num_fds
             )
