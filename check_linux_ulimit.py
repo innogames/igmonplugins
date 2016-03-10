@@ -30,7 +30,7 @@ import os
 import sys
 import argparse
 
-from libigmonplugins.common import ExitCodes
+from libigmonplugins.common import exit, ExitCodes
 
 def main():
     """The main program"""
@@ -57,15 +57,12 @@ def main():
     args = parser.parse_args()
 
     if os.getuid() != 0:
-        state = ExitCodes.unknown
-        msg = 'I need to be run as root, really'
-    else:
-        state, msg = get_state(int(args.warning) / 100)
+        raise Exception('I need to be run as root, really')
 
-    print(msg)
-    sys.exit(state)
+    exit(*get_state(int(args.warning) / 100))
 
 def get_state(warning_ratio):
+    """The main logic of the check"""
 
     assert 0 <= warning_ratio <= 1
 
@@ -99,12 +96,6 @@ def get_state(warning_ratio):
             )
         else:
             state = max(state, ExitCodes.ok)
-
-    if state is None:
-        state = ExitCodes.unknown
-        msg += 'Nothing could be checked'
-    elif state == ExitCodes.ok:
-        msg += 'OK'
 
     return state, msg
 

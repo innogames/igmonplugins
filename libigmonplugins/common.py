@@ -23,8 +23,42 @@
 # THE SOFTWARE.
 #
 
+from __future__ import print_function
+
+import sys
+
+def exit(exit_code=None, message=''):
+    """Exit procedure for the check commands"""
+
+    if exit_code == ExitCodes.ok:
+        status = 'OK'
+    elif exit_code == ExitCodes.warning:
+        status = 'WARNING'
+    elif exit_code == ExitCodes.critical:
+        status = 'CRITICAL'
+    else:
+        status = 'UNKNOWN'
+        exit_code = 3
+
+        # People tend to interpret UNKNOWN status in different ways.
+        # We are including a default message to avoid confusion.  When
+        # there are specific problems, errors, the message should be
+        # set.
+        if not message:
+            message = 'Nothing could be checked'
+
+    print(status, message)
+    sys.exit(exit_code)
+
 class ExitCodes:
+    """Enum for Nagios compatible exit codes
+
+    We are not including a code for unknown in here.  Anything other
+    than those two are considered as unknown.  It is easier to threat
+    unknown as None on Python rather than giving it a number greater
+    than 2, because None is less than all of those.
+    """
+
     ok = 0
     warning = 1
     critical = 2
-    unknown = 3
