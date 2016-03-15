@@ -14,8 +14,9 @@ try:
   for line in f.readlines():
     if 'BACKEND' in line:
       split = line.split(',')
+      name = split[0]
       status = split[17]
-      print split[0] + ' ' + status
+      print name + ' ' + status
       if status != 'UP':
         exit_code = 2
 except:
