@@ -50,7 +50,7 @@ END {
 		filename = ARGV[arg]
 		if (filename in mysqld_section) {
 			if ( debug ) print "Comparing file " filename > "/dev/stderr"
-			out = 1
+			out = system(diffcmd " " filename)
 			if ( out != 0) {
 				exitcode = 1
 				bad_files = bad_files" "filename
