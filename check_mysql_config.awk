@@ -12,6 +12,9 @@ BEGIN {
 		exitcode = 3
 		exit
 	}
+	if ( ENVIRON["DEBUG"] ) {
+		debug = 1
+	}
 	print > outfile
 }
 
@@ -34,20 +37,20 @@ END {
 		if ( /^(#|$)/ ) {
 			# Skip comment lines
 		} else if ($1 in confd_params) {
-			print "Parameter "$1" redefined in: " confd_params[$1] > "/dev/stderr"
+			if ( debug ) print "Parameter "$1" redefined in: " confd_params[$1] > "/dev/stderr"
 		} else {
 			print $0 >> outfile
 		}
 	}
 
-	print "Comparing file " outfile > /dev/stderr
+	if ( debug ) print "Comparing file " outfile > /dev/stderr
 	system(diffcmd " " outfile)
 
 	for (arg=2; arg<ARGC; arg++) {
 		filename = ARGV[arg]
 		if (filename in mysqld_section) {
-			print "Comparing file " filename > "/dev/stderr"
-			out = system(diffcmd " " filename)
+			if ( debug ) print "Comparing file " filename > "/dev/stderr"
+			out = 1
 			if ( out != 0) {
 				exitcode = 1
 				bad_files = bad_files" "filename
