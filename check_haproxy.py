@@ -41,7 +41,11 @@ try:
 
     elif isgoodipv4(split[1].split(':')[0]):
       # If it is an ip - append it to dict of lbstatuses
-     lbstatuses[split[1]] = split[17]
+      lbstatuses[split[1]] = split[17]
+      # if any server under lbpool is down - print warning
+      if split[17] != 'UP':
+        exit_code = 1
+
 
 except:
   print 'Error connecting to haproxy socket %s' % haproxy_socket_path
