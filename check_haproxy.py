@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-import socket, sys
+import socket, sys, argparse
+
+parser = argparse.ArgumentParser(description='Check haproxy lbpool up and running')
+parser.add_argument('-i', '--ignore_warnings', dest='ignore_warnings', action='store_true', default=False, help="Ignore if some hosts under LBpool are down")
+args=parser.parse_args()
 
 haproxy_socket_path = '/tmp/haproxy'
 exit_code = 0
@@ -38,7 +42,8 @@ try:
       lbstatuses[split[1]] = split[17]
       # if any server under lbpool is down - print warning
       if split[17] != 'UP':
-        exit_code = 1
+          if not args.ignore_warnings:
+            exit_code = 1
 
 
 except:
