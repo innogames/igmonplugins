@@ -2,12 +2,6 @@
 
 import socket, sys
 
-def isgoodipv4(s):
-  pieces = s.split('.')
-  if len(pieces) != 4: return False
-  try: return all(0<=int(p)<256 for p in pieces)
-  except ValueError: return False
-
 haproxy_socket_path = '/tmp/haproxy'
 exit_code = 0
 try:
@@ -39,7 +33,7 @@ try:
       if status != 'UP':
         exit_code = 2
 
-    elif isgoodipv4(split[1].split(':')[0]):
+    elif len(split[1].split(':')) == 2:
       # If it is an ip - append it to dict of lbstatuses
       lbstatuses[split[1]] = split[17]
       # if any server under lbpool is down - print warning
