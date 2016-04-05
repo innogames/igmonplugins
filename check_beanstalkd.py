@@ -54,8 +54,8 @@ checks = (
     ('current-jobs-urgent',    None,      None,          1,          10),
     ('current-producers',      None,      None,         10,        1000),
     ('current-tubes',          None,      None,      10000,      100000),
-    ('current-waiting',        None,         1,          8,        None),
-    ('current-workers',           0,         3,         10,          20),
+    ('current-waiting',        None,         1,       None,        None),
+    ('current-workers',           0,         3,         15,          30),
     ('job-timeouts',           None,      None,        100,        None),
 )
 
