@@ -77,7 +77,7 @@ def main(check_get, check_delete, check_incr, check_decr, check_cas, check_touch
     maximum_misses_value = 0
     list_failed_checks = ''
 
-    # if the warning limit is higher than the critical limit we will ignore it    
+    # if the warning limit is higher than the critical limit we will ignore it
     if warning_misses_limit > critical_misses_limit:
         warning_misses_limit == critical_misses_limit
 
@@ -119,7 +119,7 @@ def main(check_get, check_delete, check_incr, check_decr, check_cas, check_touch
         if misses_value > warning_misses_limit:
             maximum_misses_value = max(maximum_misses_value, misses_value)
             list_failed_checks += " TOUCH"
-    
+
     # check if the worst value is higher than the critical limit
     if maximum_misses_value > critical_misses_limit:
         print ("CRITCAL - " + list_failed_checks)
