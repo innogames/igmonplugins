@@ -19,23 +19,25 @@ CHECK_QUERY2="show global variables where variable_name='wsrep_sst_method'"
 
 return_ok()
 {
-    echo "HTTP/1.1 200 OK\r\n"
-    echo "Content-Type: text/html\r\n"
-    echo "Content-Length: 43\r\n"
-    echo "\r\n"
-    echo "<html><body>MySQL is running.</body></html>\r\n"
-    echo "\r\n"
+    printf "HTTP/1.1 200 OK\r\n"
+    printf "Content-Type: text/html\r\n"
+    printf "Content-Length: 43\r\n"
+    printf "\r\n"
+    printf "<html><body>MySQL is running.</body></html>\r\n"
+    printf "\r\n"
+    sleep 0.1
     exit 0
 }
 
 return_fail()
 {
-    echo "HTTP/1.1 503 Service Unavailable\r\n"
-    echo "Content-Type: text/html\r\n"
-    echo "Content-Length: 42\r\n"
-    echo "\r\n"
-    echo "<html><body>MySQL is *down*.</body></html>\r\n"
-    echo "\r\n"
+    printf "HTTP/1.1 503 Service Unavailable\r\n"
+    printf "Content-Type: text/html\r\n"
+    printf "Content-Length: 42\r\n"
+    printf "\r\n"
+    printf "<html><body>MySQL is *down*.</body></html>\r\n"
+    printf "\r\n"
+    sleep 0.1
     exit 1
 }
 
