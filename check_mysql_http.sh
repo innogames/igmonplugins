@@ -25,7 +25,7 @@ return_ok()
     printf "\r\n"
     printf "<html><body>MySQL is running.</body></html>\r\n"
     printf "\r\n"
-    sleep 0.1
+    sleep 0.5
     exit 0
 }
 
@@ -37,7 +37,6 @@ return_fail()
     printf "\r\n"
     printf "<html><body>MySQL is *down*.</body></html>\r\n"
     printf "\r\n"
-    sleep 0.1
     exit 1
 }
 
