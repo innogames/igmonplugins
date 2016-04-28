@@ -1,4 +1,7 @@
 #!/bin/sh
+# PLEASE DO NOT USE THIS SCRIPT
+# IT IS BROKEN BY DESIGN
+# USE https://github.com/innogames/galeraht
 #
 # This script checks if a mysql server is healthy running on 127.0.0.1. It will
 # return:
@@ -25,7 +28,6 @@ return_ok()
     printf "\r\n"
     printf "<html><body>MySQL is running.</body></html>\r\n"
     printf "\r\n"
-    sleep 0.5
     exit 0
 }
 
