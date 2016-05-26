@@ -46,16 +46,16 @@ def main():
 checks = (
     #   Metric              Minimum     Minimum     Maximum     Maximum
     #   Name                Critical    Warning     Warning     Critical
-    ('current-connections',    None,      None,        100,       10000),
+    ('current-connections',    None,      None,        150,       10000),
     ('current-jobs-buried',    None,      None,          1,         100),
     ('current-jobs-delayed',   None,      None,         15,        1000),
     ('current-jobs-reserved',  None,      None,         10,         100),
     ('current-jobs-ready',     None,      None,     500000,     1000000),
     ('current-jobs-urgent',    None,      None,          1,          10),
-    ('current-producers',      None,      None,         10,        1000),
+    ('current-producers',      None,      None,        150,        1000),
     ('current-tubes',          None,      None,      15000,      100000),
     ('current-waiting',        None,         1,       None,        None),
-    ('current-workers',           0,         3,         15,          30),
+    ('current-workers',           0,         3,        150,         200),
     ('job-timeouts',           None,      None,        100,        None),
 )
 
