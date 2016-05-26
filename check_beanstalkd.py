@@ -33,6 +33,22 @@ from argparse import ArgumentParser
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
+        '--host',
+        default='localhost',
+        help='The hostname',)
+    parser.add_argument(
+        '--port',
+        default=11300,
+        type=int,
+        help='The port number',
+    )
+    parser.add_argument(
+        '--timeout',
+        default=2,
+        type=int,
+        help='The connection timeout in seconds',
+    )
+    parser.add_argument(
         'checks',
         metavar='CHECK',
         nargs='*',
@@ -51,11 +67,11 @@ def parse_args():
     return vars(parser.parse_args())
 
 
-def main(checks):
+def main(checks, **kwargs):
     """The main program
     """
 
-    status, output = run(Check(c) for c in checks)
+    status, output = run(Check(c) for c in checks, **kwargs)
 
     print(status + ' ' + output)
 
@@ -69,14 +85,15 @@ def main(checks):
         sys.exit(3)
 
 
-def run(checks):
+def run(checks, **kwargs):
     """The main part of the program
 
-    Parse the stats from beanstalkd.  Run the checks, it they are available.
+    Parse the stats from beanstalkd.  Run the checks, if they are
+    available.
     """
 
     try:
-        response = read_stats()
+        response = read_stats(**kwargs)
     except socket.error as error:
         return 'CRITICAL', 'Error connecting to beanstalkd: ' + str(error)
 
@@ -114,7 +131,7 @@ def run(checks):
     return 'OK', 'Everything is okay. | ' + ' '.join(perfs)
 
 
-def read_stats():
+def read_stats(host, port, timeout):
     """Read the stats from the local Beanstalkd service
 
     Beanstalkd implements Memcached like simple TCP plain text protocol.
@@ -133,8 +150,8 @@ def read_stats():
 
     conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        conn.settimeout(2)
-        conn.connect(('localhost', 11300))
+        conn.settimeout(timeout)
+        conn.connect((host, port))
         conn.send('stats\r\n')
         return conn.recv(4096)
     finally:
