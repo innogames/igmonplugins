@@ -23,14 +23,39 @@
 # THE SOFTWARE.
 #
 
+import re
 import sys
 import socket
 
-def main():
+from argparse import ArgumentParser
+
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument(
+        'checks',
+        metavar='CHECK',
+        nargs='*',
+        help=(
+            'The check consist of the name of the metric, the operator, '
+            'the warning and the critical limits separated by a double '
+            'column (:).  The operator can be less than (<) or grater '
+            'than (>).  The same metric can be used multiple times '
+            'with different operators.  The critical limit is optional. '
+            'This is an example "current-connections>100:10000".  This '
+            'is the regular expression: "{0}".  '
+            "Don't forget to quote the arguments on shell."
+        ).format(Check.parser.pattern),
+    )
+
+    return vars(parser.parse_args())
+
+
+def main(checks):
     """The main program
     """
 
-    status, output = run_checks()
+    status, output = run(Check(c) for c in checks)
 
     print(status + ' ' + output)
 
@@ -43,23 +68,8 @@ def main():
     else:
         sys.exit(3)
 
-checks = (
-    #   Metric              Minimum     Minimum     Maximum     Maximum
-    #   Name                Critical    Warning     Warning     Critical
-    ('current-connections',    None,      None,        100,       10000),
-    ('current-jobs-buried',    None,      None,          1,         100),
-    ('current-jobs-delayed',   None,      None,         15,        1000),
-    ('current-jobs-reserved',  None,      None,         10,         100),
-    ('current-jobs-ready',     None,      None,     500000,     1000000),
-    ('current-jobs-urgent',    None,      None,          1,          10),
-    ('current-producers',      None,      None,         10,        1000),
-    ('current-tubes',          None,      None,      15000,      100000),
-    ('current-waiting',        None,         1,       None,        None),
-    ('current-workers',           0,         3,         15,          30),
-    ('job-timeouts',           None,      None,        100,        None),
-)
 
-def run_checks():
+def run(checks):
     """The main part of the program
 
     Parse the stats from beanstalkd.  Run the checks, it they are available.
@@ -72,7 +82,7 @@ def run_checks():
 
     lines = response.splitlines()[2:-1]
     if len(lines) <= 3:
-        return 'CRITICAL', 'Couldn\'t get stats from beanstalkd: ' + lines[0]
+        return 'CRITICAL', "Couldn't get stats from beanstalkd: " + lines[0]
 
     stats = {}
     for line in lines:
@@ -82,41 +92,27 @@ def run_checks():
         else:
             return 'UNKNOWN', 'Error parsing stats: ' + line
 
-    warnings = []
-    criticals = []
-    perfs = []
-    for metric, min_crit, min_warn, max_warn, max_crit in checks:
-        if metric in stats:
-            value = int(stats[metric])
+    warns = []
+    crits = []
+    perfs = set()
+    for check in checks:
+        if check.metric in stats:
+            value = int(stats[check.metric])
+            perfs.add('{0}={1}'.format(check.metric, value))
 
-            perfs.append('{0}={1}'.format(metric, value))
-
-            if min_crit is not None and value <= min_crit:
-                criticals.append('{0} is {1} less than {2}'.format(
-                    metric, value, min_crit,
-                ))
-            elif max_crit is not None and value >= max_crit:
-                criticals.append('{0} is {1} greater than {2}'.format(
-                    metric, value, max_crit,
-                ))
-            elif min_warn is not None and value <= min_warn:
-                warnings.append('{0} is {1} less than {2}'.format(
-                    metric, value, min_warn,
-                ))
-            elif max_warn is not None and value >= max_warn:
-                warnings.append('{0} is {1} greater than {2}'.format(
-                    metric, value, max_warn,
-                ))
+            if check.test(value, check.crit_limit):
+                crits.append(check.get_message(value, check.crit_limit))
+            elif check.test(value, check.warn_limit):
+                warns.append(check.get_message(value, check.warn_limit))
         else:
-            return 'UNKNOWN', 'Metric {0} couldn\'t found.'.format(metric)
+            return 'UNKNOWN', "Metric {0} couldn't found.".format(check.metric)
 
-    if criticals:
-        return 'CRITICAL', '; '.join(criticals + warnings) + '. | ' + ' '.join(perfs)
-
-    if warnings:
-        return 'WARNING', '; '.join(warnings) + '. | ' + ' '.join(perfs)
-
+    if crits:
+        return 'CRITICAL', '; '.join(crits + warns) + '. | ' + ' '.join(perfs)
+    if warns:
+        return 'WARNING', '; '.join(warns) + '. | ' + ' '.join(perfs)
     return 'OK', 'Everything is okay. | ' + ' '.join(perfs)
+
 
 def read_stats():
     """Read the stats from the local Beanstalkd service
@@ -144,5 +140,45 @@ def read_stats():
     finally:
         conn.close()
 
+
+class Check(object):
+    parser = re.compile(
+        r'^(?P<metric>[a-z\-]+)'
+        r'(?P<operator><|>)'
+        r'(?P<warn_limit>[0-9]+)'
+        r'(:(?P<crit_limit>[0-9]+))?'
+    )
+
+    def __init__(self, check_str):
+        matches = self.parser.match(check_str)
+        if not matches:
+            raise ValueError('Cannot parse check ' + check_str)
+        self.metric = matches.group('metric')
+        self.operator = matches.group('operator')
+        self.warn_limit = int(matches.group('warn_limit'))
+        self.crit_limit = int(matches.group('crit_limit') or 0)
+        if self.crit_limit and self.test(self.warn_limit, self.crit_limit):
+            raise ValueError(
+                'Critical limit is more restrictive than warning for check ' +
+                check_str
+            )
+
+    def test(self, value, limit):
+        if self.operator == '<':
+            return value < limit
+        else:
+            return value > limit
+
+    def get_message(self, value, limit):
+        if self.operator == '<':
+            operator_str = 'less than'
+        else:
+            operator_str = 'greater than'
+
+        return '{0} is {1} {2} {3}'.format(
+            self.metric, value, operator_str, limit
+        )
+
+
 if __name__ == '__main__':
-    main()
+    main(**parse_args())
