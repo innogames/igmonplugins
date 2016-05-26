@@ -172,7 +172,7 @@ class Check(object):
             raise ValueError('Cannot parse check ' + check_str)
         self.metric = matches.group('metric')
         self.operator = matches.group('operator')
-        self.warn_limit = int(matches.group('warn_limit'))
+        self.warn_limit = int(matches.group('warn_limit') or 0)
         self.crit_limit = int(matches.group('crit_limit') or 0)
         if self.crit_limit and self.test(self.warn_limit, self.crit_limit):
             raise ValueError(
@@ -181,10 +181,11 @@ class Check(object):
             )
 
     def test(self, value, limit):
-        if self.operator == '<':
-            return value < limit
-        else:
-            return value > limit
+        if limit:
+            if self.operator == '<':
+                return value < limit
+            else:
+                return value > limit
 
     def get_message(self, value, limit):
         if self.operator == '<':
