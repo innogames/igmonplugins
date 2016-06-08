@@ -24,6 +24,11 @@
 #
 
 import os, MySQLdb as mdb
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-n', '--name', help='Name of slave to check (for multi-source replication)', action='store')
+(opts, args) = parser.parse_args()
 
 CONFIG="/etc/mysql/my.cnf"
 ERR={'CRITICAL':2, 'WARNING':1, 'OK':0}
@@ -31,7 +36,10 @@ ERR={'CRITICAL':2, 'WARNING':1, 'OK':0}
 def get_server_status():
     db = mdb.connect(user="root", read_default_file=CONFIG)
     cur = db.cursor(mdb.cursors.DictCursor)
-    cur.execute("SHOW SLAVE STATUS")
+    if opts.name:
+        cur.execute("SHOW SLAVE '" + opts.name + "' STATUS")
+    else:
+        cur.execute("SHOW SLAVE STATUS")
     res = cur.fetchall()
     cur.close()
     db.close()
