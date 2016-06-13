@@ -67,7 +67,7 @@ def main(critical_services):
         service_name = service_split[0]
         problem = check_service(*service_split[1:4])
 
-        if problem:
+        if problem is not None:
             if service_name in critical_services:
                 if problem == Problem.failed:
                     criticals.append((problem, service_name))
