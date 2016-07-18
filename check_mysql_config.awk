@@ -1,7 +1,7 @@
 BEGIN {
 	outfile="/tmp/check_mysql_config"
 	exitcode = 0
-	diffcmd = "pt-config-diff h=localhost --user=" ENVIRON["MYSQL_USER"] " --password=" ENVIRON["MYSQL_PASSWORD"] " --noreport --noversion-check --ignore-variables=wsrep_sst_auth"
+	diffcmd = "pt-config-diff h=localhost --user=" ENVIRON["MYSQL_USER"] " --password=" ENVIRON["MYSQL_PASSWORD"] " --noreport --noversion-check --ignore-variables=wsrep_sst_auth --defaults-file='/tmp'"
 	if (ARGC<3) {
 		print "Give me at least two files!" > "/dev/stderr"
 		exitcode = 3
