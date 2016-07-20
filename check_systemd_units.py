@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 #
-# Nagios systemd service status check
+# Nagios systemd units check
 #
-# This is a Nagios script to check all services know to "systemd".
-# It checks for anomalies of those services like the ones not anymore
+# This is a Nagios script to check all or some units of "systemd".
+# It checks for anomalies of those units like the ones not anymore
 # defined but still running, and them being dead.  Normally returns
-# at most warning, if no critical services are specified.  Returns
+# at most warning, if no critical units are specified.  Returns
 #
-# * critical when a critical service is failed
-# * warning when a critical service is not running
-# * warning when a non-critical service is failed
+# * critical when a critical unit is failed
+# * warning when a critical unit is not running
+# * warning when a non-critical unit is failed
 # * warning for other anomalies.
 #
 # Copyright (c) 2016, InnoGames GmbH
@@ -25,7 +25,7 @@ command = 'systemctl --all --no-legend --no-pager list-units'
 
 
 class Problem:
-    """Enum for problems that can apply to the services"""
+    """Enum for problems that can apply to the units"""
 
     # From more important to less
     failed = 0
@@ -43,15 +43,15 @@ def parse_args():
     parser.add_argument(
         '-s',
         action='append',
-        dest='critical_services',
+        dest='critical_units',
         default=[],
-        help='service to return critical when failed',
+        help='unit to return critical when failed',
     )
 
     return vars(parser.parse_args())
 
 
-def main(critical_services):
+def main(critical_units):
     """The main program"""
 
     try:
@@ -63,18 +63,18 @@ def main(critical_services):
     criticals = []
     warnings = []
     for line in output.splitlines():
-        service_split = line.strip().split(None, 4)
-        service_name = service_split[0]
-        problem = check_service(*service_split[1:4])
+        unit_split = line.strip().split(None, 4)
+        unit_name = unit_split[0]
+        problem = check_unit(*unit_split[1:4])
 
         if problem is not None:
-            if service_name in critical_services:
+            if unit_name in critical_units:
                 if problem == Problem.failed:
-                    criticals.append((problem, service_name))
+                    criticals.append((problem, unit_name))
                 else:
-                    warnings.append((problem, service_name))
+                    warnings.append((problem, unit_name))
             elif problem != Problem.dead:
-                warnings.append((problem, service_name))
+                warnings.append((problem, unit_name))
 
     criticals.sort()
     warnings.sort()
@@ -90,8 +90,8 @@ def main(critical_services):
         sys.exit(0)
 
 
-def check_service(serv_load, serv_active, serv_sub):
-    """Detect problems of a service"""
+def check_unit(serv_load, serv_active, serv_sub):
+    """Detect problems of a unit"""
     if serv_load == 'loaded':
         if serv_active == 'failed' or serv_sub == 'failed':
             return Problem.failed
@@ -115,11 +115,11 @@ def get_message(problems):
     }
     message = ''
     last_problem = None
-    for problem, service in problems:
+    for problem, unit in problems:
         if problem != last_problem:
             message += problem_names[problem] + ': '
             last_problem = problem
-        message += service + ' '
+        message += unit + ' '
 
     return message
 
