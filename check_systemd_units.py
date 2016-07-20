@@ -53,13 +53,28 @@ def parse_args():
 
 def main(critical_units):
     """The main program"""
-
     try:
         output = subprocess.check_output(command.split())
     except subprocess.CalledProcessError as error:
         print('UNKNOWN: ' + str(error))
-        sys.exit(3)
+        exit_code = 3
+    else:
+        criticals, warnings = process(output, critical_units)
+        if criticals:
+            print('CRITICAL: ' + get_message(criticals + warnings))
+            exit_code = 2
+        elif warnings:
+            print('WARNING: ' + get_message(warnings))
+            exit_code = 1
+        else:
+            print('OK')
+            exit_code = 0
 
+    sys.exit(exit_code)
+
+
+def process(output, critical_units):
+    """Process the Systemd list-units command output"""
     criticals = []
     warnings = []
     for line in output.splitlines():
@@ -76,18 +91,7 @@ def main(critical_units):
             elif problem != Problem.dead:
                 warnings.append((problem, unit_name))
 
-    criticals.sort()
-    warnings.sort()
-
-    if criticals:
-        print('CRITICAL: ' + get_message(criticals + warnings))
-        sys.exit(2)
-    elif warnings:
-        print('WARNING: ' + get_message(warnings))
-        sys.exit(1)
-    else:
-        print('OK')
-        sys.exit(0)
+    return criticals, warnings
 
 
 def check_unit(serv_load, serv_active, serv_sub):
