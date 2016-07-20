@@ -21,9 +21,6 @@ import sys
 from argparse import ArgumentParser
 
 
-command = 'systemctl --all --no-legend --no-pager list-units'
-
-
 class Problem:
     """Enum for problems that can apply to the units"""
 
@@ -41,6 +38,13 @@ def parse_args():
     """
     parser = ArgumentParser()
     parser.add_argument(
+        '-a',
+        action='store_true',
+        dest='check_all',
+        default=False,
+        help='check all units (it is the default when no services are passed)',
+    )
+    parser.add_argument(
         '-s',
         action='append',
         dest='critical_units',
@@ -51,8 +55,13 @@ def parse_args():
     return vars(parser.parse_args())
 
 
-def main(critical_units):
+def main(check_all, critical_units):
     """The main program"""
+    command = 'systemctl --all --no-legend --no-pager list-units'
+    if not check_all:
+        for unit in critical_units:
+            command += ' ' + unit
+
     try:
         output = subprocess.check_output(command.split())
     except subprocess.CalledProcessError as error:
