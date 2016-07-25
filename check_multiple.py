@@ -13,14 +13,14 @@ exit_code = 0
 message = ''
 subs = {}
 
-for q in args.iterate_over:
-    subs[q] = subprocess.Popen(args.origin_command + ' ' + q , stdout=subprocess.PIPE, shell=True)
+for iterate_param in args.iterate_over:
+    subs[iterate_param] = subprocess.Popen(args.origin_command + ' ' + iterate_param , stdout=subprocess.PIPE, shell=True)
 
-for q, p in subs.iteritems():
-    out, err = p.communicate()
-    if p.returncode != 0:
+for iterate_param, process in subs.iteritems():
+    out, err = process.communicate()
+    if process.returncode != 0:
         exit_code = 2
-        message += '(' + q + '): ' + out + '\n'
+        message += '(' + iterate_param + '): ' + out + '\n'
 
 if not message:
     print 'Everything is fine'
