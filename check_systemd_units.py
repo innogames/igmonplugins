@@ -51,11 +51,18 @@ def parse_args():
         default=[],
         help='unit to return critical when failed',
     )
+    parser.add_argument(
+        '-i',
+        action='append',
+        dest='ignored_units',
+        default=[],
+        help='unit to ignore',
+    )
 
     return vars(parser.parse_args())
 
 
-def main(check_all, critical_units):
+def main(check_all, critical_units, ignored_units):
     """The main program"""
     command = 'systemctl --all --no-legend --no-pager list-units'
     if not check_all:
@@ -68,7 +75,7 @@ def main(check_all, critical_units):
         print('UNKNOWN: ' + str(error))
         exit_code = 3
     else:
-        criticals, warnings = process(output, critical_units)
+        criticals, warnings = process(output, critical_units, ignored_units)
         if criticals:
             print('CRITICAL: ' + get_message(criticals + warnings))
             exit_code = 2
@@ -82,7 +89,7 @@ def main(check_all, critical_units):
     sys.exit(exit_code)
 
 
-def process(output, critical_units):
+def process(output, critical_units, ignored_units):
     """Process the Systemd list-units command output"""
     criticals = []
     warnings = []
@@ -97,8 +104,9 @@ def process(output, critical_units):
                     criticals.append((problem, unit_name))
                 else:
                     warnings.append((problem, unit_name))
-            elif problem != Problem.dead:
-                warnings.append((problem, unit_name))
+            elif unit_name not in ignored_units:
+                if problem != Problem.dead:
+                    warnings.append((problem, unit_name))
 
     return criticals, warnings
 
