@@ -20,7 +20,7 @@ for q, p in subs.iteritems():
     out, err = p.communicate()
     if p.returncode != 0:
         exit_code = 2
-        message += out + '\n'
+        message += '(' + q + '): ' + out + '\n'
 
 if not message:
     print 'Everything is fine'
