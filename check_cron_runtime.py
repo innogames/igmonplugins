@@ -131,7 +131,7 @@ def main(verbose=False):
     #print cron_pid_more_than1
     if warn_flag:
 
-        msg = '|' + cron_pid_more_than1
+        msg = '|'.join(str(pid) for pid in cron_pid_more_than1)
         print msg
         for i in cron_pid_more_than1:
             get_child(i)
