@@ -50,7 +50,7 @@ def main(hosts, service, command):
         subprocess.check_output('hostname').strip(),
         service,
         str(process.returncode),
-        output[0],
+        output[0].splitlines()[0],
     ))
 
     # Send the data to NSCA servers
