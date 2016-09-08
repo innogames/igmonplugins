@@ -72,13 +72,13 @@ def main():
     if os.getuid() != 0:
         raise Exception('I need to be run as root, really')
 
-    exit(*get_state(int(args.warning) / 100))
+    exit(*get_state(float(args.warning) / 100.0))
 
 
 def get_state(warning_ratio):
     """The main logic of the check"""
 
-    assert 0 <= warning_ratio <= 1
+    assert 0.0 <= warning_ratio <= 1.0
 
     state = None    # None is less than everything
     msg = ''
@@ -97,7 +97,6 @@ def get_state(warning_ratio):
             continue
 
         num_fds = len(list_proc_db(pid, 'fd'))
-
         if num_fds >= soft_limit:
             state = ExitCodes.critical
             msg += (
@@ -149,7 +148,7 @@ def get_proc_name(pid):
     """Get the name of the process from the proc file system"""
     cmdline = read_proc_db(pid, 'cmdline')
 
-    return cmdline.split('\x00')[0] if cmdline else 'unknown'
+    return cmdline[0].split('\x00')[0] if cmdline else 'unknown'
 
 
 def get_proc_ulimit(pid, name):
@@ -159,7 +158,7 @@ def get_proc_ulimit(pid, name):
     if limits:
         for line in limits:
             if line.startswith(name):
-                return line.split()[3]
+                return int(line.split()[3])
     return 0
 
 
