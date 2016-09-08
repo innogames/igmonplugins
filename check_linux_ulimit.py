@@ -148,7 +148,11 @@ def get_proc_name(pid):
     """Get the name of the process from the proc file system"""
     cmdline = read_proc_db(pid, 'cmdline')
 
-    return cmdline[0].split('\x00')[0] if cmdline else 'unknown'
+    if cmdline:
+        process = cmdline[0].split('\x00')[0]
+        if process:
+            return process
+    return 'unknown'
 
 
 def get_proc_ulimit(pid, name):
