@@ -5,8 +5,9 @@
 # Copyright (c) 2016, InnoGames GmbH
 #
 
-import subprocess
 import argparse
+import socket
+import subprocess
 
 
 def parse_args():
@@ -14,49 +15,47 @@ def parse_args():
 
     Returns the parsed arguments in a dictionary.
     """
-
     parser = argparse.ArgumentParser(description='NSCA helper')
     parser.add_argument(
         '-H',
+        '--target',
         action='append',
-        dest='hosts',
-        required=True,
+        dest='targets',
+        default=['localhost'],
         help='NSCA server to send the status',
     )
     parser.add_argument(
+        '--hostname',
+        default=socket.gethostname(),
+        help='Hostname to send the status for',
+    )
+    parser.add_argument(
         '-s',
+        '--service',
         dest='service',
-        required=True,
-        help='NSCA service to send the status',
+        default='passive_check',
+        help='Service to send the status for',
     )
     parser.add_argument(
         'command',
         nargs='+',
-        help='Active command to run',
+        help='Command to run',
     )
 
     return vars(parser.parse_args())
 
 
-def main(hosts, service, command):
+def main(targets, hostname, service, command):
     """The main program """
+    process = subprocess.Popen(
+        ' '.join(command), stdout=subprocess.PIPE, shell=True
+    )
+    output = process.communicate()[0][:4096]
+    result = '\t'.join((hostname, service, str(process.returncode), output))
 
-    # Run the actual command
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
-    output = process.communicate()
-
-    # Prepare the result to send
-    result = '\t'.join((
-        subprocess.check_output('hostname').strip(),
-        service,
-        str(process.returncode),
-        output[0].splitlines()[0][:4096],
-    ))
-
-    # Send the data to NSCA servers
-    for host in hosts:
+    for target in targets:
         send_process = subprocess.Popen(
-            ('send_nsca', '-H', host),
+            ('send_nsca', '-H', target),
             stdin=subprocess.PIPE,
         )
         send_process.communicate(result)
