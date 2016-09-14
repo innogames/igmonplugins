@@ -21,7 +21,6 @@ def parse_args():
         '--target',
         action='append',
         dest='targets',
-        default=['localhost'],
         help='NSCA server to send the status',
     )
     parser.add_argument(
@@ -45,7 +44,7 @@ def parse_args():
     return vars(parser.parse_args())
 
 
-def main(targets, hostname, service, command):
+def main(targets, command, hostname, service):
     """The main program """
     process = subprocess.Popen(
         ' '.join(command), stdout=subprocess.PIPE, shell=True
@@ -53,12 +52,15 @@ def main(targets, hostname, service, command):
     output = process.communicate()[0][:4096]
     result = '\t'.join((hostname, service, str(process.returncode), output))
 
-    for target in targets:
-        send_process = subprocess.Popen(
-            ('send_nsca', '-H', target),
-            stdin=subprocess.PIPE,
-        )
-        send_process.communicate(result)
+    if targets:
+        for target in targets:
+            send_process = subprocess.Popen(
+                ('send_nsca', '-H', target),
+                stdin=subprocess.PIPE,
+            )
+            send_process.communicate(result)
+    else:
+        print(result)
 
 
 if __name__ == '__main__':
