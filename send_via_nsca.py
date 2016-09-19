@@ -45,7 +45,7 @@ def main(command, hostname, service, target):
     process = subprocess.Popen(
         ' '.join(command), stdout=subprocess.PIPE, shell=True
     )
-    output = process.communicate()[0][:4096]
+    output = process.communicate()[0][:4096] or 'NO OUTPUT'
     result = '\t'.join((hostname, service, str(process.returncode), output))
 
     if target:
