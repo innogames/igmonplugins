@@ -5,11 +5,21 @@
 # Copyright (c) 2016, InnoGames GmbH
 #
 
-if [ `ls -1 /var/spool/exim4/msglog/ | wc -l` -gt 10 ]
-then
-	echo "Warning: exim might not be able to send mails - please check your config"
-	exit 1
+set -euo pipefail
+
+exim_dir="/var/spool/exim4/msglog/"
+max_message=10
+
+if ! [ -d $exim_dir ]; then
+    echo "Can not open $exim_dir"
+    exit 1
 fi
 
-echo "OK - exim seems to work properly"
-exit 0
+messages=$(ls -1 $exim_dir | wc -l)
+
+if [ $messages -gt $max_message ]; then
+    echo "To many messages in queue ($messages > $max_message). See $exim_dir"
+    exit 1
+else
+    echo "OK - exim seems to work properly"
+fi
