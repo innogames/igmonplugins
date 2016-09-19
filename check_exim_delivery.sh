@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# InnoGames Monitoring Plugins - check_swapping.sh
+# InnoGames Monitoring Plugins - check_exim_delivery.sh
 #
 # Copyright (c) 2016, InnoGames GmbH
 #
