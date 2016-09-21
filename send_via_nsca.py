@@ -32,6 +32,11 @@ def parse_args():
         help='Service to send the status for',
     )
     parser.add_argument(
+        '--prefix',
+        default='',
+        help='Prefix the output',
+    )
+    parser.add_argument(
         'command',
         nargs='+',
         help='Command to run',
@@ -40,12 +45,12 @@ def parse_args():
     return vars(parser.parse_args())
 
 
-def main(command, hostname, service, target):
+def main(command, hostname, service, target, prefix):
     """The main program """
     process = subprocess.Popen(
         ' '.join(command), stdout=subprocess.PIPE, shell=True
     )
-    output = process.communicate()[0][:4096] or 'NO OUTPUT'
+    output = prefix + (process.communicate()[0][:4096] or 'NO OUTPUT')
     result = '\t'.join((hostname, service, str(process.returncode), output))
 
     if target:
