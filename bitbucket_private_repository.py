@@ -91,7 +91,7 @@ def main(args):
         ]
 
     if not private_repos:
-        print('OK: No private repositories found.')
+        print('No private repositories found')
         exit(0)
 
     if args.format:
@@ -102,9 +102,9 @@ def main(args):
 
     string = ''.join(format_string.format(repo=r)
                      for r in private_repos)
-    print('WARNING: {amount} private repositories found:\n{0}'
+    print('{amount} private repositories found\n{0}'
           .format(string, amount=len(private_repos)))
-    exit(2)
+    exit(1)
 
 
 def parse_auth_argument(args):
