@@ -68,14 +68,14 @@ def parse_args():
                         help="consumer key for oauth authentication")
     parser.add_argument('--consumer_secret',
                         help="consumer secret for oauth authentication")
-    parser.add_argument('--private-key', help="private key for oauth")
+    parser.add_argument('--private-key', help='private key for oauth')
     parser.add_argument('--passphrase',
                         help="possible passphrase for the private key")
     parser.add_argument('--format',
-                        help=("the format of the final print out. for the "
-                              "format the repository object will be passed"))
-    parser.add_argument('--delete', action="store_true",
-                        help="if found repositories should be deleted")
+                        help='the format of the final print out. for the '
+                             'format the repository object will be passed')
+    parser.add_argument('--delete', action='store_true',
+                        help='if found repositories should be deleted')
     return parser.parse_args()
 
 
@@ -91,7 +91,6 @@ def main(args):
         ]
 
     if not private_repos:
-        # no private repos were found
         print('OK: No private repositories found.')
         exit(0)
 
@@ -100,7 +99,7 @@ def main(args):
     else:
         format_string = ('{repo[project][owner][name]}: {repo[name]} '
                          '({repo[links][self][0][href]})\n')
-    # private repos were found
+
     string = ''.join(format_string.format(repo=r)
                      for r in private_repos)
     print('WARNING: {amount} private repositories found:\n{0}'
@@ -118,8 +117,8 @@ def parse_auth_argument(args):
         auth = HTTPBasicAuth(args.username, args.password)
     elif auth == 'oauth':
         if not (args.consumer_key and args.private_key):
-            print(('For oauth authentication, \'consumer-key\' '
-                   'and \'private-key\' parameter are needed'))
+            print("For oauth authentication, 'consumer-key' "
+                  "and 'private-key' parameter are needed")
             exit(3)
         auth = get_oauth1session(args.consumer_key, args.consumer_secret,
                                  args.private_key, args.passphrase)
