@@ -87,7 +87,7 @@ def main(args):
     repositories = fetch_repositories(base_url, auth)
     private_repos = [
         repo for repo in repositories
-        if 'origin' not in repo and repo['project']['type'] != 'PERSONAL'
+        if 'origin' not in repo and repo['project']['type'] == 'PERSONAL'
         ]
 
     if not private_repos:
@@ -133,19 +133,18 @@ def fetch_repositories(base_url, auth=None):
         :rtype: list of dict
     """
     endpoint = '/rest/api/1.0/repos'
-    limit = 1000
+    limit = 1000  # right now bitbucket limit the request with a default of 1000
     start = 0
     params = {'limit': limit, 'start': start}
-    repositories = []
     last_page = False
     while not last_page:
         response = do_request('get', base_url, endpoint, params=params,
                               auth=auth)
         response = json.loads(response.text)
-        repositories.extend(response['values'])
+        for repository in response['values']:
+            yield repository
         params['start'] += limit
         last_page = response['isLastPage']
-    return repositories
 
 
 def do_request(method, base_url, endpoint, params={}, auth=None):
