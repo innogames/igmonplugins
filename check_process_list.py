@@ -4,7 +4,7 @@
 This is a monitoring check that calls the "ps" binary, and parses
 the results.  It is compatible with BSD and GNU "ps", though they
 provide different set of variables.  It is possible to use any
-supported variable.  See you man pages for the list of them.
+supported variable.  See your man pages for the list of them.
 
 The script is capable of executing multiple operators on the processes.
 Some examples are:
@@ -70,18 +70,15 @@ def main():
     ]
     if args.parent:
         try:
-            processes = filter_process_tree(processes, args.parent)
+            processes = filter_process_family(processes, args.parent, [])
         except NoProcess:
             print('CRITICAL no parent process')
             exit(2)
-        # We don't want to check the parent or descendant family members.
-        # Putting them as the first check groups would cause this.  We
-        # would also get the change to give information about them.
+        # We don't want to check the parents.  Putting them as the first
+        # check groups would cause this.  We would also get the change
+        # to give information about them.
         check_groups.insert(0, ('parent', (
             Check('mark', '==', 'parent'),
-        )))
-        check_groups.insert(0, ('descendant', (
-            Check('mark', '==', 'descendant'),
         )))
 
     processes = filter_processes(processes, check_groups)
@@ -123,11 +120,11 @@ def get_processes(columns):
         cmd += ('-o', column + '=')
     ps = Popen(cmd, stdout=PIPE)
     with ps.stdout as fd:
-        while True:
-            line = fd.readline()
-            if not line:
-                break
-            values = (cast(v) for v in line.split(None, len(columns) - 1))
+        for line in iter(fd.readline, b''):
+            values = (
+                cast(v.decode('utf8'))
+                for v in line.split(None, len(columns) - 1)
+            )
             yield dict(zip(columns, values))
     if ps.wait() != 0:
         raise Exception('Command "{}" failed'.format(' '.join(cmd)))
@@ -139,34 +136,42 @@ def filter_processes(processes, check_groups):
         for mark, checks in check_groups:
             if execute_checks(process, checks, mark):
                 yield process
-                continue
+                break
 
 
-def filter_process_tree(processes, parent_checks):
+def filter_process_family(processes, parent_checks, child_checks):
     """Filter the parent process with the given checks and then its children
 
-    We are taking advantage of "ps" output being sorted by by controlling
-    process by default to iterate the process list only once.
+    We are taking advantage of "ps" output being likely to be sorted.
     """
-    child_checks = []
-    descendant_checks = []
+    assert parent_checks or child_checks
+
+    rest = []
     for process in filter_processes(processes, (
         ('parent', parent_checks),
         ('child', child_checks),
-        ('descendant', descendant_checks),
+        ('rest', (Check('ppid', '>', 0), )),
     )):
-        parentship_check = Check('ppid', '==', process['pid'])
+        if process['mark'] == 'rest':
+            rest.append(process)
+            continue
         if process['mark'] == 'parent':
-            child_checks.append(parentship_check)
-        else:
-            descendant_checks.append(parentship_check)
+            child_checks.append(Check('ppid', '==', process['pid']))
         yield process
+
+    # If we couldn't find any parents on the fist run, we error out.
     if not child_checks:
         raise NoProcess()
 
+    # We need to recursively filter the rest, because on some systems
+    # child processes can appear before the parents.
+    if rest != processes:
+        for process in filter_process_family(rest, [], child_checks):
+            yield process
+
 
 def execute_checks(process, checks, mark):
-    """Execute all checks on a process and mark it"""
+    """Execute checks on a process and mark it"""
     for check in checks:
         if check(process):
             process['mark'] = mark
@@ -203,6 +208,7 @@ class Check:
     operators = {
         '~=': lambda b: compile(b).match,
         '==': lambda b: lambda a: a == b,
+        '!=': lambda b: lambda a: a != b,
         '<=': lambda b: lambda a: a <= b,
         '>=': lambda b: lambda a: a >= b,
         '<': lambda b: lambda a: a < b,
