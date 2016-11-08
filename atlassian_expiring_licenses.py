@@ -120,7 +120,7 @@ def main(args):
     expires = sorted(expires, key=lambda item: item[1]['maintenanceExpiryDate'])
 
     format_string = (args.format if args.format else
-                     '[{plugin[name]}]: {time_left} left\n')
+                     '\n[{plugin[name]}]: {time_left} left')
 
     exit_code = 1
     status = 'WARNING'
@@ -142,7 +142,7 @@ def main(args):
 
     header = ('{status}: {amount} soon expiring licenses found'
               .format(status=status, amount=len(expires)))
-    print('{header}\n{content}'.format(header=header, content=string))
+    print('{header}: {content}'.format(header=header, content=string))
     exit(exit_code)
 
 
