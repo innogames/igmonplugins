@@ -49,6 +49,7 @@ from datetime import datetime, timedelta
 import grequests
 import requests
 from requests.auth import HTTPBasicAuth
+from requests.utils import quote
 
 
 def parse_args():
@@ -175,15 +176,21 @@ def fetch_plugins(base_url, auth=None):
 
 
 def fetch_plugin_license(base_url, plugin_key, auth=None):
-    endpoint = '/rest/plugins/1.0/{plugin_key}/license'
-    endpoint = endpoint.format(plugin_key=plugin_key)
+    if not plugin_key:
+        return None
+    plugin_key = quote(str(plugin_key), '')
+    endpoint = ('/rest/plugins/1.0/{plugin_key}/license'
+                .format(plugin_key=plugin_key))
     response = do_request('get', base_url, endpoint, auth=auth)
     return response.json()
 
 
 def get_fetch_plugin_license_request(base_url, plugin_key, auth=None):
-    endpoint = '/rest/plugins/1.0/{plugin_key}/license'
-    endpoint = endpoint.format(plugin_key=plugin_key)
+    if not plugin_key:
+        return None
+    plugin_key = quote(str(plugin_key), '')
+    endpoint = ('/rest/plugins/1.0/{plugin_key}/license'
+                .format(plugin_key=plugin_key))
     return grequests.get(base_url + endpoint, auth=auth)
 
 
