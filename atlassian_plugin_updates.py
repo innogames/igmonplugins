@@ -47,6 +47,7 @@ from argparse import ArgumentParser
 import grequests
 import requests
 from requests.auth import HTTPBasicAuth
+from requests.utils import quote
 
 ATLASSIAN_MARKETPLACE_BASE_URL = 'https://marketplace.atlassian.com/'
 
@@ -75,7 +76,8 @@ def parse_args():
                         help='possible passphrase for the private key')
     parser.add_argument('--format',
                         help='the format of the final print out. for the '
-                             'format the repository object will be passed')
+                             'format the plugin and update object will be '
+                             'passed')
     return parser.parse_args()
 
 
@@ -106,17 +108,17 @@ def main(args):
         ]
 
     if not updates:
-        print('No updates for plugins found')
+        print('OK: No updates for plugins found')
         exit(0)
 
     format_string = (args.format if args.format else
-                     '[{plugin[name]}]: '
+                     '\n[{plugin[name]}]: '
                      '{plugin[version]} --> '
-                     '{update[_embedded][versions][0][name]}\n')
+                     '{update[_embedded][versions][0][name]}')
 
-    string = ''.join(format_string.format(plugin=p, update=u)
-                     for p, u in updates)
-    print('{amount} updates for plugins found\n{0}'
+    string = ''.join(format_string.format(plugin=plugin, update=update)
+                     for plugin, update in updates)
+    print('WARNING: {amount} updates for plugins found: {0}'
           .format(string, amount=len(updates)))
     exit(1)
 
@@ -166,8 +168,11 @@ def get_fetch_plugins_request(base_url, auth=None):
 
 
 def fetch_plugin_versions(base_url, plugin_key, params={}):
-    endpoint = '/rest/2/addons/{plugin_key}/versions'
-    endpoint = endpoint.format(plugin_key=plugin_key)
+    if not plugin_key:
+        return None
+    plugin_key = quote(str(plugin_key), '')
+    endpoint = ('/rest/2/addons/{plugin_key}/versions'
+                .format(plugin_key=plugin_key))
     response = do_request('get', base_url, endpoint, params)
     if not response.ok:
         return None
@@ -176,8 +181,11 @@ def fetch_plugin_versions(base_url, plugin_key, params={}):
 
 
 def get_fetch_plugin_versions_request(base_url, plugin_key, params={}):
-    endpoint = '/rest/2/addons/{plugin_key}/versions'
-    endpoint = endpoint.format(plugin_key=plugin_key)
+    if not plugin_key:
+        return None
+    plugin_key = quote(str(plugin_key), '')
+    endpoint = ('/rest/2/addons/{plugin_key}/versions'
+                .format(plugin_key=plugin_key))
     return grequests.get(base_url + endpoint, params=params)
 
 
