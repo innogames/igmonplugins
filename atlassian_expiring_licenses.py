@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# InnoGames Monitoring Plugins - bitbucket_private_repository.py
+# InnoGames Monitoring Plugins - atlassian_expiring_licenses.py
 #
 # This is a Nagios script which checks, if there are any plugin licenses
 # which will expire soon. The script uses the Jira Server Rest Api and it is
@@ -60,7 +60,7 @@ def parse_args():
                         help='authentication mode to use. basic uses '
                              'username and password. oauth uses private key '
                              '(with/out passphrase) and consumer key. '
-                             'without --auth script will try an anonym '
+                             'without --auth script will try an anonymous '
                              'access.'
                         )
     parser.add_argument('--username',
@@ -104,15 +104,19 @@ def main(args):
             base_url, plugin['key'] + '-key', auth=auth) for plugin in plugins))
     )
 
-    updates = [
+    expires = [
         (plugin, response.json()) for plugin, response in responses
         if response and datetime.utcfromtimestamp(
             response.json()['maintenanceExpiryDate'] / 1000) < deadline
         ]
 
+    if not expires:
+        print('OK: No license will expire soon')
+        exit(0)
+
     # Sort the update list based on their expire date and name
-    updates = sorted(updates, key=lambda item: item[0]['name'])
-    updates = sorted(updates, key=lambda item: item[1]['maintenanceExpiryDate'])
+    expires = sorted(expires, key=lambda item: item[0]['name'])
+    expires = sorted(expires, key=lambda item: item[1]['maintenanceExpiryDate'])
 
     format_string = (args.format if args.format else
                      '[{plugin[name]}]: {time_left} left\n')
@@ -121,7 +125,7 @@ def main(args):
     status = 'WARNING'
 
     string = ''
-    for plugin, response in updates:
+    for plugin, response in expires:
         expiry_date = datetime.utcfromtimestamp(
             response['maintenanceExpiryDate'] / 1000)
 
@@ -136,7 +140,7 @@ def main(args):
             time_left='{} days'.format(delta.days))
 
     header = ('{status}: {amount} soon expiring licenses found'
-              .format(status=status, amount=len(updates)))
+              .format(status=status, amount=len(expires)))
     print('{header}\n{content}'.format(header=header, content=string))
     exit(exit_code)
 
@@ -162,7 +166,7 @@ def parse_auth_argument(args):
 
 def fetch_plugins(base_url, auth=None):
     """
-        :return: repositories
+        :return: plugins
         :rtype: list of dict
     """
     endpoint = '/rest/plugins/1.0/'
