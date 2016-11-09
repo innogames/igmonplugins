@@ -13,9 +13,9 @@
 #
 
 import re
+from argparse import ArgumentParser
 from os import path
 from apt import Cache
-from argparse import ArgumentParser
 
 # File contains packages to be ignored by check_apt_missing_repository
 # Deprecated. Will be removed soon. UZse option -i
@@ -70,17 +70,12 @@ def main(ignored_packages):
 
     if not_in_repos:
         pkgs = ' '.join([pkg.name for pkg in not_in_repos])
-        msg = (
-            'WARNING: {0} packages have no candidate in repositories! | {1}'
-            .format(len(not_in_repos), pkgs)
-        )
-        sig = 1
-    else:
-        msg = 'OK: All packages are found in repositories'
-        sig = 0
+        print('WARNING: {0} packages have no candidate in repositories! | {1}'
+              .format(len(not_in_repos), pkgs))
+        exit(1)
 
-    print(msg)
-    exit(sig)
+    print('OK: All packages are found in repositories')
+    exit(0)
 
 
 if __name__ == '__main__':
