@@ -2,14 +2,21 @@
 
 # InnoGames Monitoring Plugins - check_ssl_expiry.py
 #
-# This is a script that checks for ssl certificatexpiration in the next 30 days
-# for all ssl certificate files in a given directory.
+# This is a script that checks for ssl certificat expiration in a given time
+# for all ssl certificate files in a given directory. By default the time for
+# warning is 30 days, and the time for critical is 7 days. This can be
+# influenced via the --warning-days and --crit-days parameters. The directory
+# must be set via --cert-dir parameter.
 # The script will exit with:
 #  - 0 (OK) if no certificate in the checked directory will expire in the next
 #           30 days
 #
-#  - 1 (Warning) if a script in the checked directory will expire in the next
-#                30 days
+#  - 1 (WARNING) if a certificate in the checked directory will expire in the
+#                specified --warning-days time (default 30 days)
+#
+#  - 2 (CRITICAL) if a certificate in the checked directory will expire in the
+#                specified --cerrt-days time (default 7 days)
+#
 # Copyright (c) 2016, InnoGames GmbH
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,11 +37,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from __future__ import print_function
+
 import sys
 import os
 import time
 import datetime
-import fnmatch
 from argparse import ArgumentParser
 from OpenSSL import crypto
 
@@ -57,49 +65,52 @@ def main(args):
     crit_cns = ''
     days_to_seconds = 86400
     check_time = int(time.time() + int(args.warning_days) * days_to_seconds)
+    crit_check_time = int(time.time() + int(args.crit_days) * days_to_seconds)
     cert_dir = args.cert_dir
     certs = os.listdir(cert_dir)
     wanted_extensions = ['pem', 'crt', 'ca-bundle']
 
-    for certfile in certs:
-        st_cert = open(os.path.join(cert_dir, certfile), 'r').read()
-        crypto_object = crypto
-        extension = certfile.rsplit('.', 1)[-1]
+    for cert_file in certs:
+        st_cert = open(os.path.join(cert_dir, cert_file), 'rb').read()
+        extension = cert_file.rsplit('.', 1)[-1]
         if extension not in wanted_extensions:
             continue
 
-        certobject = crypto_object.load_certificate(crypto_object.FILETYPE_PEM,
-                                                    st_cert)
-        timestring = certobject.get_notAfter().rstrip('Z')
-        expiry_date = datetime.datetime.strptime(timestring, '%Y%m%d%H%M%S')
+        cert_object = crypto.load_certificate(crypto.FILETYPE_PEM, st_cert)
+        time_string = cert_object.get_notAfter().rstrip('Z')
+        expiry_date = datetime.datetime.strptime(time_string, '%Y%m%d%H%M%S')
         expiry_date_unix = int(expiry_date.strftime("%s"))
 
         # Skip already expired certificates
         if expiry_date_unix <= int(time.time()):
             continue
 
-        if check_time < crit_days:
-            cn = str(certobject.get_subject()).split(
+        if crit_check_time > expiry_date_unix:
+            cn = str(cert_object.get_subject()).split(
                         'CN')[1].rstrip('\'>').strip('=')
-            crit_cns += cn + ' ({0}), '
-        if check_time < expiry_date_unix:
-            cn = str(certobject.get_subject()).split(
+            cn_expiry = (' ({0}), '.format(time.strftime("%d.%m.%Y",
+                         time.localtime(int(expiry_date_unix)))))
+            crit_cns += cn + cn_expiry
+            continue
+        if check_time > expiry_date_unix:
+            cn = str(cert_object.get_subject()).split(
                         'CN')[1].rstrip('\'>').strip('=')
-            warn_cns += cn + ' ({0}), '
-            .format(time.strftime("%d.%m.%Y", time.localtime(int(
-                expiry_date_unix))))
+            cn_expiry = (' ({0}), '.format(time.strftime("%d.%m.%Y",
+                         time.localtime(int(expiry_date_unix)))))
+            new_cn = cn + cn_expiry
+            warn_cns += cn + cn_expiry
 
     if crit_cns:
-        print "CRITICAL: the following certs will expire soon: {0} {1}"
-        .format(crit_cns, warn_cns)
+        print("CRITICAL: the following certs will expire soon: {0} {1}"
+              .format(crit_cns, warn_cns))
         sys.exit(2)
 
     if warn_cns:
-        print "WARNING: the following certs will expire soon: {0}"
-        .format(warn_cns)
+        print("WARNING: the following certs will expire soon: {0}"
+              .format(warn_cns))
         sys.exit(1)
 
-    print "OK: Everything is fine"
+    print ("OK: Everything is fine")
 
 if __name__ == '__main__':
     main(parse_args())
