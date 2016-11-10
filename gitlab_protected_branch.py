@@ -100,7 +100,7 @@ def main(args):
         projects = [fetch_project(base_url, args.project, auth=auth)]
     else:
         projects = fetch_projects(base_url, args.project, auth=auth)
-    print(projects)
+
     if not projects:
         print('No projects found')
         exit(3)
