@@ -49,12 +49,12 @@ from OpenSSL import crypto
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--cert-dir', dest='cert_dir',
+    parser.add_argument('--cert-dir', default='/etc/ssl/private',
                         help='The folder containing the certificates to check')
-    parser.add_argument('--warning-days', dest='warning_days', default=30,
+    parser.add_argument('--warning-days', default=30,
                         help='Days before expiry of a cert that a warning is '
                         'triggered. Will be thirty if left unspecified')
-    parser.add_argument('--crit-days', dest='crit_days', default=7,
+    parser.add_argument('--crit-days', default=7,
                         help='Days before expiry of a cert that a warning is '
                         'triggered. Will be thirty if left unspecified')
     return parser.parse_args()
