@@ -6,7 +6,7 @@
 # for all ssl certificate files in a given directory. By default the time for
 # warning is 30 days, and the time for critical is 7 days. This can be
 # influenced via the --warning-days and --crit-days parameters. The directory
-# must be set via --cert-dir parameter.
+# must be set via -d parameter.
 # The script will exit with:
 #  - 0 (OK) if no certificate in the checked directory will expire in the next
 #           30 days
@@ -48,13 +48,14 @@ from OpenSSL import crypto
 
 
 def parse_args():
-    parser = ArgumentParser()
-    parser.add_argument('--cert-dir', dest='cert_dir',
+    parser = ArgumentParser("Check if certificate files in given folder are"
+                            "about to expire")
+    parser.add_argument("dir",
                         help='The folder containing the certificates to check')
-    parser.add_argument('--warning-days', dest='warning_days', default=30,
+    parser.add_argument('--warning-days', default=30,
                         help='Days before expiry of a cert that a warning is '
                         'triggered. Will be thirty if left unspecified')
-    parser.add_argument('--crit-days', dest='crit_days', default=7,
+    parser.add_argument('--crit-days', default=7,
                         help='Days before expiry of a cert that a warning is '
                         'triggered. Will be thirty if left unspecified')
     return parser.parse_args()
@@ -66,7 +67,7 @@ def main(args):
     days_to_seconds = 86400
     check_time = int(time.time() + int(args.warning_days) * days_to_seconds)
     crit_check_time = int(time.time() + int(args.crit_days) * days_to_seconds)
-    cert_dir = args.cert_dir
+    cert_dir = args.dir
     certs = os.listdir(cert_dir)
     wanted_extensions = ['pem', 'crt', 'ca-bundle']
 
