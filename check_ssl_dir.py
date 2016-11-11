@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# InnoGames Monitoring Plugins - check_ssl_expiry.py
+# InnoGames Monitoring Plugins - check_ssl_dir.py
 #
 # This is a script that checks for ssl certificate expiration in a given time
 # for all ssl certificate files in a given directory. By default the time for
