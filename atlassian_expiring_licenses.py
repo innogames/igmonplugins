@@ -176,6 +176,9 @@ def fetch_plugins(base_url, auth=None):
     """
     endpoint = '/rest/plugins/1.0/'
     response = do_request('get', base_url, endpoint, auth=auth)
+    if not response.ok:
+        return
+
     return response.json()['plugins']
 
 
@@ -186,6 +189,9 @@ def fetch_plugin_license(base_url, plugin_key, auth=None):
     endpoint = ('/rest/plugins/1.0/{plugin_key}/license'
                 .format(plugin_key=plugin_key))
     response = do_request('get', base_url, endpoint, auth=auth)
+    if not response.ok:
+        return
+
     return response.json()
 
 
