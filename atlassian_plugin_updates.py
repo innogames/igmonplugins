@@ -34,7 +34,7 @@
 
 # Needed modules which are imported below
 #
-# For OAuth authentication, lines 190-191
+# For OAuth authentication, lines 202-203
 # pycrypto, pip install pycrypto
 # requests_oauthlib, pip install requests requests_oauthlib
 #
@@ -95,17 +95,18 @@ def main(args):
 
     responses = zip(
         plugins,
-        grequests.map((get_fetch_plugin_versions_request(
+        grequests.map(get_fetch_plugin_versions_request(
             ATLASSIAN_MARKETPLACE_BASE_URL, plugin['key'],
             {'afterVersion': plugin['version'],
              'application': application, 'applicationBuild': build_number})
-                       for plugin in plugins))
+                      for plugin in plugins)
     )
     updates = [
-        (plugin, response.json()) for plugin, response in responses
+        (plugin, response.json())
+        for plugin, response in responses
         if response and response.status_code == 200 and
         response.json()['_embedded']['versions']
-        ]
+    ]
 
     if not updates:
         print('OK: No updates for plugins found')
@@ -149,7 +150,7 @@ def fetch_server_info(base_url, auth=None):
     """
     endpoint = '/rest/api/2/serverInfo'
     response = do_request('get', base_url, endpoint, auth=auth)
-    return json.loads(response.text)
+    return response.json()
 
 
 def fetch_plugins(base_url, auth=None):
@@ -159,7 +160,7 @@ def fetch_plugins(base_url, auth=None):
     """
     endpoint = '/rest/plugins/1.0/'
     response = do_request('get', base_url, endpoint, auth=auth)
-    return json.loads(response.text)['plugins']
+    return response.json()['plugins']
 
 
 def get_fetch_plugins_request(base_url, auth=None):
@@ -169,20 +170,20 @@ def get_fetch_plugins_request(base_url, auth=None):
 
 def fetch_plugin_versions(base_url, plugin_key, params={}):
     if not plugin_key:
-        return None
+        return
     plugin_key = quote(str(plugin_key), '')
     endpoint = ('/rest/2/addons/{plugin_key}/versions'
                 .format(plugin_key=plugin_key))
     response = do_request('get', base_url, endpoint, params)
     if not response.ok:
-        return None
+        return
 
     return response.json()['_embedded']['versions']
 
 
 def get_fetch_plugin_versions_request(base_url, plugin_key, params={}):
     if not plugin_key:
-        return None
+        return
     plugin_key = quote(str(plugin_key), '')
     endpoint = ('/rest/2/addons/{plugin_key}/versions'
                 .format(plugin_key=plugin_key))
