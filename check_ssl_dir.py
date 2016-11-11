@@ -5,8 +5,7 @@
 # This is a script that checks for ssl certificate expiration in a given time
 # for all ssl certificate files in a given directory. By default the time for
 # warning is 30 days, and the time for critical is 7 days. This can be
-# influenced via the --warning-days and --crit-days parameters. The directory
-# must be set via -d parameter.
+# influenced via the --warning-days and --crit-days parameters.
 # The script will exit with:
 #  - 0 (OK) if no certificate in the checked directory will expire in the next
 #           30 days
