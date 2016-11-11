@@ -54,7 +54,7 @@ ATLASSIAN_MARKETPLACE_BASE_URL = 'https://marketplace.atlassian.com/'
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--base-url', dest='base_url',
+    parser.add_argument('base_url',
                         help='the base url of the application you want to '
                              'check (e.g. https://sub.example.de)')
     parser.add_argument('--auth', choices=('basic', 'oauth'),
@@ -69,7 +69,7 @@ def parse_args():
                         help='the password for basic authentication')
     parser.add_argument('--consumer-key',
                         help='consumer key for oauth authentication')
-    parser.add_argument('--consumer_secret',
+    parser.add_argument('--consumer-secret',
                         help='consumer secret for oauth authentication')
     parser.add_argument('--private-key', help='private key for oauth')
     parser.add_argument('--passphrase',
