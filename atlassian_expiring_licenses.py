@@ -36,7 +36,7 @@
 
 # Needed modules which are imported below
 #
-# For OAuth authentication, lines 190-191
+# For OAuth authentication, lines 213-214
 # pycrypto, pip install pycrypto
 # requests_oauthlib, pip install requests requests_oauthlib
 #
@@ -69,13 +69,13 @@ def parse_args():
     parser.add_argument('--password',
                         help='the password for basic authentication')
     parser.add_argument('--consumer-key',
-                        help="consumer key for oauth authentication")
+                        help='consumer key for oauth authentication')
     parser.add_argument('--consumer-secret',
-                        help="consumer secret for oauth authentication")
+                        help='consumer secret for oauth authentication')
     parser.add_argument('--private-key',
-                        help="private key for oauth")
+                        help='private key for oauth')
     parser.add_argument('--passphrase',
-                        help="possible passphrase for the private key")
+                        help='possible passphrase for the private key')
     parser.add_argument('--days', type=int, default=60,
                         help='amount of days before the license will be shown')
     parser.add_argument('--days-critical', type=int, default=14,
@@ -100,23 +100,28 @@ def main(args):
     plugins = [plugin for plugin in plugins if plugin['usesLicensing']]
     responses = zip(
         plugins,
-        grequests.map((get_fetch_plugin_license_request(
-            base_url, plugin['key'] + '-key', auth=auth) for plugin in plugins))
+        grequests.map(
+            get_fetch_plugin_license_request(
+                base_url, plugin['key'] + '-key', auth=auth)
+            for plugin in plugins)
     )
 
     expires = [
-        (plugin, response.json()) for plugin, response in responses
+        (plugin, response.json())
+        for plugin, response in responses
         if response and datetime.utcfromtimestamp(
             response.json()['maintenanceExpiryDate'] / 1000) < deadline
-        ]
+    ]
 
     if not expires:
         print('OK: No license will expire soon')
         exit(0)
 
     # Sort the update list based on their expire date and name
-    expires = sorted(expires, key=lambda item: item[0]['name'])
-    expires = sorted(expires, key=lambda item: item[1]['maintenanceExpiryDate'])
+    expires = sorted(expires,
+                     key=lambda item: item[0]['name'])
+    expires = sorted(expires,
+                     key=lambda item: item[1]['maintenanceExpiryDate'])
 
     format_string = (args.format if args.format else
                      '\n[{plugin[name]}]: {time_left} left')
@@ -149,14 +154,14 @@ def parse_auth_argument(args):
     auth = args.auth
     if auth == 'basic':
         if not (args.username and args.password):
-            print(("For basic authentication, 'username' and 'password' "
-                   "parameter are needed"))
+            print("For basic authentication, 'username' and 'password' "
+                  "parameter are needed")
             exit(3)
         auth = HTTPBasicAuth(args.username, args.password)
     elif auth == 'oauth':
         if not (args.consumer_key and args.private_key):
-            print(("For oauth authentication, 'consumer-key' "
-                   "and 'private-key' parameter are needed"))
+            print("For oauth authentication, 'consumer-key' "
+                  "and 'private-key' parameter are needed")
             exit(3)
         auth = get_oauth1session(args.consumer_key, args.consumer_secret,
                                  args.private_key, args.passphrase)
