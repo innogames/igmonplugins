@@ -160,6 +160,9 @@ def fetch_plugins(base_url, auth=None):
     """
     endpoint = '/rest/plugins/1.0/'
     response = do_request('get', base_url, endpoint, auth=auth)
+    if not response.ok:
+        return
+
     return response.json()['plugins']
 
 
