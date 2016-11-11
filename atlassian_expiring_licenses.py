@@ -54,7 +54,7 @@ from requests.utils import quote
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--base-url', dest='base_url',
+    parser.add_argument('base_url',
                         help='the base url of the application you want to '
                              'check (e.g. https://sub.example.com)')
     parser.add_argument('--auth', choices=('basic', 'oauth'),
@@ -68,18 +68,17 @@ def parse_args():
                         help='the username for basic authentication')
     parser.add_argument('--password',
                         help='the password for basic authentication')
-    parser.add_argument('--consumer-key', dest='consumer_key',
+    parser.add_argument('--consumer-key',
                         help="consumer key for oauth authentication")
-    parser.add_argument('--consumer_secret', dest='consumer_secret',
+    parser.add_argument('--consumer-secret',
                         help="consumer secret for oauth authentication")
-    parser.add_argument('--private-key', dest='private_key',
+    parser.add_argument('--private-key',
                         help="private key for oauth")
     parser.add_argument('--passphrase',
                         help="possible passphrase for the private key")
     parser.add_argument('--days', type=int, default=60,
                         help='amount of days before the license will be shown')
-    parser.add_argument('--days-critical', dest='days_critical',
-                        type=int, default=14,
+    parser.add_argument('--days-critical', type=int, default=14,
                         help='amount of days before the license will be shown '
                              'as critical')
     parser.add_argument('--format',
