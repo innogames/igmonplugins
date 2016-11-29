@@ -3,11 +3,11 @@
 # InnoGames Monitoring Plugins - atlassian_expiring_licenses.py
 #
 # This is a Nagios script which checks, if the authentication to a specific
-# url is possible or not. Supported authentication checks are: basic, oauth,
-# header (e.g. token) and form authentication. Two Factor Authentication is
-# supported too by passing your TOTP Secret Key with the parameter `totp`.
-# Every single occurrence of `<totp>` in the header and input values will be
-# replaced with the actual generated TOTP value.
+# url is possible or not. Supported authentication checks are: anonymous,
+# basic, oauth, header (e.g. token) and form authentication. Two Factor
+# Authentication is supported too by passing your TOTP Secret Key with the
+# parameter `totp`. Every single occurrence of `<totp>` in the header and input
+# values will be replaced with the actual generated TOTP value.
 #
 # The script will exit with:
 #  - 0 (OK)         if authentication request returns a http status code
