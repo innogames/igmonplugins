@@ -83,23 +83,17 @@ def parse_args():
     # 2FA
     parser.add_argument('--2fa', dest='totp',
                         help='')
-    parser.add_argument('--ajax', action='store_true',
-                        help='requests will be sent as an ajax call')
     return parser.parse_args()
 
 
 def main(args):
-    # totp = ''
     if args.totp:
         import pyotp
         args.totp = pyotp.TOTP(args.totp).now()
 
     auth = parse_auth_argument(args)
+
     headers = {}
-
-    if args.ajax:
-        headers['X-Requested-With'] = 'XMLHttpRequest'
-
     if args.headers:
         if len(args.headers) % 2 != 0:
             print("The parameter 'headers' does need an even amount of "
