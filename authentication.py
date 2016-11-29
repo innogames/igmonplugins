@@ -88,7 +88,7 @@ def parse_args():
                         help='the input names for the form authentication')
     # 2FA
     parser.add_argument('--totp',
-                        help='')
+                        help='the secret key for the two factor authentication')
     return parser.parse_args()
 
 
