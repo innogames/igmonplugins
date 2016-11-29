@@ -89,6 +89,16 @@ def parse_args():
     # 2FA
     parser.add_argument('--totp',
                         help='the secret key for the two factor authentication')
+    # Formats
+    parser.add_argument('--format',
+                        help='the format which will be used if the request '
+                             'was successful')
+    parser.add_argument('--format-fail',
+                        help='the format which will be used if the request '
+                             'was not successful due to authentication failure')
+    parser.add_argument('--format-error',
+                        help='the format which will be used if the request '
+                             'was not successful due to some other errors')
     return parser.parse_args()
 
 
@@ -111,27 +121,30 @@ def main(args):
                 value = value.replace('<totp>', args.totp)
             headers[name] = value
 
+    format_success = (args.format or
+                      'OK: Authentication was successful | '
+                      '{response.url} ; {response.status_code}')
+    format_fail = (args.format_fail or
+                   'CRITICAL: Authentication failed | '
+                   '{response.url} ; {response.status_code}\n'
+                   '{response.text}')
+    format_error = (args.format_error or
+                    'CRITICAL: Authentication failed | '
+                    '{args.url}\n'
+                    '{error}')
+
     try:
         response = requests.request(args.method, args.url,
                                     headers=headers, auth=auth)
     except requests.RequestException as error:
-        print('CRITICAL: Authentication failed | '
-              '{args.url}\n'
-              '{error}'
-              .format(error=error, args=args))
+        print(format_error.format(error=error, args=args))
         sys.exit(2)
 
     if response.ok:
-        print('OK: Authentication was successful | '
-              '{response.url};{response.status_code}\n'
-              '{response.text}'
-              .format(response=response, args=args))
+        print(format_success.format(response=response, args=args))
         sys.exit(0)
 
-    print('CRITICAL: Authentication failed | '
-          '{response.url};{response.status_code}\n'
-          '{response.text}'
-          .format(response=response, args=args))
+    print(format_fail.format(response=response, args=args))
     sys.exit(2)
 
 
