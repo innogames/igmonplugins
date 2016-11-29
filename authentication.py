@@ -96,7 +96,7 @@ def main(args):
     headers = {}
     if args.headers:
         if len(args.headers) % 2 != 0:
-            print("The parameter 'headers' does need an even amount of "
+            print("The parameter 'headers' needs an even amount of "
                   "elements")
             sys.exit(3)
 
@@ -147,7 +147,7 @@ def parse_auth_argument(args):
 
         if len(args.headers) % 2 != 0:
             print(
-                "The parameter 'headers' does need an even amount of elements")
+                "The parameter 'headers' needs an even amount of elements")
             sys.exit(3)
         auth = None
     elif auth == 'oauth':
@@ -164,7 +164,7 @@ def parse_auth_argument(args):
             sys.exit(3)
 
         if len(args.inputs) % 2 != 0:
-            print("The parameter 'inputs' does need an even amount of elements")
+            print("The parameter 'inputs' needs an even amount of elements")
             sys.exit(3)
 
         form = {}
