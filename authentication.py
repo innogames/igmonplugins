@@ -187,7 +187,7 @@ def parse_auth_argument(args):
 def create_oauth1(consumer_key, consumer_secret, private_key, passphrase):
     from Crypto.PublicKey import RSA
     from requests_oauthlib import OAuth1
-    with open(private_key, 'r') as fd:
+    with open(private_key, 'rb') as fd:
         rsa_key = RSA.importKey(fd.read(), passphrase)
 
     return OAuth1(client_key=consumer_key, client_secret=consumer_secret,
