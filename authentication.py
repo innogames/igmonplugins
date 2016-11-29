@@ -2,15 +2,19 @@
 #
 # InnoGames Monitoring Plugins - atlassian_expiring_licenses.py
 #
-# todo:
-# This is a Nagios script which checks, if there are any plugin licenses
-# which will expire soon. The script uses the Jira Server Rest Api and it is
-# possible to use Basic or two-legged OAuth authentication.
+# This is a Nagios script which checks, if the authentication to a specific
+# url is possible or not. Supported authentication checks are: basic, oauth,
+# header (e.g. token) and form authentication. Two Factor Authentication is
+# supported too by passing your TOTP Secret Key with the parameter `totp`.
+# Every single occurrence of `<totp>` in the header and input values will be
+# replaced with the actual generated TOTP value.
+#
 # The script will exit with:
-#  - 0 (OK)         if there are no soon expiring licenses
-#  - 2 (CRITICAL)   if there are soon expiring licenses _after_ that optional
-#                   given time
-# todo:
+#  - 0 (OK)         if authentication request returns a http status code
+#                   without error (means not 400 or above)
+#  - 2 (CRITICAL)   if authentication request fails either because of the
+#                   request or the authentication
+#
 # Copyright (c) 2016, InnoGames GmbH
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,9 +38,12 @@
 
 # Needed modules which are imported below
 #
-# For OAuth authentication, lines 213-214 todo:
+# For OAuth authentication, lines 188-189 todo:
 # pycrypto, pip install pycrypto
 # requests_oauthlib, pip install requests requests_oauthlib
+#
+# For Two Factor Authentication, line 97 todo:
+# pyotp, pip install pyotp
 #
 
 from __future__ import print_function
