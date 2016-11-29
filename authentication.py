@@ -41,7 +41,6 @@
 
 from __future__ import print_function
 
-import re
 import sys
 from argparse import ArgumentParser
 
@@ -206,7 +205,7 @@ class HTTPHeaderAuth(requests.auth.AuthBase):
         """
         if not self.headers:
             return request
-        print(self.headers)
+
         for name, value in self.headers.items():
             request.headers[name] = value
 
