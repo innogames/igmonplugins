@@ -80,7 +80,7 @@ def parse_args():
     parser.add_argument('--inputs', nargs='*',
                         help='the input names for the form authentication')
     # 2FA
-    parser.add_argument('--2fa', dest='totp',
+    parser.add_argument('--totp',
                         help='')
     return parser.parse_args()
 
