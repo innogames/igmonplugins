@@ -61,11 +61,13 @@ def parse_args():
                         help='the base url of the application you want to '
                              'check (e.g. https://sub.example.com)')
     parser.add_argument('-m', '--method', default='get',
-                        help='')
+                        help='the http method to use e.g. get, post, put, etc.')
     parser.add_argument('-a', '--auth',
                         choices=('none', 'basic', 'oauth', 'header', 'form'),
                         default='none',
-                        help='')
+                        help='the auth method to use, you can choose between '
+                             'none, basic, oauth, header and form '
+                             'authentication')
     # Basic
     parser.add_argument('-u', '--username',
                         help='the username for basic authentication')
