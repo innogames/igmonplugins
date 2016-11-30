@@ -29,6 +29,7 @@
 import time
 import sys
 import hashlib
+import platform
 
 errors = 0
 msg_count = {}
@@ -40,7 +41,12 @@ new = 0
 check_time = time.time() - 10800 # check the last 3 hours
 important_time = time.time() - 3600 # only if message is within the last 1 hour
 
-lines = open('/var/log/daemon.log').readlines()
+if platform.system() == 'FreeBSD':
+    logpath = '/var/log/messages'
+else:
+    logpath = '/var/log/daemon.log'
+
+lines = open(logpath).readlines()
 for line in lines[-200:]:
 	if "puppet-agent" in line:
 		# remove duplicate spaces - makes problems with strptime and split
