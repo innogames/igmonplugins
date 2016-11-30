@@ -34,7 +34,7 @@ foreach (@output)
 		{
 			$laggports{$current_if} = [ ];
 		}
-		push ($laggports{$current_if}, $1);
+		push (@{$laggports{$current_if}}, $1);
 		$laggportflag{$1} = $2;
 	}
 }
