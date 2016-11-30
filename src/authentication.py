@@ -47,59 +47,64 @@
 # pyotp, pip install pyotp
 #
 
-import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawTextHelpFormatter
 
 import requests
 from requests.auth import HTTPBasicAuth
 
 
 def parse_args():
-    parser = ArgumentParser()
+    parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('url',
-                        help='the base url of the application you want to '
+                        help='The base url of the application you want to '
                              'check (e.g. https://sub.example.com)')
     parser.add_argument('-m', '--method', default='get',
-                        help='the http method to use e.g. get, post, put, etc.')
+                        help='The http method to use e.g. get, post, etc.')
     parser.add_argument('-a', '--auth',
                         choices=('basic', 'oauth', 'header', 'form'),
-                        help='the auth method to use, you can choose between '
-                             'none, basic, oauth, header and form '
-                             'authentication')
+                        help='The auth method to use, you can choose between '
+                             'basic, oauth, header and form authentication. '
+                             'If nothing is passed it will try an anonymous '
+                             'request.')
     # Basic Auth
     # Form Auth
     # Header Auth
+    # OAuth
     parser.add_argument('--inputs', nargs='*',
-                        help='the input names for the form authentication')
+                        help='The inputs for the authentication. '
+                             'Have to be an even amount of parameters.''''
+* Basic:
+    username
+    password
+* OAuth:
+    consumer-key
+    consumer-secret (optional)
+    private-key
+    passphrase (optional)
+* Form/Header
+    several different key value pairs''')
     # More Headers
     parser.add_argument('--headers', nargs='*',
-                        help='the header name for the header authentication')
-    # OAuth
-    parser.add_argument('--consumer-key',
-                        help='consumer key for oauth authentication')
-    parser.add_argument('--consumer-secret',
-                        help='consumer secret for oauth authentication')
-    parser.add_argument('--private-key',
-                        help='private key for oauth')
-    parser.add_argument('--passphrase',
-                        help='possible passphrase for the private key')
+                        help='The headers which shall be applied besides of '
+                             'the authentication inputs.')
     # Two Factor Authentication
     parser.add_argument('--totp',
-                        help='the secret key for the two factor authentication')
+                        help='The secret key for the '
+                             'Two-Factor-Authentication.')
     # Formats
     parser.add_argument('--format',
-                        help='the format which will be used if the request '
+                        help='The format which will be used if the request '
                              'was successful. the response as `response` and '
                              'all arguments as `args` will be passed in.')
     parser.add_argument('--format-fail',
-                        help='the format which will be used if the request was '
-                             'not successful due to authentication failure. '
-                             'the response as `response` and all arguments as '
-                             '`args` will be passed in.')
+                        help='The format which will be used if the request '
+                             'was not successful due to authentication '
+                             'failure. The response as `response` and all '
+                             'arguments as `args` will be passed in.')
     parser.add_argument('--format-error',
-                        help='the format which will be used if the request '
+                        help='The format which will be used if the request '
                              'was not successful due to some other errors. '
-                             'all arguments as `args` and the raised error as '
+                             'All arguments as `args` and the raised error as '
                              '`error` will be passed in.')
     return parser.parse_args()
 
@@ -174,8 +179,8 @@ def parse_auth_argument(auth_type, inputs):
 
     elif auth_type == 'header':
         if not inputs:
-            raise ValueError("For header authentication the 'inputs' parameter "
-                             "is needed")
+            raise ValueError("For header authentication the 'inputs' "
+                             "parameter is needed")
         auth = HTTPHeaderAuth(inputs)
 
     elif auth_type == 'oauth':
