@@ -31,7 +31,7 @@ def parse_args():
 
 def check_debianos():
     if not os.path.isfile('/etc/debian_version'):
-        print "OK: This isn't a Debian system"
+        print("OK: This isn't a Debian system")
         sys.exit(0)
 
 
