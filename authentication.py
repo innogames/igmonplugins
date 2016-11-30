@@ -6,7 +6,7 @@
 # url is possible or not. Supported authentication checks are: anonymous,
 # basic, oauth, header (e.g. token) and form authentication. Two Factor
 # Authentication is supported too by passing your TOTP Secret Key with the
-# parameter `totp`. Every single occurrence of `<totp>` in the header and input
+# parameter `totp`. Every single occurrence of `{totp}` in the header and input
 # values will be replaced with the actual generated TOTP value. However right
 # now it will just works with one single request.
 #
@@ -39,15 +39,13 @@
 
 # Needed modules which are imported below
 #
-# For OAuth authentication, lines 209-210
+# For OAuth authentication, lines 209-210 todo:
 # pycrypto, pip install pycrypto
 # requests_oauthlib, pip install requests requests_oauthlib
 #
-# For Two Factor Authentication, line 115
+# For Two Factor Authentication, line 115 todo:
 # pyotp, pip install pyotp
 #
-
-from __future__ import print_function
 
 import sys
 from argparse import ArgumentParser
@@ -64,17 +62,16 @@ def parse_args():
     parser.add_argument('-m', '--method', default='get',
                         help='the http method to use e.g. get, post, put, etc.')
     parser.add_argument('-a', '--auth',
-                        choices=('none', 'basic', 'oauth', 'header', 'form'),
-                        default='none',
+                        choices=('basic', 'oauth', 'header', 'form'),
                         help='the auth method to use, you can choose between '
                              'none, basic, oauth, header and form '
                              'authentication')
-    # Basic
-    parser.add_argument('-u', '--username',
-                        help='the username for basic authentication')
-    parser.add_argument('-p', '--password',
-                        help='the password for basic authentication')
-    # Header
+    # Basic Auth
+    # Form Auth
+    # Header Auth
+    parser.add_argument('--inputs', nargs='*',
+                        help='the input names for the form authentication')
+    # More Headers
     parser.add_argument('--headers', nargs='*',
                         help='the header name for the header authentication')
     # OAuth
@@ -86,10 +83,7 @@ def parse_args():
                         help='private key for oauth')
     parser.add_argument('--passphrase',
                         help='possible passphrase for the private key')
-    # Form
-    parser.add_argument('--inputs', nargs='*',
-                        help='the input names for the form authentication')
-    # 2FA
+    # Two Factor Authentication
     parser.add_argument('--totp',
                         help='the secret key for the two factor authentication')
     # Formats
@@ -110,24 +104,34 @@ def parse_args():
     return parser.parse_args()
 
 
-def main(args):
+def main():
+    args = parse_args()
+
+    totp = ''
     if args.totp:
-        import pyotp
-        args.totp = pyotp.TOTP(args.totp).now()
+        totp = get_new_totp(args.totp)
 
-    auth = parse_auth_argument(args)
+    try:
+        inputs = collect_pair_values(args.inputs)
+    except ValueError:
+        print("The parameter 'inputs' needs an even amount of elements")
+        raise SystemExit(3)
 
-    headers = {}
-    if args.headers:
-        if len(args.headers) % 2 != 0:
-            print("The parameter 'headers' needs an even amount of "
-                  "elements")
-            sys.exit(3)
+    inputs = insert_totp_token(inputs, totp)
 
-        for name, value in zip(args.headers[0::2], args.headers[1::2]):
-            if '<totp>' in value:
-                value = value.replace('<totp>', args.totp)
-            headers[name] = value
+    try:
+        auth = parse_auth_argument(args.auth, inputs)
+    except ValueError as e:
+        print(e)
+        raise SystemExit(3)
+
+    try:
+        headers = collect_pair_values(args.headers)
+    except ValueError:
+        print("The parameter 'headers' needs an even amount of elements")
+        raise SystemExit(3)
+
+    headers = insert_totp_token(headers, totp)
 
     format_success = (args.format or
                       'OK: Authentication was successful | '
@@ -146,61 +150,46 @@ def main(args):
                                     headers=headers, auth=auth)
     except requests.RequestException as error:
         print(format_error.format(error=error, args=args))
-        sys.exit(2)
+        raise SystemExit(2)
 
     if response.ok:
         print(format_success.format(response=response, args=args))
-        sys.exit(0)
+        raise SystemExit(0)
 
     print(format_fail.format(response=response, args=args))
-    sys.exit(2)
+    raise SystemExit(2)
 
 
-def parse_auth_argument(args):
-    auth = args.auth
-    if not auth or auth == 'none':
-        return None
+def parse_auth_argument(auth_type, inputs):
+    auth = None
 
-    if auth == 'basic':
-        if not (args.username and args.password):
-            print("For basic authentication, 'username' and 'password' "
-                  "parameter are needed")
-            sys.exit(3)
-        auth = HTTPBasicAuth(args.username, args.password)
-    elif auth == 'header':
-        if not args.headers:
-            print("For header authentication the 'headers' parameter is needed")
-            sys.exit(3)
-
-        if len(args.headers) % 2 != 0:
-            print(
-                "The parameter 'headers' needs an even amount of elements")
-            sys.exit(3)
+    if not auth_type:
         auth = None
-    elif auth == 'oauth':
-        if not (args.consumer_key and args.private_key):
-            print("For oauth authentication, 'consumer-key' "
-                  "and 'private-key' parameter are needed")
-            sys.exit(3)
-        auth = create_oauth1(args.consumer_key, args.consumer_secret,
-                             args.private_key, args.passphrase)
-    elif auth == 'form':
-        if not args.inputs:
-            print("For form authentication, 'inputs' and 'values' "
-                  "parameter are needed")
-            sys.exit(3)
+    elif auth_type == 'basic':
+        if not (inputs['username'] and inputs['password']):
+            raise ValueError("For basic authentication, the values for "
+                             "'username' and 'password' are needed "
+                             "in the inputs parameter")
+        auth = HTTPBasicAuth(inputs['username'], inputs['password'])
 
-        if len(args.inputs) % 2 != 0:
-            print("The parameter 'inputs' needs an even amount of elements")
-            sys.exit(3)
+    elif auth_type == 'header':
+        if not inputs:
+            raise ValueError("For header authentication the 'inputs' parameter "
+                             "is needed")
+        auth = HTTPHeaderAuth(inputs)
 
-        form = {}
-        for name, value in zip(args.inputs[0::2], args.inputs[1::2]):
-            if '<totp>' in value:
-                value = value.replace('<totp>', args.totp)
-            form[name] = value
+    elif auth_type == 'oauth':
+        if not (inputs['consumer_key'] and inputs['args.private_key']):
+            raise ValueError("For oauth authentication, the values "
+                             "'consumer-key' and 'private-key' are needed "
+                             "in the inputs parameter")
+        auth = create_oauth1(
+            inputs['consumer_key'], inputs['args.consumer_secret'],
+            inputs['private_key'], inputs['passphrase']
+        )
 
-        auth = HTTPFormAuth(form)
+    elif auth_type == 'form':
+        auth = HTTPFormAuth(inputs)
 
     return auth
 
@@ -268,6 +257,7 @@ class HTTPFormAuth(requests.auth.AuthBase):
         """
         :param dict inputs:
         """
+        super(requests.auth.AuthBase, self).__init__()
         self.inputs = inputs
 
     def __eq__(self, other):
@@ -285,4 +275,4 @@ class HTTPFormAuth(requests.auth.AuthBase):
 
 
 if __name__ == '__main__':
-    main(parse_args())
+    main()
