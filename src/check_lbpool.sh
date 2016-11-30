@@ -28,7 +28,7 @@ fi
 # backup ok   - OK - my role is BACKUP
 # backup fail - CR - grep -E 'role is BACKUP, carp([a-z0-9]| ?)+ is MASTER'
 
-CARP=`/usr/local/libexec/nagios/check_carps.py`
+CARP=`/usr/local/libexec/nagios/igmonplugins/check_carps.py`
 
 CARPEXIT=$?
 
