@@ -7,7 +7,8 @@
 # basic, oauth, header (e.g. token) and form authentication. Two Factor
 # Authentication is supported too by passing your TOTP Secret Key with the
 # parameter `totp`. Every single occurrence of `<totp>` in the header and input
-# values will be replaced with the actual generated TOTP value.
+# values will be replaced with the actual generated TOTP value. However right
+# now it will just works with one single request.
 #
 # The script will exit with:
 #  - 0 (OK)         if authentication request returns a http status code
@@ -38,11 +39,11 @@
 
 # Needed modules which are imported below
 #
-# For OAuth authentication, lines 188-189 todo:
+# For OAuth authentication, lines 209-210
 # pycrypto, pip install pycrypto
 # requests_oauthlib, pip install requests requests_oauthlib
 #
-# For Two Factor Authentication, line 97 todo:
+# For Two Factor Authentication, line 115
 # pyotp, pip install pyotp
 #
 
@@ -94,13 +95,18 @@ def parse_args():
     # Formats
     parser.add_argument('--format',
                         help='the format which will be used if the request '
-                             'was successful')
+                             'was successful. the response as `response` and '
+                             'all arguments as `args` will be passed in.')
     parser.add_argument('--format-fail',
-                        help='the format which will be used if the request '
-                             'was not successful due to authentication failure')
+                        help='the format which will be used if the request was '
+                             'not successful due to authentication failure. '
+                             'the response as `response` and all arguments as '
+                             '`args` will be passed in.')
     parser.add_argument('--format-error',
                         help='the format which will be used if the request '
-                             'was not successful due to some other errors')
+                             'was not successful due to some other errors. '
+                             'all arguments as `args` and the raised error as '
+                             '`error` will be passed in.')
     return parser.parse_args()
 
 
