@@ -215,6 +215,25 @@ def create_oauth1(consumer_key, consumer_secret, private_key, passphrase):
                   signature_method='RSA-SHA1', rsa_key=rsa_key)
 
 
+def get_new_totp(totp):
+    import pyotp
+    return pyotp.TOTP(totp).now()
+
+
+def insert_totp_token(values, totp):
+    return {key: value.format(totp=totp) for key, value in values}
+
+
+def collect_pair_values(values):
+    if not values:
+        return {}
+
+    if len(values) % 2 != 0:
+        raise ValueError("An even amount of elements are needed.")
+
+    return zip(values[0::2], values[1::2])
+
+
 class HTTPFormAuth(requests.auth.AuthBase):
     """Attaches HTTP Token Authentication to the given Request object."""
 
