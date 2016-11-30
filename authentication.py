@@ -234,6 +234,33 @@ def collect_pair_values(values):
     return zip(values[0::2], values[1::2])
 
 
+class HTTPHeaderAuth(requests.auth.AuthBase):
+    """Attaches HTTP Header Authentication to the given Request object."""
+
+    def __init__(self, headers):
+        super(requests.auth.AuthBase, self).__init__()
+        self.headers = headers
+
+    def __eq__(self, other):
+        return self.headers == getattr(other, 'headers')
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __call__(self, request):
+        """
+        :param requests.models.PreparedRequest request:
+        """
+        if not self.headers:
+            return request
+
+        # for name, value in self.headers.items():
+        #     request.headers[name] = value
+        request.headers.update(self.headers)
+
+        return request
+
+
 class HTTPFormAuth(requests.auth.AuthBase):
     """Attaches HTTP Token Authentication to the given Request object."""
 
