@@ -23,7 +23,7 @@ try:
 	hostname = hostname_match.group(1)
 	fhostname.close()
 except:
-	print "UNKNOWN: Unable to read hostname and determine system's role."
+	print("UNKNOWN: Unable to read hostname and determine system's role.")
 	sys.exit(exit_unknown)
 
 known_hwlbs = { key for iface_dict in carp_settings.ifaces.values() for key in iface_dict.keys() }
@@ -73,9 +73,9 @@ elif result_code == exit_warn:
 	result_dscr = "WARNING"
 elif result_code == exit_crit:
 	result_dscr = "CRITICAL"
-elif result_code == _unknown:
+elif result_code == exit_unknown:
 	result_dscr = "UNKNOWN"
 
-print "%s: %s" % (result_dscr, result_txt)
+print("%s: %s" % (result_dscr, result_txt))
 sys.exit(result_code)
 
