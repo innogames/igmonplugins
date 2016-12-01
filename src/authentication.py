@@ -50,6 +50,7 @@
 from argparse import ArgumentParser, RawTextHelpFormatter
 
 import requests
+from requests import request, RequestException
 from requests.auth import HTTPBasicAuth
 
 
@@ -66,10 +67,6 @@ def parse_args():
                              'basic, oauth, header and form authentication. '
                              'If nothing is passed it will try an anonymous '
                              'request.')
-    # Basic Auth
-    # Form Auth
-    # Header Auth
-    # OAuth
     parser.add_argument('--inputs', nargs='*',
                         help='The inputs for the authentication. '
                              'Have to be an even amount of parameters.''''
@@ -83,29 +80,12 @@ def parse_args():
     passphrase (optional)
 * Form/Header
     several different key value pairs''')
-    # More Headers
     parser.add_argument('--headers', nargs='*',
                         help='The headers which shall be applied besides of '
                              'the authentication inputs.')
-    # Two Factor Authentication
     parser.add_argument('--totp',
                         help='The secret key for the '
                              'Two-Factor-Authentication.')
-    # Formats
-    parser.add_argument('--format',
-                        help='The format which will be used if the request '
-                             'was successful. the response as `response` and '
-                             'all arguments as `args` will be passed in.')
-    parser.add_argument('--format-fail',
-                        help='The format which will be used if the request '
-                             'was not successful due to authentication '
-                             'failure. The response as `response` and all '
-                             'arguments as `args` will be passed in.')
-    parser.add_argument('--format-error',
-                        help='The format which will be used if the request '
-                             'was not successful due to some other errors. '
-                             'All arguments as `args` and the raised error as '
-                             '`error` will be passed in.')
     return parser.parse_args()
 
 
@@ -138,30 +118,23 @@ def main():
 
     headers = insert_totp_token(headers, totp)
 
-    format_success = (args.format or
-                      'OK: Authentication was successful | '
-                      '{response.url} ; {response.status_code}')
-    format_fail = (args.format_fail or
-                   'CRITICAL: Authentication failed | '
-                   '{response.url} ; {response.status_code}\n'
-                   '{response.text}')
-    format_error = (args.format_error or
-                    'CRITICAL: Authentication failed | '
-                    '{args.url}\n'
-                    '{error}')
-
     try:
-        response = requests.request(args.method, args.url,
-                                    headers=headers, auth=auth)
-    except requests.RequestException as error:
-        print(format_error.format(error=error, args=args))
+        response = request(args.method, args.url, headers=headers, auth=auth)
+    except RequestException as error:
+        print('CRITICAL: Authentication failed | {args.url}\n{error}'
+              .format(error=error, args=args))
         raise SystemExit(2)
 
     if response.ok:
-        print(format_success.format(response=response, args=args))
+        print('OK: Authentication was successful | '
+              '{response.url} ; {response.status_code}'
+              .format(response=response, args=args))
         raise SystemExit(0)
 
-    print(format_fail.format(response=response, args=args))
+    print('CRITICAL: Authentication failed | '
+          '{response.url} ; {response.status_code}\n'
+          '{response.text}'
+          .format(response=response, args=args))
     raise SystemExit(2)
 
 
@@ -210,8 +183,8 @@ def create_oauth1(consumer_key, consumer_secret, private_key, passphrase):
 
 
 def get_new_totp(totp):
-    import pyotp
-    return pyotp.TOTP(totp).now()
+    from pyotp import TOTP
+    return TOTP(totp).now()
 
 
 def insert_totp_token(values, totp):
@@ -225,18 +198,23 @@ def collect_pair_values(values):
     if len(values) % 2 != 0:
         raise ValueError("An even amount of elements are needed.")
 
-    return zip(values[0::2], values[1::2])
+    # Use the exact same iterator twice to go through the value list in
+    # parallel. Fast alternative way for `zip(values[0::2], values[1::2])`
+    return zip(*([iter(values)] * 2))
 
 
 class HTTPHeaderAuth(requests.auth.AuthBase):
     """Attaches HTTP Header Authentication to the given Request object."""
 
     def __init__(self, headers):
-        super(requests.auth.AuthBase, self).__init__()
+        super(HTTPHeaderAuth, self).__init__()
         self.headers = headers
 
     def __eq__(self, other):
-        return self.headers == getattr(other, 'headers')
+        if not isinstance(other, HTTPHeaderAuth):
+            return False
+
+        return self.headers == other.headers
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -248,8 +226,6 @@ class HTTPHeaderAuth(requests.auth.AuthBase):
         if not self.headers:
             return request
 
-        # for name, value in self.headers.items():
-        #     request.headers[name] = value
         request.headers.update(self.headers)
 
         return request
@@ -262,11 +238,14 @@ class HTTPFormAuth(requests.auth.AuthBase):
         """
         :param dict inputs:
         """
-        super(requests.auth.AuthBase, self).__init__()
+        super(HTTPFormAuth, self).__init__()
         self.inputs = inputs
 
     def __eq__(self, other):
-        return self.inputs == getattr(other, 'inputs')
+        if not isinstance(other, HTTPFormAuth):
+            return False
+
+        return self.inputs == other.inputs
 
     def __ne__(self, other):
         return not self.__eq__(other)
