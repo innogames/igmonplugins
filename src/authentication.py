@@ -39,19 +39,18 @@
 
 # Needed modules which are imported below
 #
-# For OAuth authentication, lines 209-210 todo:
+# For OAuth authentication, lines 175-176
 # pycrypto, pip install pycrypto
 # requests_oauthlib, pip install requests requests_oauthlib
 #
-# For Two Factor Authentication, line 115 todo:
+# For Two Factor Authentication, line 185
 # pyotp, pip install pyotp
 #
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 
-import requests
 from requests import request, RequestException
-from requests.auth import HTTPBasicAuth
+from requests.auth import HTTPBasicAuth, AuthBase
 
 
 def parse_args():
@@ -203,7 +202,7 @@ def collect_pair_values(values):
     return zip(*([iter(values)] * 2))
 
 
-class HTTPHeaderAuth(requests.auth.AuthBase):
+class HTTPHeaderAuth(AuthBase):
     """Attaches HTTP Header Authentication to the given Request object."""
 
     def __init__(self, headers):
@@ -231,7 +230,7 @@ class HTTPHeaderAuth(requests.auth.AuthBase):
         return request
 
 
-class HTTPFormAuth(requests.auth.AuthBase):
+class HTTPFormAuth(AuthBase):
     """Attaches HTTP Token Authentication to the given Request object."""
 
     def __init__(self, inputs):
