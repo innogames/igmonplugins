@@ -6,36 +6,25 @@
 #2   CRITICAL
 #3   UNKNOWN
 
-protos=`birdc 'show protocols' | awk '$2=="BGP" { print $1":"$6}'`
+birdc 'show protocols' | awk '$2=="BGP" { ORS=" "; print $1":"; for (i=6; i<=NF; i++) print $i; ORS="\n"; print ""}' > /tmp/bgpstatus
 
-for proto in $protos; do
-	router=${proto%:*}
-	status=${proto#*:}
+while read proto; do
+    router=${proto%%:*}
+    status=${proto#*:}
+    status=${status# *}
 
-	if [ "$status" != "Established" ]; then
-		CRIT="yes"
-		dead="$dead $router"
-	fi
-done
-
-if [ -n "$CRIT" ]; then
-	echo "No connection to routers $dead!"
-else
-	echo "All routers are fine."
-fi
-
-
-for proto in $protos; do
-	router=${proto%:*}
-	status=${proto#*:}
-
-	echo "$router is $status"
-done
-
+    if [ "$status" != "Established" ]; then
+        CRIT="yes"
+    fi
+    routers="${routers}${router}: ${status}"$'\n'
+done < /tmp/bgpstatus
 
 if [ -n "$CRIT" ]; then
-	exit 2
+    echo "No connection to some routers!"
+    echo "$routers"
+    exit 2
 else
-	exit 0
+    echo "All routers are fine."
+    echo "$routers"
+    exit 0
 fi
-
