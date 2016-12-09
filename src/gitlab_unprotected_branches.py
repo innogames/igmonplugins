@@ -114,7 +114,7 @@ def main(args):
     # create array of requests for all the branches
     branch_requests = []
     for project in projects:
-        branch = args.branch if args.branch else project['default_branch']
+        branch = args.branch or project['default_branch']
         if not branch:
             continue
         branch_requests.append(get_branch_request(
@@ -123,16 +123,22 @@ def main(args):
     # map the branch responses with their project
     branches = zip(
         projects,
-        (branch.json() for branch in grequests.map(branch_requests, size=2)
-         if branch and branch.status_code == 200)
+        (
+            branch.json() if branch and branch.status_code == 200
+            else None
+            for branch in grequests.map(branch_requests, size=2)
+        )
     )
 
     # collect all unprotected branches
     unprotected_branches = [
         (project, branch) for project, branch in branches
-        if not branch['protected'] or
-        branch['developers_can_merge'] or
-        branch['developers_can_push']
+        if branch and
+        (
+            not branch['protected'] or
+            branch['developers_can_merge'] or
+            branch['developers_can_push']
+        )
     ]
 
     if not unprotected_branches:
