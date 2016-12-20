@@ -25,6 +25,6 @@ for iterate_param, process in subs.iteritems():
 if not message:
     print 'Everything is fine'
 else:
-    print 'Found some problems:\n' + message
+    print 'Found some problems: ' + message.replace('\n', ' <> ')
 
 sys.exit(exit_code)
