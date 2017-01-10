@@ -24,7 +24,7 @@ def master_status():
         # Read interface configuration:
         p = subprocess.Popen(['/sbin/ifconfig', ifname], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         ifconfig, err = p.communicate()
-        
+
         for line in ifconfig.split("\n"):
             # Find carp lines, the look like this:
             #carp: MASTER vhid 133 advbase 1 advskew 50
@@ -71,17 +71,22 @@ def compare_pools(pools, testtool, send):
             num_nodes = testtool[pool_k]['nodes_alive']
             in_testtool = True
 
+        optimal_nodes = pool_v.get('optimal_nodes')
+
         if pool_v['has_healthchecks']:
             if in_testtool:
                 if num_nodes == 0:
                     exit_code = exit_crit
-                else:
+                elif num_nodes == optimal_nodes:
                     exit_code = exit_ok
-                output += "{}\t{}\t{}\t{} nodes alive{}".format(
+                else:
+                    exit_code = exit_warn
+                output += "{}\t{}\t{}\t{}/{} nodes alive{}".format(
                     pool_v['nagios_host'],
                     pool_v['nagios_service'],
                     exit_code,
                     num_nodes,
+                    optimal_nodes,
                     separator,
                     )
                 separator
@@ -93,7 +98,6 @@ def compare_pools(pools, testtool, send):
                     separator
                     )
         else:
-            optimal_nodes = pool_v.get('optimal_nodes')
             if optimal_nodes == 1:
                 output += "{}\t{}\t{}\tHas no healthchecks and only 1 node{}".format(
                     pool_v['nagios_host'],
