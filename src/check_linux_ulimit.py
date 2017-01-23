@@ -82,35 +82,41 @@ def get_state(warning_ratio):
 
     state = None    # None is less than everything
     msg = ''
+    total_fds = 0
 
     for pid in list_proc_db():
-
         # The are some other files under the proc file system.  If
         # the directory name is not a digit, it cannot be a process.
         if not pid.isdigit():
             continue
 
         soft_limit = get_proc_ulimit(pid, 'Max open files')
+        warning_limit = soft_limit * warning_ratio
 
         # soft_limit 0 means actually not set (during fork etc)
         if soft_limit == 0:
             continue
 
         num_fds = len(list_proc_db(pid, 'fd'))
+        total_fds += num_fds
+
         if num_fds >= soft_limit:
-            state = ExitCodes.critical
-            msg += (
-                'PID {0} [{1}] reached its soft limit (open: {2}, limit {3})\n'
-                .format(pid, get_proc_name(pid), num_fds, soft_limit)
-            )
-        elif num_fds >= soft_limit * warning_ratio:
+            state = max(state, ExitCodes.critical)
+        elif num_fds >= warning_limit:
             state = max(state, ExitCodes.warning)
-            msg += (
-                'PID {0} [{1}] nearly reached its soft limit at {2} open fds\n'
-                .format(pid, get_proc_name(pid), num_fds)
-            )
         else:
             state = max(state, ExitCodes.ok)
+
+        if num_fds >= warning_limit:
+            msg += 'PID {} ({}) {} its FD soft limit {} with {} FDs; '.format(
+                pid,
+                get_proc_name(pid),
+                'reached' if num_fds >= soft_limit else 'nearly reached',
+                soft_limit,
+                num_fds,
+            )
+
+    msg += '{} total FDs'.format(total_fds)
 
     return state, msg
 
