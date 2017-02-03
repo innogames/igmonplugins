@@ -6,7 +6,7 @@
 
 if [[ ! -d $1/.git ]]
 then
-    echo "Unknown: No valid git repository found in $1"
+    echo "UNKNOWN: No valid git repository found in $1"
     exit 3
 fi
 
@@ -19,5 +19,5 @@ then
     exit 0
 fi
 
-echo "Warning: $1 is $NUM_COMMITS commits behind origin"
+echo "WARNING: $1 is $NUM_COMMITS commits behind origin"
 exit 1
