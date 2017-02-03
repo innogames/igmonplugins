@@ -19,5 +19,5 @@ then
     exit 0
 fi
 
-echo "WARNING: $1 is $NUM commits behind origin"
+echo "WARNING: $1 is $NUM_COMMITS commits behind origin"
 exit 1
