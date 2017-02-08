@@ -48,7 +48,7 @@ def load_testtool_status():
                 k = k.split(':')[0]
                 subret[k] = v
             ret[subret['lbpool']] = {
-                'nodes_alive': subret['nodes_alive'],
+                'nodes_alive': int(subret['nodes_alive']),
                 'backup_pool': subret['backup_pool'],
             }
     return ret
