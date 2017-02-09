@@ -108,15 +108,18 @@ def get_state(warning_ratio):
             state = max(state, ExitCodes.ok)
 
         if num_fds >= warning_limit:
-            msg += 'PID {} ({}) {} its FD soft limit {} with {} FDs; '.format(
-                pid,
-                get_proc_name(pid),
-                'reached' if num_fds >= soft_limit else 'nearly reached',
-                soft_limit,
-                num_fds,
+            msg += (
+                'PID {0} ({1}) {2} its FD soft limit {3} with {4} FDs; '
+                .format(
+                    pid,
+                    get_proc_name(pid),
+                    'reached' if num_fds >= soft_limit else 'nearly reached',
+                    soft_limit,
+                    num_fds,
+                )
             )
 
-    msg += '{} total FDs'.format(total_fds)
+    msg += '{0} total FDs'.format(total_fds)
 
     return state, msg
 
