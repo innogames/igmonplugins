@@ -205,10 +205,8 @@ class Value(object):
             return self.value * 10 ** 12
         return self.value
 
-    def __cmp__(self, other):
-        self_value = int(self)
-        other_value = int(other)
-        return (self_value > other_value) - (self_value < other_value)
+    def __lt__(self, other):
+        return int(self) < int(other)
 
 
 class Table:
