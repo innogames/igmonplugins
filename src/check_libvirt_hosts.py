@@ -1,26 +1,49 @@
-#!/usr/bin/python
+#!/usr/bin/env python
+"""InnoGames Monitoring Plugins - check_libvirt_hosts.py
 
-# author: Juergen Thomann
+Copyright (c) 2017, InnoGames GmbH
+"""
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the 'Software'), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
-import libvirt
-import sys
+from sys import exit
 
-try:
-    conn = libvirt.openReadOnly(None)
-except libvirt.libvirtError as e:
-    print "WARNING: could not connect to libvirt: {0}".format(e)
-    sys.exit(1)
-domids = conn.listAllDomains()
-messages = []
+from libvirt import openReadOnly, libvirtError
 
-for dom in domids:
-    if not dom.isActive():
-        messages.append('{0} is defined but not running'.format(dom.name()))
 
-if messages:
-    message =', '.join(messages)
-    print "WARNING: {0}".format(message)
-    sys.exit(1)
-else:
-    print "OK: all defined domains are running"
+def main():
+    try:
+        conn = openReadOnly(None)
+    except libvirtError as error:
+        print('WARNING: could not connect to libvirt: ' + str(error))
+        exit(1)
 
+    inactive_domains = [d for d in conn.listAllDomains() if not d.isActive()]
+    if inactive_domains:
+        print('WARNING: ' + ', '.join(
+            '{} is defined but not running'.format(d.name())
+            for d in inactive_domains
+        ))
+        exit(1)
+
+    print('OK: all defined domains are running')
+    exit(0)
+
+
+if __name__ == '__main__':
+    main()
