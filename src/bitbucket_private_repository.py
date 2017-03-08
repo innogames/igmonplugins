@@ -94,15 +94,13 @@ def main(args):
         print('No private repositories found')
         exit(0)
 
-    if args.format:
-        format_string = args.format
-    else:
-        format_string = ('{repo[project][owner][name]}: {repo[name]} '
-                         '({repo[links][self][0][href]})\n')
+    format_string = (args.format if args.format else
+                     '\n{repo[project][owner][name]}: {repo[name]} '
+                     '({repo[links][self][0][href]})')
 
     string = ''.join(format_string.format(repo=r)
                      for r in private_repos)
-    print('{amount} private repositories found\n{0}'
+    print('{amount} private repositories found{0}'
           .format(string, amount=len(private_repos)))
     exit(1)
 
@@ -132,7 +130,8 @@ def fetch_repositories(base_url, auth=None):
         :rtype: list of dict
     """
     endpoint = '/rest/api/1.0/repos'
-    limit = 1000  # right now bitbucket limit the request with a default of 1000
+    # right now bitbucket limit the request with a default of 1000
+    limit = 1000
     start = 0
     params = {'limit': limit, 'start': start}
     last_page = False

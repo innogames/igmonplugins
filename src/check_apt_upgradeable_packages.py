@@ -8,11 +8,12 @@
 #
 # Copyright (c) 2016, InnoGames GmbH
 #
-import re
 import os
+import re
 import sys
-import apt
 from argparse import ArgumentParser
+
+import apt
 
 ignorefile = '/etc/check_apt_upgrade_ignores'
 
@@ -67,10 +68,9 @@ def main(ignored_packages):
 
     if to_upgrade:
         packages = ' '.join([pkg.name for pkg in to_upgrade])
-        print((
-            'WARNING: {0} packages do not have the newest version installed!'
-            ' | {1}'
-        ).format(len(to_upgrade), packages))
+        print('WARNING: '
+              '{0} packages do not have the newest version installed! | {1}'
+              .format(len(to_upgrade), packages))
         sys.exit(1)
 
     print('OK: All packages are at the newest available version')

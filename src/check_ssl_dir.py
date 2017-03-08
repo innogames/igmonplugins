@@ -38,11 +38,12 @@
 
 from __future__ import print_function
 
-import sys
-import os
-import time
 import datetime
+import os
+import sys
+import time
 from argparse import ArgumentParser
+
 from OpenSSL import crypto
 
 
@@ -52,23 +53,25 @@ def parse_args():
     parser.add_argument("dir",
                         help='The folder containing the certificates to check')
     parser.add_argument('--warning-days', default=30,
+                        type=int,
                         help='Days before expiry of a cert that a warning is '
                         'triggered. Will be thirty if left unspecified')
     parser.add_argument('--crit-days', default=7,
+                        type=int,
                         help='Days before expiry of a cert that a warning is '
-                        'triggered. Will be thirty if left unspecified')
+                             'triggered. Will be thirty if left unspecified')
     return parser.parse_args()
 
 
 def main(args):
     warn_cns = ''
     crit_cns = ''
-    days_to_seconds = 86400
-    check_time = int(time.time() + int(args.warning_days) * days_to_seconds)
-    crit_check_time = int(time.time() + int(args.crit_days) * days_to_seconds)
+    day_to_seconds = 86400  # 24 * 60 * 60
+    check_time = int(time.time() + args.warning_days * day_to_seconds)
+    crit_check_time = int(time.time() + args.crit_days * day_to_seconds)
     cert_dir = args.dir
     certs = os.listdir(cert_dir)
-    wanted_extensions = ['pem', 'crt', 'ca-bundle']
+    wanted_extensions = ('pem', 'crt', 'ca-bundle')
 
     for cert_file in certs:
         st_cert = open(os.path.join(cert_dir, cert_file), 'rb').read()
@@ -86,17 +89,19 @@ def main(args):
             continue
 
         if crit_check_time > expiry_date_unix:
-            cn = str(cert_object.get_subject()).split(
-                        'CN')[1].rstrip('\'>').strip('=')
-            cn_expiry = (' ({0}), '.format(time.strftime('%d.%m.%Y',
-                         time.localtime(int(expiry_date_unix)))))
+            cn = (str(cert_object.get_subject()).split('CN')[1]
+                  .rstrip("'>").strip('='))
+            cn_expiry = (' ({0}), '.format(
+                time.strftime('%d.%m.%Y', time.localtime(expiry_date_unix))
+            ))
             crit_cns += cn + cn_expiry
             continue
         if check_time > expiry_date_unix:
-            cn = str(cert_object.get_subject()).split(
-                        'CN')[1].rstrip('\'>').strip('=')
-            cn_expiry = (' ({0}), '.format(time.strftime('%d.%m.%Y',
-                         time.localtime(int(expiry_date_unix)))))
+            cn = (str(cert_object.get_subject()).split('CN')[1]
+                  .rstrip("'>").strip('='))
+            cn_expiry = (' ({0}), '.format(
+                time.strftime('%d.%m.%Y', time.localtime(expiry_date_unix))
+            ))
             warn_cns += cn + cn_expiry
 
     if crit_cns:
@@ -110,6 +115,7 @@ def main(args):
         sys.exit(1)
 
     print('OK: Everything is fine')
+
 
 if __name__ == '__main__':
     main(parse_args())

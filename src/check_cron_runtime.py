@@ -23,14 +23,15 @@
 # THE SOFTWARE.
 #
 
-from subprocess import Popen, PIPE, STDOUT
 from argparse import ArgumentParser
+from subprocess import Popen, PIPE, STDOUT
 from sys import exit
 
 # A list of cron names that shall get ignored by this check.
 exclude_list = [
     'am_stockpile_distribution',
 ]
+
 
 def parse_args():
     """The argument parser"""
@@ -45,56 +46,57 @@ def parse_args():
             'is the elapsed time in seconds.'
         ),
     )
-    parser.add_argument(
-        '--verbose',
-        dest='verbose',
-        action='store_true',
-        help='Increase verbosity',
-    )
-    return vars(parser.parse_args())
+    parser.add_argument('--verbose', action='store_true',
+                        help='Increase verbosity')
+    return parser.parse_args()
 
-def main(verbose=False):
+
+def main():
     """The main program"""
+
+    args = parse_args()
+
+    verbose = args.verbose
 
     # Dictionary of pids containing th command that is running
     ps_aux = get_ps_aux()
 
-    #pids = psutil.pids()
+    # pids = psutil.pids()
 
-    #Nagios Return codes
+    # Nagios Return codes
     ok_code = 0
     warn_code = 1
     crit_code = 2
     un_code = 3
 
-    #pre check ps version
+    # pre check ps version
     if '3.2.8' in execute('ps --version').strip('\n').split(' ')[2]:
         print('PS version 3.2.9 or above needed to run this script')
-        exit(int(un_code))
+        exit(un_code)
 
-    #Check for main Cron, Return CRITICAL if not running
+    # Check for main Cron, Return CRITICAL if not running
     try:
         parent_cron_pid = execute('pgrep -o cron').strip('\n')
     except AttributeError:
         print('MAIN CRON NOT RUNNING')
-        exit(int(crit_code))
+        exit(crit_code)
 
     if verbose:
         print('Cron PID: ' + parent_cron_pid)
 
     # Get child processes for main cron
     # Usage: pgrep -P pid
-    cron_childs = execute('pgrep -P ' + parent_cron_pid)
+    cron_children = execute('pgrep -P ' + parent_cron_pid)
 
-    #Exit with CRITICAL if no child cron running
-    if not cron_childs:
+    # Exit with CRITICAL if no child cron running
+    if not cron_children:
         print('No child crons running')
-        exit(int(ok_code))
+        exit(ok_code)
 
     cron_child_list = []
     cron_child_time = []
 
-    for child in cron_childs.split('\n'):
+    for child in cron_children.split('\n'):
         cron_child_list.append(child)
 
     if verbose:
@@ -103,42 +105,46 @@ def main(verbose=False):
     cron_pid_more_than1 = []
     ok_flag = warn_flag = un_flag = 0
     for pid in cron_child_list:
-        if pid:
-            try:
-                cron_child_time = execute("ps -o 'etimes=' " + pid).strip('    ').strip('\n')
-            except AttributeError:
-                pass
+        if not pid:
+            continue
 
-            #check for 1 hour time
-            if int(cron_child_time) > 3600:
-                # Check if cron name is on ignore list
-                include = True
-                child_pid = execute('pgrep -P ' + pid).strip()
+        try:
+            cron_child_time = execute("ps -o 'etimes=' " + pid)
+            cron_child_time = cron_child_time.strip('    ').strip('\n')
+        except AttributeError:
+            pass
 
-                for exclude in exclude_list:
-                    if child_pid in ps_aux:
-                        if exclude in ps_aux[child_pid]:
-                            include = False
-                if include:
-                    cron_pid_more_than1.append(pid)
-                    warn_flag += 1
-            elif int(cron_child_time) < 3600:
-                ok_flag = 1
-            else:
-                print('UNKNOWN PID execution TIME')
-                exit(int(un_code))
+        # check for 1 hour time
+        if int(cron_child_time) > 3600:
+            # Check if cron name is on ignore list
+            include = True
+            child_pid = execute('pgrep -P ' + pid).strip()
 
-    #print cron_pid_more_than1
+            for exclude in exclude_list:
+                if child_pid in ps_aux:
+                    if exclude in ps_aux[child_pid]:
+                        include = False
+            if include:
+                cron_pid_more_than1.append(pid)
+                warn_flag += 1
+        elif int(cron_child_time) < 3600:
+            ok_flag = 1
+        else:
+            print('UNKNOWN PID execution TIME')
+            exit(un_code)
+
+    # print cron_pid_more_than1
     if warn_flag:
 
         msg = '|'.join(str(pid) for pid in cron_pid_more_than1)
-        print msg
+        print(msg)
         for i in cron_pid_more_than1:
             get_child(i)
-        exit(int(warn_code))
+        exit(warn_code)
     if ok_flag:
         print('No CRON running more than 1 hour')
-        exit(int(ok_code))
+        exit(ok_code)
+
 
 def get_ps_aux():
     pids = {}
@@ -149,21 +155,20 @@ def get_ps_aux():
             pids[the_pid] = the_command
     return pids
 
+
 def get_child(ppid):
     childs = execute('pgrep -P ' + ppid)
-    if childs:
-        for child in childs.strip('\n').split():
-       	    print '|' + (execute('ps -ef | grep ' + child + ' | grep -v grep'))
-            get_child(child)
+    if not childs:
+        return
+
+    for child in childs.strip('\n').split():
+        print('|' + (execute('ps -ef | grep ' + child + ' | grep -v grep')))
+        get_child(child)
+
 
 def execute(cmd):
     content = ''
-    process = Popen(
-        cmd,
-        shell=True,
-        stdout=PIPE,
-        stderr=STDOUT,
-    )
+    process = Popen(cmd, shell=True, stdout=PIPE, stderr=STDOUT)
     for line in iter(process.stdout.readline, ''):
         content += line
     returncode = process.wait()
@@ -177,5 +182,6 @@ def execute(cmd):
 
     return content
 
+
 if __name__ == '__main__':
-    main(**parse_args())
+    main()
