@@ -24,7 +24,7 @@ def master_status():
         # Read interface configuration:
         p = subprocess.Popen(['/sbin/ifconfig', ifname], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         ifconfig, err = p.communicate()
-        
+
         for line in ifconfig.split("\n"):
             # Find carp lines, the look like this:
             #carp: MASTER vhid 133 advbase 1 advskew 50
@@ -68,7 +68,7 @@ def compare_pools(pools, testtool, send):
     for pool_k, pool_v in pools.items():
         in_testtool = False
         if pool_k in testtool:
-            num_nodes = testtool[pool_k]['nodes_alive']
+            num_nodes = int(testtool[pool_k]['nodes_alive'])
             in_testtool = True
 
         if pool_v['has_healthchecks']:
