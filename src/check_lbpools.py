@@ -48,7 +48,7 @@ def load_testtool_status():
                 k = k.split(':')[0]
                 subret[k] = v
             ret[subret['lbpool']] = {
-                'nodes_alive': int(subret['nodes_alive']),
+                'nodes_alive': int(subret.get('nodes_alive')),
                 'backup_pool': subret['backup_pool'],
             }
     return ret
@@ -68,20 +68,33 @@ def compare_pools(pools, testtool, send):
     for pool_k, pool_v in pools.items():
         in_testtool = False
         if pool_k in testtool:
-            num_nodes = int(testtool[pool_k]['nodes_alive'])
+            num_nodes = testtool[pool_k]['nodes_alive']
             in_testtool = True
+
+        optimal_nodes = pool_v.get('optimal_nodes')
+        min_nodes = pool_v.get('min_nodes')
+        max_nodes = pool_v.get('max_nodes')
 
         if pool_v['has_healthchecks']:
             if in_testtool:
                 if num_nodes == 0:
                     exit_code = exit_crit
-                else:
+                elif max_nodes is not None and (num_nodes > max_nodes):
+                    exit_code = exit_warn
+                elif num_nodes == optimal_nodes:
                     exit_code = exit_ok
-                output += "{}\t{}\t{}\t{} nodes alive{}".format(
+                elif min_nodes is not None and (num_nodes >= min_nodes):
+                    exit_code = exit_ok
+                else:
+                    exit_code = exit_warn
+                output += "{}\t{}\t{}\t{}(min: {}, max: {})/{} nodes alive{}".format(
                     pool_v['nagios_host'],
                     pool_v['nagios_service'],
                     exit_code,
                     num_nodes,
+                    min_nodes,
+                    max_nodes,
+                    optimal_nodes,
                     separator,
                     )
                 separator
@@ -93,7 +106,6 @@ def compare_pools(pools, testtool, send):
                     separator
                     )
         else:
-            optimal_nodes = pool_v.get('optimal_nodes')
             if optimal_nodes == 1:
                 output += "{}\t{}\t{}\tHas no healthchecks and only 1 node{}".format(
                     pool_v['nagios_host'],
