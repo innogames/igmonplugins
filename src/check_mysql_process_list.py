@@ -21,7 +21,7 @@ args = parser.parse_args()
 
 def get_list(count):
     try :
-        db = MySQLdb.connect(host="localhost", user=username, passwd=pass)
+        db = MySQLdb.connect(host="localhost", user="dsTeamNLsql4", passwd="iegohC3eeDah")
         cur = db.cursor()
         sql = ("(select count(*) from information_schema.processlist where time >= {});").format(count)
         cur.execute(sql)
