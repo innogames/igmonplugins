@@ -2,39 +2,63 @@
 import sys
 import MySQLdb
 import argparse
+import re
+
+#TODO: add verbose input for timestamps (1H, 30S, ...)
+#----- add for select columns (Sleep)
 
 #exitcodes
-errorreport = {"ok":0,"warning":1,"critical":3}
-
-def getRows():
-    db = MySQLdb.connect(host="localhost", user="dsTeamNLsql4", passwd="iegohC3eeDah")
-    cur = db.cursor()
-    sql = "(select count(*) as stat from information_schema.processlist where time >= %s AND time < %s) union all (select count(*) as crit_stat from information_schema.processlist where time >= %s);" % (
-    results.warning, results.critical, results.critical)
-    cur.execute(sql)
-    rows = cur.fetchall()
-    db.close()
-    return rows
+class Exit_Codes:
+    ok = 0
+    warning = 1
+    critical = 2
 
 #init parser
 parser = argparse.ArgumentParser(description='Parameters for checking mysql processlist')
-parser.add_argument("-w","--warning",dest="warning",nargs="?",type=int,help="Number of seconds before a warning is given -- default:90", default=90,action='store')
-parser.add_argument("-c","--critical",dest="critical",nargs="?",type=int,help="Number of seconds before situation is critical -- default:120", default=120,action='store')
-parser.add_argument("-x","--countw",dest="countw",nargs="?",type=int,help="Number of situations before throwing warning -- default:1", default=1,action='store')
-parser.add_argument("-y","--countc",dest="countc",nargs="?",type=int,help="Number of situations before throwing critical message -- default:1", default=1,action='store')
-parser.add_argument("-z","--countwarn",dest="countwarn",nargs="?",type=int,help="Number of (warning) situations before warnings are considered as critical -- default:1", default=1,action='store')
+parser.add_argument("-w","--warning",type=str,nargs="+",help="Number of occasions with number seconds before a warning is given -- default:'1 of 90'", default="1 of 90")
+parser.add_argument("-c","--critical",type=str,nargs="+",help="Number of occasions with number seconds before situation is critical -- default:'1 of 120'", default="1 of 120")
+args = parser.parse_args()
 
-results = parser.parse_args()
+def get_list(count):
+    try :
+        db = MySQLdb.connect(host="localhost", user=username, passwd=pass)
+        cur = db.cursor()
+        sql = ("(select count(*) from information_schema.processlist where time >= {});").format(count)
+        cur.execute(sql)
+        return cur.fetchall()
+    finally:
+        db.close()
+
+def is_active(count,current):
+    count = int(count)
+    current = int(current)
+    if current >= count:
+        return True
+    return False
 
 
-rows = getRows()
-#script logic
-warnings =  rows[0][0];
-criticals =  rows[1][0];
+def main():
+    global args
+    for crit_condition in args.critical:
+        match_array_crit = re.match("^([0-9]*) of ([0-9]*)$", crit_condition)
+        rows = get_list(match_array_crit.group(2))
+        counts =rows [0][0]
+        if is_active(match_array_crit.group(1),counts) == True:
+            sys.exit(Exit_Codes.critical)
+            #quit script once one critical situation is detected
+            quit()
 
-if criticals >= results.countc or warnings >= results.countwarn:
-    sys.exit(errorreport["critical"])
-elif warnings >=results.countw:
-    sys.exit(errorreport["warning"])
-else :
-    sys.exit(errorreport["ok"])
+    for warn_condition in args.warning:
+        match_array_warning = re.match("^([0-9]*) of ([0-9]*)$", warn_condition)
+        rows = get_list(match_array_warning.group(2))
+        counts = rows[0][0]
+        if is_active(match_array_warning.group(1),counts) == True:
+            sys.exit(Exit_Codes.warning)
+            #quit script once one warnable situation is detected
+            quit()
+
+
+    sys.exit(Exit_Codes.ok)
+
+if __name__ == '__main__':
+    main()
