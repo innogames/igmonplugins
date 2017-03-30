@@ -19,9 +19,13 @@ parser.add_argument("-w","--warning",type=str,nargs="+",help="Number of occasion
 parser.add_argument("-c","--critical",type=str,nargs="+",help="Number of occasions with number seconds before situation is critical -- default:'1 of 120'", default="1 of 120")
 parser.add_argument("-u","--user",type=str)
 parser.add_argument("-p","--passw",type=str)
-args = parser.parse_args()
+
+def parse_args():
+    args = parser.parse_args()
+    return args
 
 def get_list(query):
+    args = parse_args()
     try :
         db = MySQLdb.connect(host="localhost", user=args.user, passwd=args.passw)
         cur = db.cursor()
@@ -32,7 +36,7 @@ def get_list(query):
 
 
 def build_query():
-    global args
+    args = parse_args()
     reg_pattern = "^([0-9]*).*?([0-9]*)$"
     base_query = "(select count(*) from information_schema.processlist where"
     critical_query = base_query
