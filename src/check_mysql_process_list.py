@@ -8,7 +8,7 @@ import re
 #----- add for select columns (Sleep)
 
 #exitcodes
-class Exit_Codes:
+class ExitCodes:
     ok = 0
     warning = 1
     critical = 2
@@ -17,48 +17,60 @@ class Exit_Codes:
 parser = argparse.ArgumentParser(description='Parameters for checking mysql processlist')
 parser.add_argument("-w","--warning",type=str,nargs="+",help="Number of occasions with number seconds before a warning is given -- default:'1 of 90'", default="1 of 90")
 parser.add_argument("-c","--critical",type=str,nargs="+",help="Number of occasions with number seconds before situation is critical -- default:'1 of 120'", default="1 of 120")
+parser.add_argument("-u","--user",type=str)
+parser.add_argument("-p","--passw",type=str)
 args = parser.parse_args()
 
-def get_list(count):
+def get_list(query):
     try :
-        db = MySQLdb.connect(host="localhost", user="user", passwd="pass")
+        db = MySQLdb.connect(host="localhost", user=args.user, passwd=args.passw)
         cur = db.cursor()
-        sql = ("(select count(*) from information_schema.processlist where time >= {});").format(count)
-        cur.execute(sql)
+        cur.execute(query)
         return cur.fetchall()
     finally:
         db.close()
 
-def is_active(count,current):
-    count = int(count)
-    current = int(current)
-    if current >= count:
-        return True
-    return False
+
+def build_query():
+    global args
+    reg_pattern = "^([0-9]*).*?([0-9]*)$"
+    base_query = "(select count(*) from information_schema.processlist where"
+    critical_query = base_query
+    warn_query = base_query
+    i = 0
+    for crit_condition in args.critical:
+        match_array_crit = re.match(reg_pattern, crit_condition)
+        query_or = (" time > {}").format(match_array_crit.group(2))
+        critical_query += query_or
+        if i != len(args.critical)-1:
+            critical_query += " OR"
+        i = i+1
+    critical_query += ")"
+
+    i = 0
+    for warn_condition in args.warning:
+        match_array_warning = re.match(reg_pattern, warn_condition)
+        query_or = (" time > {}").format(match_array_warning.group(2))
+        warn_query += query_or
+        if i != len(args.warning)-1:
+            warn_query += " OR"
+        i = i+1
+    warn_query += ")"
+
+    final_query = critical_query + " UNION ALL " + warn_query + ";"
+    return final_query
 
 
 def main():
-    global args
-    for crit_condition in args.critical:
-        match_array_crit = re.match("^([0-9]*) of ([0-9]*)$", crit_condition)
-        rows = get_list(match_array_crit.group(2))
-        counts =rows [0][0]
-        if is_active(match_array_crit.group(1),counts) == True:
-            sys.exit(Exit_Codes.critical)
-            #quit script once one critical situation is detected
-            quit()
-
-    for warn_condition in args.warning:
-        match_array_warning = re.match("^([0-9]*) of ([0-9]*)$", warn_condition)
-        rows = get_list(match_array_warning.group(2))
-        counts = rows[0][0]
-        if is_active(match_array_warning.group(1),counts) == True:
-            sys.exit(Exit_Codes.warning)
-            #quit script once one warnable situation is detected
-            quit()
-
-
-    sys.exit(Exit_Codes.ok)
+    query =  build_query()
+    rows = get_list(query)
+    count_criticals = rows[0][0]
+    count_warnings = rows[1][0]
+    if count_criticals != 0:
+        sys.exit(ExitCodes.critical)
+    elif count_warnings != 0:
+        sys.exit(ExitCodes.warning)
+    sys.exit(ExitCodes.ok)
 
 if __name__ == '__main__':
     main()
