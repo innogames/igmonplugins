@@ -4,6 +4,7 @@
 Modes are used to check different values of the tables.  Multiple
 vales can be given comma separated to modes and limits.  K for 10**3,
 M for 10**6, G for 10**9, T for 10**12 units can be used for limits.
+% is also accepted as a unit for limits of auto_increment.
 
 Copyright (c) 2013, Tart Internet Teknolojileri Ticaret AS
 Copyright (c) 2017, InnoGames GmbH
@@ -112,8 +113,18 @@ def get_messages(database, attributes, outputs):
     """Check all tables for all output instances"""
     for table, values in database.get_table_values(attributes):
         for output in outputs:
-            if output.attribute in values:
-                output.check(table, values[output.attribute])
+            attribute = output.attribute
+            if attribute not in values:
+                continue
+            value = values[output.attribute]
+            if output.relative():
+                if attribute.lower() != 'auto_increment':
+                    raise Exception(
+                        'We don\'t know how to run relative limits on "{}"'
+                        .format(attribute)
+                    )
+                value.scale(database.get_primary_key_datatype(table))
+            output.check(table, value)
 
     messages = {}
     for message_type in MESSAGE_TYPES:
@@ -136,17 +147,17 @@ def join_messages(critical, warning, ok, perf):
 class Value(object):
     def __init__(self, value):
         """Parse the value"""
-        if str(value)[-1:] in ['K', 'M', 'G', 'T']:
-            self.value = int(value[:-1])
+        if str(value)[-1:] in ['K', 'M', 'G', 'T', '%']:
+            self.value = float(value[:-1])
             self.unit = value[-1:]
         else:
-            self.value = int(value)
+            self.value = float(value)
             self.unit = None
 
     def __str__(self):
         """If necessary change the value to number + unit format by rounding"""
         if self.unit:
-            return str(self.value) + self.unit
+            return str(int(round(self.value))) + self.unit
         if self.value > 10 ** 12:
             return str(int(round(self.value / 10 ** 12))) + 'T'
         if self.value > 10 ** 9:
@@ -157,7 +168,7 @@ class Value(object):
             return str(int(round(self.value / 10 ** 3))) + 'K'
         return str(self.value)
 
-    def __int__(self):
+    def __float__(self):
         """If necessary change the value to number format"""
         if self.unit == 'K':
             return self.value * 10 ** 3
@@ -167,13 +178,23 @@ class Value(object):
             return self.value * 10 ** 9
         if self.unit == 'T':
             return self.value * 10 ** 12
+        if self.unit == '%':
+            return self.value / 100.0
         return self.value
 
     def __lt__(self, other):
-        return other is not None and int(self) < int(other)
+        return other is not None and float(self) < float(other)
 
     def __gt__(self, other):
-        return other is not None and int(self) > int(other)
+        return other is not None and float(self) > float(other)
+
+    def relative(self):
+        return self.unit == '%'
+
+    def scale(self, datatype):
+        assert self.unit is None
+        self.value = 100.0 * self.value / Database.datatype_max_value(datatype)
+        self.unit = '%'
 
 
 class Database(object):
@@ -199,21 +220,49 @@ class Database(object):
     def get_table_values(self, attributes):
         """Iterate tables with selected attributes"""
         for schema_row in self.select('SHOW SCHEMAS'):
-            query = (
+            table_rows = self.select(
                 'SHOW TABLE STATUS IN `{}` WHERE Engine IS NOT NULL'
                 .format(schema_row[0])
             )
-            for table_row in self.select(query):
+            attribute_positions = [
+                (a, self.get_column_position(a)) for a in attributes
+            ]
+            for table_row in table_rows:
                 values = {}
-                for attribute in attributes:
-                    position = self.get_column_position(attribute)
+                for attribute, position in attribute_positions:
                     if table_row[position]:
                         values[attribute] = Value(table_row[position])
                 yield '{}.{}'.format(schema_row[0], table_row[0]), values
 
+    def get_primary_key_datatype(self, table):
+        rows = self.select('DESC ' + table)
+        type_position = self.get_column_position('type')
+        extra_position = self.get_column_position('extra')
+        for row in rows:
+            if 'auto_increment' in row[extra_position]:
+                return row[type_position].split('(', 1)[0]
+
+    @staticmethod
+    def datatype_max_value(datatype):
+        if datatype == 'tinyint':
+            return 255
+        if datatype == 'smallint':
+            return 65535
+        if datatype == 'mediumint':
+            return 16777215
+        if datatype == 'int':
+            return 4294967295
+        if datatype == 'bigint':
+            return 18446744073709551615
+
 
 class Output(object):
     def __init__(self, attribute, warning_limit, critical_limit, perf):
+        if (
+            warning_limit and critical_limit and
+            warning_limit.relative() != critical_limit.relative()
+        ):
+            raise Exception('Limits must together be relative or not')
         self.attribute = attribute
         self.warning_limit = warning_limit
         self.critical_limit = critical_limit
@@ -223,10 +272,13 @@ class Output(object):
         return '{}.{}={};{};{};'.format(
             name,
             self.attribute,
-            int(value),
-            int(self.warning_limit) if self.warning_limit else '',
-            int(self.critical_limit) if self.critical_limit else '',
+            float(value),
+            float(self.warning_limit) if self.warning_limit else '',
+            float(self.critical_limit) if self.critical_limit else '',
         )
+
+    def relative(self):
+        return self.warning_limit and self.warning_limit.relative()
 
 
 class OutputTables(Output):
@@ -272,7 +324,7 @@ class OutputAvg(Output):
     def check(self, table, value):
         """Count tables and sum values for average calculation"""
         self.count += 1
-        self.total += int(value)
+        self.total += float(value)
 
     def get_value(self):
         return Value(round(self.total / self.count))
@@ -283,7 +335,7 @@ class OutputAvg(Output):
                 self.attribute, self.get_value()
             )
         if name == 'perf':
-            return self.format_perf_message('average', int(self.get_value()))
+            return self.format_perf_message('average', float(self.get_value()))
 
 
 class OutputMax(Output):
