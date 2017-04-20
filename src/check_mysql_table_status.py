@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 """InnoGames Monitoring Plugins - check_mysql_table_status.py
 
+Modes are used to check different values of the tables.  Multiple
+vales can be given comma separated to modes and limits.  K for 10**3,
+M for 10**6, G for 10**9, T for 10**12 units can be used for limits.
+% is also accepted as a unit for limits of auto_increment.
+
 Copyright (c) 2013, Tart Internet Teknolojileri Ticaret AS
 Copyright (c) 2017, InnoGames GmbH
 """
@@ -22,16 +27,60 @@ Copyright (c) 2017, InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from argparse import (
-    ArgumentParser, RawTextHelpFormatter, ArgumentDefaultsHelpFormatter
-)
+from argparse import ArgumentParser, RawTextHelpFormatter
 from sys import exit
 
 from MySQLdb import connect
 
+DEFAULT_MODES = ['rows', 'data_length', 'index_length']
+MESSAGE_TYPES = ['ok', 'warning', 'critical', 'perf']
+MESSAGE_SEPARATOR = '; '
+
+
+def parse_arguments():
+    def options(value):
+        return value.split(',')
+
+    parser = ArgumentParser(
+        formatter_class=RawTextHelpFormatter, description=__doc__
+    )
+    parser.add_argument('--host', help='hostname', default='localhost')
+    parser.add_argument('--port', type=int, default=3306)
+    parser.add_argument('--user', help='username')
+    parser.add_argument('--passwd', help='password')
+    parser.add_argument('--modes', type=options, default=DEFAULT_MODES)
+    parser.add_argument('--warnings', type=options, help='warning limits')
+    parser.add_argument('--criticals', type=options, help='critical limits')
+    parser.add_argument('--tables', type=options, help='show selected tables')
+    parser.add_argument('--perf', action='store_true', help='performance data')
+    parser.add_argument('--avg', action='store_true', help='show averages')
+    parser.add_argument('--max', action='store_true', help='show maximums')
+    parser.add_argument('--min', action='store_true', help='show minimums')
+
+    return parser.parse_args()
+
 
 def main():
-    messages = Checker().get_messages()
+    arguments = parse_arguments()
+    database = Database(**{
+        k: v for k, v in vars(arguments).items()
+        if k in ('host', 'port', 'user', 'passwd') and v is not None
+    })
+    output_classes = [OutputTables]
+    if arguments.avg:
+        output_classes.append(OutputAvg)
+    if arguments.max:
+        output_classes.append(OutputMax)
+    if arguments.min:
+        output_classes.append(OutputMin)
+    outputs = get_outputs(
+        output_classes,
+        arguments.modes,
+        arguments.warnings,
+        arguments.criticals,
+        arguments.perf,
+    )
+    messages = get_messages(database, arguments.modes, list(outputs))
     joined_message = join_messages(**messages)
 
     if messages['critical']:
@@ -44,157 +93,83 @@ def main():
     exit(0)
 
 
-def join_messages(critical, warning, ok, performance):
+def get_outputs(output_classes, modes, warnings, criticals, perf):
+    for seq, mode in enumerate(modes):
+        warning_limit = (
+            Value(warnings[seq])
+            if warnings and seq < len(warnings) and warnings[seq]
+            else None
+        )
+        critical_limit = (
+            Value(criticals[seq])
+            if criticals and seq < len(criticals) and criticals[seq]
+            else None
+        )
+        for output_class in output_classes:
+            yield output_class(mode, warning_limit, critical_limit, perf)
+
+
+def get_messages(database, attributes, outputs):
+    """Check all tables for all output instances"""
+    for table, values in database.get_table_values(attributes):
+        for output in outputs:
+            attribute = output.attribute
+            if attribute not in values:
+                continue
+            value = values[output.attribute]
+            if output.relative():
+                if attribute.lower() != 'auto_increment':
+                    raise Exception(
+                        'We don\'t know how to run relative limits on "{}"'
+                        .format(attribute)
+                    )
+                value.scale(database.get_primary_key_datatype(table))
+            output.check(table, value)
+
+    messages = {}
+    for message_type in MESSAGE_TYPES:
+        messages[message_type] = MESSAGE_SEPARATOR.join(filter(bool, (
+            o.get_message(message_type) for o in outputs if o
+        )))
+
+    return messages
+
+
+def join_messages(critical, warning, ok, perf):
     result = critical + warning
     if not result:
         result += ok
-    if performance:
-        result += '|' + performance
+    if perf:
+        result += ' | ' + perf
     return result
-
-
-class Checker(object):
-    """Modes are used to check different values of the tables.  Multiple
-    vales can be given comma separated to modes and limits.  K for 10**3,
-    M for 10**6, G for 10**9, T for 10**12 units can be used for limits.
-    """
-    default_modes = 'rows,data_length,index_length'
-
-    def parse_arguments(self):
-        def options(value):
-            return value.split(',')
-
-        class Formatter (RawTextHelpFormatter, ArgumentDefaultsHelpFormatter):
-            pass
-
-        argumentParser = ArgumentParser(
-            formatter_class=Formatter, description=self.__doc__
-        )
-        argumentParser.add_argument(
-            '-H', '--host', help='hostname', default='localhost'
-        )
-        argumentParser.add_argument(
-            '-P', '--port', type=int, default=3306
-        )
-        argumentParser.add_argument(
-            '-u', '--user', help='username', default='monitor'
-        )
-        argumentParser.add_argument(
-            '-p', '--passwd', help='password', default=''
-        )
-        argumentParser.add_argument(
-            '-m', '--mode', type=options, default=self.default_modes
-        )
-        argumentParser.add_argument(
-            '-w', '--warning', type=options, help='warning limits')
-        argumentParser.add_argument(
-            '-c', '--critical', type=options, help='critical limits'
-        )
-        argumentParser.add_argument(
-            '-t', '--tables', type=options, help='show selected tables'
-        )
-        argumentParser.add_argument(
-            '-a', '--all', action='store_true', help='show all tables'
-        )
-        argumentParser.add_argument(
-            '-A', '--average', action='store_true', help='show averages'
-        )
-        argumentParser.add_argument(
-            '-M', '--maximum', action='store_true', help='show maximums'
-        )
-        argumentParser.add_argument(
-            '-N', '--minimum', action='store_true', help='show minimums'
-        )
-        return argumentParser.parse_args()
-
-    def __init__(self):     # NOQA: C901
-        arguments = self.parse_arguments()
-        self.attributes = []
-        self.outputs = []
-        self.database = Database(
-            host=arguments.host,
-            port=arguments.port,
-            user=arguments.user,
-            passwd=arguments.passwd,
-        )
-        for counter, mode in enumerate(arguments.mode):
-            self.attributes.append(mode)
-            warning_limit = None
-            if arguments.warning:
-                if counter < len(arguments.warning):
-                    warning_limit = Value(arguments.warning[counter])
-            critical_limit = None
-            if arguments.critical:
-                if counter < len(arguments.critical):
-                    critical_limit = Value(arguments.critical[counter])
-            self.outputs.append(OutputUpperLimit(
-                mode, warning_limit, critical_limit))
-            if arguments.all:
-                self.outputs.append(
-                    OutputAll(mode, warning_limit, critical_limit))
-            elif arguments.tables:
-                self.outputs.append(OutputTables(
-                    arguments.tables, mode, warning_limit, critical_limit))
-            if arguments.average:
-                self.outputs.append(OutputAverage(
-                    mode, warning_limit, critical_limit))
-            if arguments.maximum:
-                self.outputs.append(OutputMaximum(
-                    mode, warning_limit, critical_limit))
-            if arguments.minimum:
-                self.outputs.append(OutputMinimum(
-                    mode, warning_limit, critical_limit))
-
-    def join_messages(self, messages):
-        result = ''
-        for message in messages:
-            if message:
-                if result:
-                    result += ' '
-                result += message
-        return result
-
-    message_names = ('ok', 'warning', 'critical', 'performance')
-
-    def get_messages(self):
-        """Check all tables for all output instances. Return the messages."""
-        for table in self.database.yieldTables(self.attributes):
-            for output in self.outputs:
-                output.check(table)
-        messages = {}
-        for name in Checker.message_names:
-            messages[name] = self.join_messages(
-                output.get_message(name) for output in self.outputs
-            )
-        return messages
 
 
 class Value(object):
     def __init__(self, value):
-        """Parses the value."""
-        if str(value)[-1:] in ['K', 'M', 'G', 'T']:
-            self.value = int(value[:-1])
+        """Parse the value"""
+        if str(value)[-1:] in ['K', 'M', 'G', 'T', '%']:
+            self.value = float(value[:-1])
             self.unit = value[-1:]
         else:
-            self.value = int(value)
+            self.value = float(value)
             self.unit = None
 
     def __str__(self):
         """If necessary change the value to number + unit format by rounding"""
         if self.unit:
-            return str(self.value) + self.unit
+            return str(int(round(self.value))) + self.unit
         if self.value > 10 ** 12:
-            return str(round(self.value / 10 ** 12))[:-2] + 'T'
+            return str(int(round(self.value / 10 ** 12))) + 'T'
         if self.value > 10 ** 9:
-            return str(round(self.value / 10 ** 9))[:-2] + 'G'
+            return str(int(round(self.value / 10 ** 9))) + 'G'
         if self.value > 10 ** 6:
-            return str(round(self.value / 10 ** 6))[:-2] + 'M'
+            return str(int(round(self.value / 10 ** 6))) + 'M'
         if self.value > 10 ** 3:
-            return str(round(self.value / 10 ** 3))[:-2] + 'K'
+            return str(int(round(self.value / 10 ** 3))) + 'K'
         return str(self.value)
 
-    def __int__(self):
-        """If necessary changes the value to number format."""
+    def __float__(self):
+        """If necessary change the value to number format"""
         if self.unit == 'K':
             return self.value * 10 ** 3
         if self.unit == 'M':
@@ -203,28 +178,26 @@ class Value(object):
             return self.value * 10 ** 9
         if self.unit == 'T':
             return self.value * 10 ** 12
+        if self.unit == '%':
+            return self.value / 100.0
         return self.value
 
-    def __cmp__(self, other):
-        self_value = int(self)
-        other_value = int(other)
-        return (self_value > other_value) - (self_value < other_value)
+    def __lt__(self, other):
+        return other is not None and float(self) < float(other)
+
+    def __gt__(self, other):
+        return other is not None and float(self) > float(other)
+
+    def relative(self):
+        return self.unit == '%'
+
+    def scale(self, datatype):
+        assert self.unit is None
+        self.value = 100.0 * self.value / Database.datatype_max_value(datatype)
+        self.unit = '%'
 
 
-class Table:
-    def __init__(self, schema, name, values):
-        self.schema = schema
-        self.name = name
-        self.values = values
-
-    def __str__(self):
-        return self.schema + '.' + self.name
-
-    def get_value(self, name):
-        return self.values.get(name)
-
-
-class Database:
+class Database(object):
     def __init__(self, **kwargs):
         self.connection = connect(**kwargs)
         self.cursor = self.connection.cursor()
@@ -244,184 +217,169 @@ class Database:
             if column.lower() == name.lower():
                 return position
 
-    def yieldTables(self, attributes):
-        """Iterate tables with selected attributes."""
+    def get_table_values(self, attributes):
+        """Iterate tables with selected attributes"""
         for schema_row in self.select('SHOW SCHEMAS'):
-            query = (
+            table_rows = self.select(
                 'SHOW TABLE STATUS IN `{}` WHERE Engine IS NOT NULL'
                 .format(schema_row[0])
             )
-            for table_row in self.select(query):
+            attribute_positions = [
+                (a, self.get_column_position(a)) for a in attributes
+            ]
+            for table_row in table_rows:
                 values = {}
-                for attribute in attributes:
-                    position = self.get_column_position(attribute)
+                for attribute, position in attribute_positions:
                     if table_row[position]:
-                        values[attribute] = (
-                            Value(table_row[position]))
-                yield Table(schema_row[0], table_row[0], values)
+                        values[attribute] = Value(table_row[position])
+                yield '{}.{}'.format(schema_row[0], table_row[0]), values
+
+    def get_primary_key_datatype(self, table):
+        rows = self.select('DESC ' + table)
+        type_position = self.get_column_position('type')
+        extra_position = self.get_column_position('extra')
+        for row in rows:
+            if 'auto_increment' in row[extra_position]:
+                return row[type_position].split('(', 1)[0]
+
+    @staticmethod
+    def datatype_max_value(datatype):
+        if datatype == 'tinyint':
+            return 255
+        if datatype == 'smallint':
+            return 65535
+        if datatype == 'mediumint':
+            return 16777215
+        if datatype == 'int':
+            return 4294967295
+        if datatype == 'bigint':
+            return 18446744073709551615
 
 
-class Output:
-    def __init__(self, attribute, warning_limit=None, critical_limit=None):
+class Output(object):
+    def __init__(self, attribute, warning_limit, critical_limit, perf):
+        if (
+            warning_limit and critical_limit and
+            warning_limit.relative() != critical_limit.relative()
+        ):
+            raise Exception('Limits must together be relative or not')
         self.attribute = attribute
         self.warning_limit = warning_limit
         self.critical_limit = critical_limit
+        self.perf = perf
 
-    def get_performance_data(self, name, value):
-        """Format performance data"""
-        message = name + '.' + self.attribute + '=' + str(value) + ';'
-        if self.warning_limit:
-            message += str(int(self.warning_limit))
-        message += ';'
-        if self.critical_limit:
-            message += str(int(self.critical_limit))
-        return message + ';0;'
+    def format_perf_message(self, name, value):
+        return '{}.{}={};{};{};'.format(
+            name,
+            self.attribute,
+            float(value),
+            float(self.warning_limit) if self.warning_limit else '',
+            float(self.critical_limit) if self.critical_limit else '',
+        )
+
+    def relative(self):
+        return self.warning_limit and self.warning_limit.relative()
 
 
-class OutputAll(Output):
+class OutputTables(Output):
     def __init__(self, *args):
         Output.__init__(self, *args)
-        self.message = ''
+        self.messages = {
+            'ok': [],
+            'warning': [],
+            'critical': [],
+            'perf': [],
+        }
 
-    def add_message(self, table):
-        if self.message:
-            self.message += ' '
-        self.message += self.get_performance_data(
-            str(table), int(table.get_value(self.attribute)))
-
-    def check(self, table):
-        if table.get_value(self.attribute):
-            self.add_message(table)
-
-    def get_message(self, name):
-        if name == 'performance':
-            return self.message
-
-
-class OutputTables(OutputAll):
-    def __init__(self, table_names, *args):
-        OutputAll.__init__(self, *args)
-        self.table_names = table_names
-
-    def check(self, table):
-        if table.get_value(self.attribute):
-            for table_name in self.table_names:
-                if table_name == str(table):
-                    self.add_message(table)
-
-
-class OutputUpperLimit(Output):
-    def __init__(self, *args):
-        Output.__init__(self, *args)
-        self.messages = {}
-
-    def add_message(self, name, table, limit):
-        if name not in self.messages:
-            self.messages[name] = ''
-        else:
-            self.messages[name] += ' '
-        self.messages[name] += str(table) + '.' + self.attribute + ' = '
-        self.messages[
-            name] += str(table.get_value(self.attribute)) + ' reached '
-        self.messages[name] += str(limit) + ';'
-
-    def check(self, table):
+    def check(self, table, value):
         """Check for warning and critical limits"""
-        if table.get_value(self.attribute):
-            if (
-                self.critical_limit and
-                table.get_value(self.attribute) > self.critical_limit
-            ):
-                self.add_message('critical', table, self.critical_limit)
-            elif (
-                self.warning_limit and
-                table.get_value(self.attribute) > self.warning_limit
-            ):
-                self.add_message('warning', table, self.warning_limit)
+        if self.critical_limit and value > self.critical_limit:
+            self.messages['critical'].append(
+                self.format_message(table, value, self.critical_limit)
+            )
+        elif self.warning_limit and value > self.warning_limit:
+            self.messages['warning'].append(
+                self.format_message(table, value, self.warning_limit)
+            )
+        if self.perf:
+            self.messages['perf'].append(
+                self.format_perf_message(table, value)
+            )
+
+    def format_message(self, table, value, limit):
+        return '{}.{} is {} reached {}'.format(
+            table, self.attribute, value, limit
+        )
 
     def get_message(self, name):
-        return self.messages.get(name)
+        return MESSAGE_SEPARATOR.join(self.messages[name])
 
 
-class OutputAverage(Output):
+class OutputAvg(Output):
     def __init__(self, *args):
         Output.__init__(self, *args)
         self.count = 0
         self.total = 0
 
-    def check(self, table):
-        """Count tables and sum values for average calculation."""
-        if table.get_value(self.attribute):
-            self.count += 1
-            self.total += int(table.get_value(self.attribute))
+    def check(self, table, value):
+        """Count tables and sum values for average calculation"""
+        self.count += 1
+        self.total += float(value)
 
     def get_value(self):
         return Value(round(self.total / self.count))
 
     def get_message(self, name):
-        if self.count:
-            if name == 'ok':
-                return 'average {} = {};'.format(
-                    self.attribute, self.get_value()
-                )
-            if name == 'performance':
-                return self.get_performance_data(
-                    'average', int(self.get_value())
-                )
+        if name == 'ok':
+            return 'average {} = {};'.format(
+                self.attribute, self.get_value()
+            )
+        if name == 'perf':
+            return self.format_perf_message('average', float(self.get_value()))
 
 
-class OutputMaximum(Output):
+class OutputMax(Output):
     def __init__(self, *args):
         Output.__init__(self, *args)
         self.table = None
+        self.value = None
 
-    def check(self, table):
-        """Get table which has maximum value."""
-        value = table.get_value(self.attribute)
-        if value and not (
-            self.table and value <= self.table.get_value(self.attribute)
-        ):
+    def check(self, table, value):
+        """Get table which has maximum value"""
+        if not self.value or value > self.value:
             self.table = table
+            self.value = value
 
     def get_message(self, name):
         if self.table:
             if name == 'ok':
-                return 'maximum {} = {} for table {};'.format(
-                    self.attribute,
-                    self.table.get_value(self.attribute),
-                    self.table,
+                return 'maximum {} = {} for table {}'.format(
+                    self.attribute, self.value, self.table
                 )
-            if name == 'performance':
-                return self.get_performance_data(
-                    'maximum', int(self.table.get_value(self.attribute))
-                )
+            if name == 'perf':
+                return self.format_perf_message('maximum', self.value)
 
 
-class OutputMinimum(Output):
+class OutputMin(Output):
     def __init__(self, *args):
         Output.__init__(self, *args)
         self.table = None
+        self.value = None
 
-    def check(self, table):
-        """Get table which has minimum value."""
-        value = table.get_value(self.attribute)
-        if value and not (
-            self.table and value >= self.table.get_value(self.attribute)
-        ):
+    def check(self, table, value):
+        """Get table which has minimum value"""
+        if not self.value or self.value > value:
             self.table = table
+            self.value = value
 
     def get_message(self, name):
         if self.table:
             if name == 'ok':
-                return 'minimum {} = {} for table {};'.format(
-                    self.attribute,
-                    self.table.get_value(self.attribute),
-                    self.table,
+                return 'minimum {} = {} for table {}'.format(
+                    self.attribute, self.value, self.table
                 )
-            if name == 'performance':
-                return self.get_performance_data(
-                    'minimum', int(self.table.get_value(self.attribute))
-                )
+            if name == 'perf':
+                return self.format_perf_message('minimum', self.value)
 
 
 if __name__ == '__main__':
