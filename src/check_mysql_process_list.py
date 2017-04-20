@@ -15,10 +15,10 @@ class ExitCodes:
 
 #init parser
 parser = argparse.ArgumentParser(description='Parameters for checking mysql processlist')
-parser.add_argument("-w","--warning",type=str,nargs="+",help="Number of occasions with number seconds before a warning is given -- default:'1 of 90'", default="1 of 90")
-parser.add_argument("-c","--critical",type=str,nargs="+",help="Number of occasions with number seconds before situation is critical -- default:'1 of 120'", default="1 of 120")
-parser.add_argument("-u","--user",type=str)
-parser.add_argument("-p","--passw",type=str)
+parser.add_argument("-w", "--warning", type=str,nargs="+", help="Number of occasions with number seconds before a warning is given -- default:'1 of 90'", default="1 of 90")
+parser.add_argument("-c", "--critical", type=str,nargs="+", help="Number of occasions with number seconds before situation is critical -- default:'1 of 120'", default="1 of 120")
+parser.add_argument("-u", "--user", type=str)
+parser.add_argument("-p", "--passw", type=str)
 
 def parse_args():
     return parser.parse_args()
@@ -62,6 +62,7 @@ def handle_rows(rows):
         elif is_possible_warning(time):
             possible_warns.append(time)
 
+    #!< Would need changing to meet the '2 of 30' requirement. Now only checked on > 0
     if len(possible_crits)>0:
         return ExitCodes.critical
     elif len(possible_warns)>0:
