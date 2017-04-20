@@ -34,36 +34,30 @@ def get_processlist():
     finally:
         db.close()
 
+def check(args,rows):
+    reg_pattern = "^([0-9]*).*?([0-9]*)$"
+    for condition in args:
+        match_array = re.match(reg_pattern, condition)
+        counts_needed = match_array.group(1)
+        count = 0
+        for row in rows:
+            time = row[0]
+            if time >= match_array.group(2):
+                count = count + 1
+                if count >= counts_needed:
+                    return True
+            else:
+                break
+    return False
+
+
 def handle_rows(rows):
     args = parse_args()
-    reg_pattern = "^([0-9]*).*?([0-9]*)$"
 
-    for crit_condition in args.critical:
-        match_array_crit = re.match(reg_pattern, crit_condition)
-        counts_needed = match_array_crit.group(1)
-        count = 0
-        for row in rows:
-            time = row[0]
-            if time >= match_array_crit.group(2):
-                count = count + 1
-                if count >= counts_needed:
-                    sys.exit(ExitCodes.critical)
-            else:
-                break
-
-    for warn_condition in args.warning:
-        match_array_warn = re.match(reg_pattern, warn_condition)
-        counts_needed = match_array_warn.group(1)
-        count = 0
-        for row in rows:
-            time = row[0]
-            if time >= match_array_warn.group(2):
-                count = count + 1
-                if count >= counts_needed:
-                    sys.exit(ExitCodes.warning)
-            else:
-                break
-
+    if check(args.critical,rows):
+        sys.exit(ExitCodes.critical)
+    elif check(args.warning,rows):
+        sys.exit(ExitCodes.warning)
     sys.exit(ExitCodes.ok)
 
 
@@ -73,7 +67,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-
