@@ -23,7 +23,7 @@ parser.add_argument("-p", "--passw", type=str)
 def parse_args():
     return parser.parse_args()
 
-def get_list():
+def get_processlist():
     args = parse_args()
     query = "select TIME,COMMAND,STATE from information_schema.processlist order by TIME DESC"
     try :
@@ -34,45 +34,42 @@ def get_list():
     finally:
         db.close()
 
-def is_possible_critical(time):
+def handle_rows(rows):
     args = parse_args()
     reg_pattern = "^([0-9]*).*?([0-9]*)$"
+
     for crit_condition in args.critical:
         match_array_crit = re.match(reg_pattern, crit_condition)
-        if time >= match_array_crit.group(2):
-            return True
-    return False
+        counts_needed = match_array_crit.group(1)
+        count = 0
+        for row in rows:
+            time = row[0]
+            if time >= match_array_crit.group(2):
+                count = count + 1
+                if count >= counts_needed:
+                    sys.exit(ExitCodes.critical)
+            else:
+                break
 
-def is_possible_warning(time):
-    args = parse_args()
-    reg_pattern = "^([0-9]*).*?([0-9]*)$"
     for warn_condition in args.warning:
         match_array_warn = re.match(reg_pattern, warn_condition)
-        if time >= match_array_warn.group(2):
-            return True
-    return False
+        counts_needed = match_array_warn.group(1)
+        count = 0
+        for row in rows:
+            time = row[0]
+            if time >= match_array_warn.group(2):
+                count = count + 1
+                if count >= counts_needed:
+                    sys.exit(ExitCodes.warning)
+            else:
+                break
 
-def handle_rows(rows):
-    possible_crits = []
-    possible_warns = []
-    for row in rows:
-        time = row[0]
-        if is_possible_critical(time):
-            possible_crits.append(time)
-        elif is_possible_warning(time):
-            possible_warns.append(time)
-
-    #!< Would need changing to meet the '2 of 30' requirement. Now only checked on > 0
-    if len(possible_crits)>0:
-        return ExitCodes.critical
-    elif len(possible_warns)>0:
-        return ExitCodes.warning
-    return ExitCodes.ok
+    sys.exit(ExitCodes.ok)
 
 
 def main():
-    rows = get_list()
-    sys.exit(handle_rows(rows))
+    rows = get_processlist()
+    handle_rows(rows)
 
 if __name__ == '__main__':
     main()
