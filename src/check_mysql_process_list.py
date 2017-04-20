@@ -21,11 +21,11 @@ parser.add_argument("-u","--user",type=str)
 parser.add_argument("-p","--passw",type=str)
 
 def parse_args():
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
-def get_list(query):
+def get_list():
     args = parse_args()
+    query = "select TIME,COMMAND,STATE from information_schema.processlist order by TIME DESC"
     try :
         db = MySQLdb.connect(host="localhost", user=args.user, passwd=args.passw)
         cur = db.cursor()
@@ -34,47 +34,48 @@ def get_list(query):
     finally:
         db.close()
 
-
-def build_query():
+def is_possible_critical(time):
     args = parse_args()
     reg_pattern = "^([0-9]*).*?([0-9]*)$"
-    base_query = "(select count(*) from information_schema.processlist where"
-    critical_query = base_query
-    warn_query = base_query
-    i = 0
     for crit_condition in args.critical:
         match_array_crit = re.match(reg_pattern, crit_condition)
-        query_or = (" time > {}").format(match_array_crit.group(2))
-        critical_query += query_or
-        if i != len(args.critical)-1:
-            critical_query += " OR"
-        i = i+1
-    critical_query += ")"
+        if time >= match_array_crit.group(2):
+            return True
+    return False
 
-    i = 0
+def is_possible_warning(time):
+    args = parse_args()
+    reg_pattern = "^([0-9]*).*?([0-9]*)$"
     for warn_condition in args.warning:
-        match_array_warning = re.match(reg_pattern, warn_condition)
-        query_or = (" time > {}").format(match_array_warning.group(2))
-        warn_query += query_or
-        if i != len(args.warning)-1:
-            warn_query += " OR"
-        i = i+1
-    warn_query += ")"
+        match_array_warn = re.match(reg_pattern, warn_condition)
+        if time >= match_array_warn.group(2):
+            return True
+    return False
 
-    final_query = critical_query + " UNION ALL " + warn_query + ";"
-    return final_query
+def handle_rows(rows):
+    possible_crits = []
+    possible_warns = []
+    for row in rows:
+        time = row[0]
+        if is_possible_critical(time):
+            possible_crits.append(time)
+        elif is_possible_warning(time):
+            possible_warns.append(time)
+
+    if len(possible_crits)>0:
+        return ExitCodes.critical
+    elif len(possible_warns)>0:
+        return ExitCodes.warning
+    return ExitCodes.ok
 
 
 def main():
-    query =  build_query()
-    rows = get_list(query)
-    count_criticals = rows[0][0]
-    count_warnings = rows[1][0]
-    if count_criticals != 0:
-        sys.exit(ExitCodes.critical)
-    elif count_warnings != 0:
-        sys.exit(ExitCodes.warning)
-    sys.exit(ExitCodes.ok)
+    rows = get_list()
+    sys.exit(handle_rows(rows))
 
 if __name__ == '__main__':
     main()
+
+
+
+
