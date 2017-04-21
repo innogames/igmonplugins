@@ -38,11 +38,11 @@ def check(args,rows):
     reg_pattern = "^([0-9]*).*?([0-9]*)$"
     for condition in args:
         match_array = re.match(reg_pattern, condition)
-        counts_needed = match_array.group(1)
+        counts_needed = int(match_array.group(1))
         count = 0
         for row in rows:
-            time = row[0]
-            if time >= match_array.group(2):
+            time = int(row[0])
+            if time >= int(match_array.group(2)):
                 count = count + 1
                 if count >= counts_needed:
                     return True
