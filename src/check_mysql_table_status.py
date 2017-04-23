@@ -80,7 +80,9 @@ def main():
         arguments.criticals,
         arguments.perf,
     )
-    messages = get_messages(database, arguments.modes, list(outputs))
+    messages = get_messages(
+        database, arguments.tables, arguments.modes, list(outputs)
+    )
     joined_message = join_messages(**messages)
 
     if messages['critical']:
@@ -109,9 +111,11 @@ def get_outputs(output_classes, modes, warnings, criticals, perf):
             yield output_class(mode, warning_limit, critical_limit, perf)
 
 
-def get_messages(database, attributes, outputs):
+def get_messages(database, filter_tables, attributes, outputs):
     """Check all tables for all output instances"""
     for table, values in database.get_table_values(attributes):
+        if filter_tables and not any(t == table for t in filter_tables):
+            continue
         for output in outputs:
             attribute = output.attribute
             if attribute not in values:
@@ -211,6 +215,14 @@ class Database(object):
         self.cursor.execute(query)
         return self.cursor.fetchall()
 
+    def select_one(self, query):
+        result = self.select(query)
+        if len(self.cursor.description) == 0:
+            raise Exception('Query returned no row')
+        if len(self.cursor.description) > 1:
+            raise Exception('Query returned more than 1 rows')
+        return [r[0] for r in result]
+
     def get_column_position(self, name):
         column = [desc[0] for desc in self.cursor.description]
         for position, column in enumerate(column):
@@ -219,20 +231,21 @@ class Database(object):
 
     def get_table_values(self, attributes):
         """Iterate tables with selected attributes"""
-        for schema_row in self.select('SHOW SCHEMAS'):
-            table_rows = self.select(
+        for schema in self.select_one('SHOW SCHEMAS'):
+            rows = self.select(
                 'SHOW TABLE STATUS IN `{}` WHERE Engine IS NOT NULL'
-                .format(schema_row[0])
+                .format(schema)
             )
             attribute_positions = [
                 (a, self.get_column_position(a)) for a in attributes
             ]
-            for table_row in table_rows:
+            for row in rows:
+                table = '{}.{}'.format(schema, row[0])
                 values = {}
                 for attribute, position in attribute_positions:
-                    if table_row[position]:
-                        values[attribute] = Value(table_row[position])
-                yield '{}.{}'.format(schema_row[0], table_row[0]), values
+                    if row[position]:
+                        values[attribute] = Value(row[position])
+                yield table, values
 
     def get_primary_key_datatype(self, table):
         rows = self.select('DESC ' + table)
