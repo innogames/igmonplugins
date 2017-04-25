@@ -21,21 +21,15 @@ Copyright (c) 2017, InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 from operator import itemgetter
 from sys import exit
-import re
+from re import compile as regexp_compile
 
 from MySQLdb import connect
 
 # TODO: Add verbose input for timestamps (1H, 30S, ...)
 # TODO: Add for select columns (Sleep)
-
-
-class ExitCodes:
-    ok = 0
-    warning = 1
-    critical = 2
 
 
 def parse_args():
@@ -51,15 +45,19 @@ def parse_args():
     parser.add_argument('--passwd', default='', help=(
         'MySQL password (default empty)'
     ))
-    parser.add_argument('--warning', nargs='*', default=['1 for 30'], help=(
-        'Number of occasions with number seconds before a warning is given '
-        '(default: %(default)s)'
-    ))
     parser.add_argument(
-        '--critical', nargs='*', default=['1 for 120'], help=(
-            'Number of occasions with number seconds before situation is '
-            'critical (default: %(default)s)'
-        )
+        '--warning',
+        nargs='*',
+        type=Check,
+        default=[Check('1 for 30')],
+        help='Warning threshold in count and seconds (default: %(default)s)'
+    )
+    parser.add_argument(
+        '--critical',
+        nargs='*',
+        type=Check,
+        default=[Check('1 for 120')],
+        help='Critical threshold in count and seconds (default: %(default)s)'
     )
 
     return parser.parse_args()
@@ -72,9 +70,9 @@ def main():
     # early.
     processes.sort(key=itemgetter('time'), reverse=True)
 
-    if args.critical and check(args.critical, processes):
+    if any(c(processes) for c in args.critical):
         exit(ExitCodes.critical)
-    if check(args.warning, processes):
+    if any(c(processes) for c in args.warning):
         exit(ExitCodes.warning)
     exit(ExitCodes.ok)
 
@@ -95,21 +93,35 @@ def get_processlist():
         db.close()
 
 
-def check(args, processes):
-    reg_pattern = '^([0-9]*).*?([0-9]*)$'
-    for condition in args:
-        match_array = re.match(reg_pattern, condition)
-        counts_needed = int(match_array.group(1))
+class ExitCodes:
+    ok = 0
+    warning = 1
+    critical = 2
+
+
+class Check:
+    pattern = regexp_compile('\A\s*([0-9]+)(?:\s*for\s*([0-9]+))?\s*\Z')
+
+    def __init__(self, arg):
+        matches = self.pattern.match(arg)
+        if not matches:
+            raise ArgumentTypeError('"{}" cannot be parsed'.format(arg))
+        self.count = int(matches.group(1) or 1)
+        self.time = int(matches.group(2) or 0)
+
+    def __repr__(self):
+        return '{} for {}'.format(self.count, self.time)
+
+    def __call__(self, processes):
         count = 0
         for process in processes:
-            time = int(process['time'])
-            if time >= int(match_array.group(2)):
+            if process['time'] >= self.time:
                 count += 1
-                if count >= counts_needed:
+                if count >= self.count:
                     return True
             else:
                 break
-    return False
+        return False
 
 
 if __name__ == '__main__':
