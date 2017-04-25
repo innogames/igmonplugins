@@ -41,6 +41,15 @@ def parse_args():
     parser = ArgumentParser(
         description='Parameters for checking MySQL process list'
     )
+    parser.add_argument('--host', default='localhost', help=(
+        'Target MySQL server (default: %(default)s)'
+    ))
+    parser.add_argument('--user', default='user', help=(
+        'MySQL user (default: %(default)s)'
+    ))
+    parser.add_argument('--passwd', default='', help=(
+        'MySQL password (default empty)'
+    ))
     parser.add_argument('--warning', nargs='*', default=['1 for 30'], help=(
         'Number of occasions with number seconds before a warning is given '
         '(default: %(default)s)'
@@ -51,8 +60,6 @@ def parse_args():
             'critical (default: %(default)s)'
         )
     )
-    parser.add_argument('--user')
-    parser.add_argument('--passwd')
 
     return parser.parse_args()
 
@@ -76,7 +83,7 @@ def get_processlist():
         'ORDER BY TIME DESC'
     )
     try:
-        db = connect(host='localhost', user=args.user, passwd=args.passwd)
+        db = connect(host=args.host, user=args.user, passwd=args.passwd)
         try:
             cursor = db.cursor()
             cursor.execute(query)
