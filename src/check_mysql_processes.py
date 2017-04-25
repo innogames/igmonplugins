@@ -22,6 +22,7 @@ Copyright (c) 2017, InnoGames GmbH
 # THE SOFTWARE.
 
 from argparse import ArgumentParser
+from operator import itemgetter
 from sys import exit
 import re
 
@@ -66,42 +67,42 @@ def parse_args():
 
 def main():
     args = parse_args()
-    rows = get_processlist()
+    processes = get_processlist()
+    # We need to sort the entries to let the check() function stop searching
+    # early.
+    processes.sort(key=itemgetter('time'), reverse=True)
 
-    if args.critical and check(args.critical, rows):
+    if args.critical and check(args.critical, processes):
         exit(ExitCodes.critical)
-    if check(args.warning, rows):
+    if check(args.warning, processes):
         exit(ExitCodes.warning)
     exit(ExitCodes.ok)
 
 
 def get_processlist():
+    """Return the processes as a list of dicts"""
     args = parse_args()
-    query = (
-        'SELECT TIME, COMMAND, STATE '
-        'FROM information_schema.PROCESSLIST '
-        'ORDER BY TIME DESC'
-    )
     try:
         db = connect(host=args.host, user=args.user, passwd=args.passwd)
         try:
             cursor = db.cursor()
-            cursor.execute(query)
-            return cursor.fetchall()
+            cursor.execute('SHOW PROCESSLIST')
+            col_names = [desc[0].lower() for desc in cursor.description]
+            return [dict(zip(col_names, r)) for r in cursor.fetchall()]
         finally:
             cursor.close()
     finally:
         db.close()
 
 
-def check(args, rows):
+def check(args, processes):
     reg_pattern = '^([0-9]*).*?([0-9]*)$'
     for condition in args:
         match_array = re.match(reg_pattern, condition)
         counts_needed = int(match_array.group(1))
         count = 0
-        for row in rows:
-            time = int(row[0])
+        for process in processes:
+            time = int(process['time'])
             if time >= int(match_array.group(2)):
                 count += 1
                 if count >= counts_needed:
