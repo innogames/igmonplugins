@@ -41,18 +41,18 @@ def parse_args():
     parser = ArgumentParser(
         description='Parameters for checking MySQL process list'
     )
-    parser.add_argument('-w', '--warning', nargs='+', default='1 of 90', help=(
+    parser.add_argument('--warning', nargs='+', default='1 of 90', help=(
         'Number of occasions with number seconds before a warning is given '
         '(default: %(default)s)'
     ))
     parser.add_argument(
-        '-c', '--critical', nargs='+', default='1 of 120', help=(
+        '--critical', nargs='+', default='1 of 120', help=(
             'Number of occasions with number seconds before situation is '
             'critical (default: %(default)s)'
         )
     )
-    parser.add_argument('-u', '--user')
-    parser.add_argument('-p', '--passwd')
+    parser.add_argument('--user')
+    parser.add_argument('--passwd')
 
     return parser.parse_args()
 
