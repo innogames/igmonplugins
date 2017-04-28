@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 #
 # InnoGames Monitoring Plugins - check_smartmon.py
 #
