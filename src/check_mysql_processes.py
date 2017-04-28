@@ -72,10 +72,15 @@ def main():
     # early.
     processes.sort(key=itemgetter('time'), reverse=True)
 
-    if any(c(processes) for c in args.critical):
+    criticals = filter(bool, (c(processes) for c in args.critical))
+    if criticals:
+        print('CRITICAL {}'.format(', '.join(criticals)))
         exit(ExitCodes.critical)
-    if any(c(processes) for c in args.warning):
+    warnings = filter(bool, (c(processes) for c in args.warning))
+    if warnings:
+        print('WARNING {}'.format(', '.join(warnings)))
         exit(ExitCodes.warning)
+    print('OK')
     exit(ExitCodes.ok)
 
 
@@ -158,11 +163,20 @@ class Check:
         for process in processes:
             if process['time'] >= int(self.time):
                 count += 1
-                if count >= self.count:
-                    return True
             else:
                 break
-        return False
+
+        if count >= self.count:
+            return self.get_problem(count)
+        return None
+
+    def get_problem(self, count):
+        problem = '{} processes'.format(count)
+        if int(self.time):
+            problem += ' longer than {}'.format(self.time)
+        if self.count > 1:
+            problem += ' exceeds {}'.format(self.count)
+        return problem
 
 
 if __name__ == '__main__':
