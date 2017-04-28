@@ -28,7 +28,6 @@ from re import compile as regexp_compile
 
 from MySQLdb import connect
 
-# TODO: Add verbose input for timestamps (1H, 30S, ...)
 # TODO: Add for select columns (Sleep)
 
 
@@ -49,15 +48,15 @@ def parse_args():
         '--warning',
         nargs='*',
         type=Check,
-        default=[Check('1 for 30')],
-        help='Warning threshold in count and seconds (default: %(default)s)'
+        default=[Check('1 for 30s')],
+        help='Warning threshold in count and time (default: %(default)s)'
     )
     parser.add_argument(
         '--critical',
         nargs='*',
         type=Check,
-        default=[Check('1 for 120')],
-        help='Critical threshold in count and seconds (default: %(default)s)'
+        default=[Check('1 for 2min')],
+        help='Critical threshold in count and time (default: %(default)s)'
     )
 
     return parser.parse_args()
@@ -98,15 +97,55 @@ class ExitCodes:
     critical = 2
 
 
+class Interval:
+    units = [
+        ('s', 1),
+        ('min', 60),            # "m" would mean "metre"
+        ('h', 60 * 60),
+        ('d', 12 * 60 * 60),
+    ]
+
+    def __init__(self, multiplier, unit):
+        for key, value in self.units:
+            if key == unit:
+                break
+        else:
+            raise Exception('Unit "{}" couldn\'t found'.format(unit))
+
+        self.seconds = multiplier * value
+
+    def __int__(self):
+        return self.seconds
+
+    def __str__(self):
+        for key, value in reversed(self.units):
+            if self.seconds > value:
+                break
+        return '{}{}'.format(self.seconds / value, key)
+
+
 class Check:
-    pattern = regexp_compile('\A\s*([0-9]+)(?:\s*for\s*([0-9]+))?\s*\Z')
+    pattern = regexp_compile(
+        '\A\s*'         # Input start
+        '([0-9]+)'      # | Count part
+        '(?:'           # | Time part start
+        '\s*for\s*'     # | | Time separator
+        '([0-9]+)'      # | | Time multiplier
+        '({})?'         # | | Time unit
+        ')?'            # | Time part end
+        '\s*\Z'         # Input end
+        .format('|'.join(k for k, v in Interval.units))
+    )
 
     def __init__(self, arg):
         matches = self.pattern.match(arg)
         if not matches:
             raise ArgumentTypeError('"{}" cannot be parsed'.format(arg))
         self.count = int(matches.group(1) or 1)
-        self.time = int(matches.group(2) or 0)
+        self.time = Interval(
+            int(matches.group(2) or 0),
+            matches.group(3) or Interval.units[0],
+        )
 
     def __repr__(self):
         return '{} for {}'.format(self.count, self.time)
@@ -114,7 +153,7 @@ class Check:
     def __call__(self, processes):
         count = 0
         for process in processes:
-            if process['time'] >= self.time:
+            if process['time'] >= int(self.time):
                 count += 1
                 if count >= self.count:
                     return True
