@@ -1,4 +1,4 @@
-#!/usr/local/bin/perl
+#!/usr/bin/env perl
 #
 # InnoGames Monitoring Plugins - check_lagg.pl
 #
