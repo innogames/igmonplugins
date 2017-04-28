@@ -65,7 +65,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    processes = get_processlist()
+    processes = get_processlist(args.host, args.user, args.passwd)
     # We need to sort the entries to let the check() function stop searching
     # early.
     processes.sort(key=itemgetter('time'), reverse=True)
@@ -77,11 +77,10 @@ def main():
     exit(ExitCodes.ok)
 
 
-def get_processlist():
+def get_processlist(host, user, passwd):
     """Return the processes as a list of dicts"""
-    args = parse_args()
     try:
-        db = connect(host=args.host, user=args.user, passwd=args.passwd)
+        db = connect(host=host, user=user, passwd=passwd)
         try:
             cursor = db.cursor()
             cursor.execute('SHOW PROCESSLIST')
