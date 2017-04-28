@@ -1,3 +1,5 @@
+#!/usr/bin/awk -f
+
 BEGIN {
 	outfile="/tmp/check_mysql_config"
 	exitcode = 0
