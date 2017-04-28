@@ -1,3 +1,5 @@
+#!/usr/bin/awk -f
+
 BEGIN {
     mebibytes_warning = ARGV[1]
     if (mebibytes_warning !~ /^[0-9]+$/) {
