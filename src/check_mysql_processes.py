@@ -28,8 +28,6 @@ from re import compile as regexp_compile
 
 from MySQLdb import connect
 
-# TODO: Add for select columns (Sleep)
-
 
 def parse_args():
     parser = ArgumentParser(
@@ -43,6 +41,9 @@ def parse_args():
     ))
     parser.add_argument('--passwd', default='', help=(
         'MySQL password (default empty)'
+    ))
+    parser.add_argument('--command', help=(
+        'Filter the processes by the command'
     ))
     parser.add_argument(
         '--warning',
@@ -65,6 +66,8 @@ def parse_args():
 def main():
     args = parse_args()
     processes = get_processlist(args.host, args.user, args.passwd)
+    if args.command:
+        processes = [p for p in processes if p['command'] == args.command]
     # We need to sort the entries to let the check() function stop searching
     # early.
     processes.sort(key=itemgetter('time'), reverse=True)
