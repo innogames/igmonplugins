@@ -65,38 +65,58 @@ def parse_args():
 
 def main():
     args = parse_args()
-    processes = get_processlist(args.host, args.user, args.passwd)
-    if args.command:
-        processes = [p for p in processes if p['command'] == args.command]
-    # We need to sort the entries to let the check() function stop searching
-    # early.
-    processes.sort(key=itemgetter('time'), reverse=True)
+    database = Database(host=args.host, user=args.user, passwd=args.passwd)
+    runner = Runner(database, args.command)
+    runner.fetch_processes()
 
-    criticals = filter(bool, (c(processes) for c in args.critical))
-    if criticals:
-        print('CRITICAL {}'.format(', '.join(criticals)))
+    critical_problems = runner.get_problems(args.critical)
+    if critical_problems:
+        print('CRITICAL {}'.format(', '.join(critical_problems)))
         exit(ExitCodes.critical)
-    warnings = filter(bool, (c(processes) for c in args.warning))
-    if warnings:
-        print('WARNING {}'.format(', '.join(warnings)))
+    warning_problems = runner.get_problems(args.warning)
+    if warning_problems:
+        print('WARNING {}'.format(', '.join(warning_problems)))
         exit(ExitCodes.warning)
     print('OK')
     exit(ExitCodes.ok)
 
 
-def get_processlist(host, user, passwd):
-    """Return the processes as a list of dicts"""
-    try:
-        db = connect(host=host, user=user, passwd=passwd)
-        try:
-            cursor = db.cursor()
-            cursor.execute('SHOW PROCESSLIST')
-            col_names = [desc[0].lower() for desc in cursor.description]
-            return [dict(zip(col_names, r)) for r in cursor.fetchall()]
-        finally:
-            cursor.close()
-    finally:
-        db.close()
+class Runner:
+    def __init__(self, database, command):
+        self.database = database
+        self.command = command
+        self.processes = None
+
+    def fetch_processes(self, command=None):
+        self.processes = self.database.execute('SHOW PROCESSLIST')
+        if self.command:
+            self.processes = filter(self.filter_process, self.processes)
+        # We need to sort the entries to let the check() function stop
+        # searching early.
+        self.processes.sort(key=itemgetter('time'), reverse=True)
+
+    def filter_process(self, process):
+        return self.command == process['command']
+
+    def get_problems(self, checks):
+        return filter(bool, (c(self.processes) for c in checks))
+
+
+class Database:
+    def __init__(self, **kwargs):
+        self.connection = connect(**kwargs)
+        self.cursor = self.connection.cursor()
+
+    def __del__(self):
+        if self.cursor:
+            self.cursor.close()
+            self.connection.close()
+
+    def execute(self, statement):
+        """Return the results as a list of dicts"""
+        self.cursor.execute(statement)
+        col_names = [desc[0].lower() for desc in self.cursor.description]
+        return [dict(zip(col_names, r)) for r in self.cursor.fetchall()]
 
 
 class ExitCodes:
