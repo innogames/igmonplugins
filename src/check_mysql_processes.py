@@ -85,6 +85,7 @@ class Runner:
     def __init__(self, database, command):
         self.database = database
         self.command = command
+        self.max_connections = None
         self.processes = None
 
     def fetch_processes(self, command=None):
@@ -98,8 +99,17 @@ class Runner:
     def filter_process(self, process):
         return self.command == process['command']
 
+    def fetch_max_connections(self):
+        result = self.database.execute("SHOW VARIABLES LIKE 'max_connections'")
+        assert len(result) == 1
+        self.max_connections = int(result[0]['value'])
+
     def get_problems(self, checks):
-        return filter(bool, (c(self.processes) for c in checks))
+        if any(c.relative() for c in checks) and self.max_connections is None:
+            self.fetch_max_connections()
+        return filter(bool, (
+            c(self.processes, self.max_connections) for c in checks)
+        )
 
 
 class Database:
@@ -133,35 +143,38 @@ class Interval:
         ('d', 12 * 60 * 60),
     ]
 
-    def __init__(self, multiplier, unit):
-        for key, value in self.units:
+    def __init__(self, number, unit):
+        for key, multiplier in self.units:
             if key == unit:
                 break
         else:
             raise Exception('Unit "{}" couldn\'t found'.format(unit))
 
-        self.seconds = multiplier * value
+        self.seconds = number * multiplier
 
     def __int__(self):
         return self.seconds
 
     def __str__(self):
-        for key, value in reversed(self.units):
-            if self.seconds > value:
+        for unit, multiplier in reversed(self.units):
+            if self.seconds > multiplier:
                 break
-        return '{}{}'.format(self.seconds / value, key)
+        return '{}{}'.format(self.seconds / multiplier, unit)
 
 
 class Check:
     pattern = regexp_compile(
-        '\A\s*'         # Input start
-        '([0-9]+)'      # | Count part
-        '(?:'           # | Time part start
-        '\s*for\s*'     # | | Time separator
-        '([0-9]+)'      # | | Time multiplier
-        '({})?'         # | | Time unit
-        ')?'            # | Time part end
-        '\s*\Z'         # Input end
+        '\A\s*'         # Input
+        '(?:'           # | Optional count clause
+        '([0-9]+)'      # | | Number
+        '(%)?'          # | | Optional unit
+        ')?'            # | '
+        '(?:'           # | Optional time clause
+        '\s*for\s*'     # | | Separator
+        '([0-9]+)'      # | | Number
+        '({})?'         # | | Optional unit
+        ')?'            # | '
+        '\s*\Z'         # '
         .format('|'.join(k for k, v in Interval.units))
     )
 
@@ -169,16 +182,22 @@ class Check:
         matches = self.pattern.match(arg)
         if not matches:
             raise ArgumentTypeError('"{}" cannot be parsed'.format(arg))
-        self.count = int(matches.group(1) or 1)
+        self.count_number = int(matches.group(1) or 1)
+        self.count_unit = matches.group(2)
         self.time = Interval(
-            int(matches.group(2) or 0),
-            matches.group(3) or Interval.units[0],
+            int(matches.group(3) or 0),
+            matches.group(4) or Interval.units[0][0],
         )
 
     def __repr__(self):
-        return '{} for {}'.format(self.count, self.time)
+        return '{}{} for {}'.format(
+            self.count_number, self.count_unit, self.time
+        )
 
-    def __call__(self, processes):
+    def relative(self):
+        return bool(self.count_unit)
+
+    def __call__(self, processes, max_connections=None):
         count = 0
         for process in processes:
             if process['time'] >= int(self.time):
@@ -186,16 +205,24 @@ class Check:
             else:
                 break
 
-        if count >= self.count:
-            return self.get_problem(count)
+        if count >= self.get_count_limit(max_connections):
+            return self.format_problem(count)
         return None
 
-    def get_problem(self, count):
+    def get_count_limit(self, max_connections=None):
+        if not self.relative():
+            return self.count_number
+        assert max_connections is not None
+        return self.count_number * max_connections / 100.0
+
+    def format_problem(self, count):
         problem = '{} processes'.format(count)
         if int(self.time):
             problem += ' longer than {}'.format(self.time)
-        if self.count > 1:
-            problem += ' exceeds {}'.format(self.count)
+        if self.count_number > 1 or self.count_unit:
+            problem += ' exceeds {}{}'.format(
+                self.count_number, self.count_unit
+            )
         return problem
 
 
