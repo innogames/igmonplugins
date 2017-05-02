@@ -92,7 +92,7 @@ def main(verbose=False):
         exit(int(ok_code))
 
     cron_child_list = []
-    cron_child_time = []
+    cron_child_time = None
 
     for child in cron_childs.split('\n'):
         cron_child_list.append(child)
@@ -110,7 +110,7 @@ def main(verbose=False):
                 pass
 
             #check for 1 hour time
-            if int(cron_child_time) > 3600:
+            if cron_child_time and int(cron_child_time) > 3600:
                 # Check if cron name is on ignore list
                 include = True
                 child_pid = execute('pgrep -P ' + pid).strip()
