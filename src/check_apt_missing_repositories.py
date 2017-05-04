@@ -69,18 +69,14 @@ def main(ignored_packages):
             not_in_repos.append(pkg)
 
     if not_in_repos:
-        pkgs = ' '.join([pkg.name for pkg in not_in_repos])
-        msg = (
-            'WARNING: {0} packages have no candidate in repositories! | {1}'
-            .format(len(not_in_repos), pkgs)
+        print(
+            'WARNING: packages not in repositories: {}'
+            .format(' '.join(pkg.name for pkg in not_in_repos))
         )
-        sig = 1
-    else:
-        msg = 'OK: All packages are found in repositories'
-        sig = 0
+        exit(1)
 
-    print(msg)
-    exit(sig)
+    print('OK: All packages are found in repositories')
+    exit(0)
 
 
 if __name__ == '__main__':
