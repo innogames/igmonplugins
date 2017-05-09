@@ -162,13 +162,13 @@ class Value(object):
         """If necessary change the value to number + unit format by rounding"""
         if self.unit:
             return str(int(round(self.value))) + self.unit
-        if self.value > 10 ** 12:
+        if self.value > 10 ** 13:
             return str(int(round(self.value / 10 ** 12))) + 'T'
-        if self.value > 10 ** 9:
+        if self.value > 10 ** 10:
             return str(int(round(self.value / 10 ** 9))) + 'G'
-        if self.value > 10 ** 6:
+        if self.value > 10 ** 7:
             return str(int(round(self.value / 10 ** 6))) + 'M'
-        if self.value > 10 ** 3:
+        if self.value > 10 ** 4:
             return str(int(round(self.value / 10 ** 3))) + 'K'
         return str(self.value)
 
