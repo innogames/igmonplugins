@@ -42,9 +42,6 @@ def parse_args():
     parser.add_argument('--passwd', default='', help=(
         'MySQL password (default empty)'
     ))
-    parser.add_argument('--command', help=(
-        'Filter the processes by the command'
-    ))
     parser.add_argument(
         '--warning',
         nargs='*',
@@ -65,15 +62,13 @@ def parse_args():
 
 def main():
     args = parse_args()
-    database = Database(host=args.host, user=args.user, passwd=args.passwd)
-    runner = Runner(database, args.command)
-    runner.fetch_processes()
+    db = Database(host=args.host, user=args.user, passwd=args.passwd)
 
-    critical_problems = runner.get_problems(args.critical)
+    critical_problems = db.get_problems(args.critical)
     if critical_problems:
         print('CRITICAL {}'.format(', '.join(critical_problems)))
         exit(ExitCodes.critical)
-    warning_problems = runner.get_problems(args.warning)
+    warning_problems = db.get_problems(args.warning)
     if warning_problems:
         print('WARNING {}'.format(', '.join(warning_problems)))
         exit(ExitCodes.warning)
@@ -81,47 +76,36 @@ def main():
     exit(ExitCodes.ok)
 
 
-class Runner:
-    def __init__(self, database, command):
-        self.database = database
-        self.command = command
-        self.max_connections = None
-        self.processes = None
-
-    def fetch_processes(self, command=None):
-        self.processes = self.database.execute('SHOW PROCESSLIST')
-        if self.command:
-            self.processes = filter(self.filter_process, self.processes)
-        # We need to sort the entries to let the check() function stop
-        # searching early.
-        self.processes.sort(key=itemgetter('time'), reverse=True)
-
-    def filter_process(self, process):
-        return self.command == process['command']
-
-    def fetch_max_connections(self):
-        result = self.database.execute("SHOW VARIABLES LIKE 'max_connections'")
-        assert len(result) == 1
-        self.max_connections = int(result[0]['value'])
-
-    def get_problems(self, checks):
-        if any(c.relative() for c in checks) and self.max_connections is None:
-            self.fetch_max_connections()
-        return filter(bool, (
-            c(self.processes, self.max_connections) for c in checks)
-        )
-
-
 class Database:
     def __init__(self, **kwargs):
         self.connection = connect(**kwargs)
         self.cursor = self.connection.cursor()
+        self.processes = None
+        self.max_connections = None
 
     def execute(self, statement):
         """Return the results as a list of dicts"""
         self.cursor.execute(statement)
         col_names = [desc[0].lower() for desc in self.cursor.description]
         return [dict(zip(col_names, r)) for r in self.cursor.fetchall()]
+
+    def get_processes(self):
+        if self.processes is None:
+            self.processes = self.execute('SHOW PROCESSLIST')
+            # We need to sort the entries to let the check() function stop
+            # searching early.
+            self.processes.sort(key=itemgetter('time'), reverse=True)
+        return self.processes
+
+    def get_max_connections(self):
+        if self.max_connections is None:
+            result = self.execute("SHOW VARIABLES LIKE 'max_connections'")
+            assert len(result) == 1
+            self.max_connections = int(result[0]['value'])
+        return self.max_connections
+
+    def get_problems(self, checks):
+        return filter(bool, (c.get_problem(self) for c in checks))
 
 
 class ExitCodes:
@@ -158,30 +142,33 @@ class Interval:
 
 
 class Check:
-    pattern = regexp_compile(
-        '\A\s*'         # Input
-        '(?:'           # | Optional count clause
-        '([0-9]+)'      # | | Number
-        '(%)?'          # | | Optional unit
-        ')?'            # | '
-        '(?:'           # | Optional time clause
-        '\s*for\s*'     # | | Separator
-        '([0-9]+)'      # | | Number
-        '({})?'         # | | Optional unit
-        ')?'            # | '
-        '\s*\Z'         # '
-        .format('|'.join(k for k, v in Interval.units))
-    )
+    pattern = regexp_compile('\s*'.join([   # Allow spaces between everything
+        '\A',
+        '(?:',                              # Count clause
+        '(?P<count_number>[0-9]+)',
+        '(?P<count_unit>%)?',
+        ')?',
+        '(?:on',                            # Command after separator
+        '(?P<command>[a-z ]+?)',
+        ')?',
+        '(?:for',                           # Time clause after separator
+        '(?P<time_number>[0-9]+)',
+        '(?P<time_unit>{})?'
+        .format('|'.join(k for k, v in Interval.units)),
+        ')?',
+        '\Z',
+    ]))
 
     def __init__(self, arg):
         matches = self.pattern.match(arg)
         if not matches:
             raise ArgumentTypeError('"{}" cannot be parsed'.format(arg))
-        self.count_number = int(matches.group(1) or 1)
-        self.count_unit = matches.group(2)
+        self.count_number = int(matches.group('count_number') or 1)
+        self.count_unit = matches.group('count_unit')
+        self.command = matches.group('command')
         self.time = Interval(
-            int(matches.group(3) or 0),
-            matches.group(4) or Interval.units[0][0],
+            int(matches.group('time_number') or 0),
+            matches.group('time_unit') or Interval.units[0][0],
         )
 
     def __repr__(self):
@@ -192,26 +179,28 @@ class Check:
     def relative(self):
         return bool(self.count_unit)
 
-    def __call__(self, processes, max_connections=None):
+    def get_problem(self, db):
         count = 0
-        for process in processes:
-            if process['time'] >= int(self.time):
-                count += 1
-            else:
+        for process in db.get_processes():
+            if process['time'] < int(self.time):
                 break
+            if self.command and process['command'].lower() != self.command:
+                continue
+            count += 1
 
-        if count >= self.get_count_limit(max_connections):
+        if count >= self.get_count_limit(db):
             return self.format_problem(count)
         return None
 
-    def get_count_limit(self, max_connections=None):
+    def get_count_limit(self, db):
         if not self.relative():
             return self.count_number
-        assert max_connections is not None
-        return self.count_number * max_connections / 100.0
+        return self.count_number * db.get_max_connections() / 100.0
 
     def format_problem(self, count):
         problem = '{} processes'.format(count)
+        if self.command:
+            problem += ' on {}'.format(self.command)
         if int(self.time):
             problem += ' longer than {}'.format(self.time)
         if self.count_number > 1 or self.count_unit:
