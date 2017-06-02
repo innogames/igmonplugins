@@ -117,11 +117,6 @@ class Database:
         self.connection = connect(**kwargs)
         self.cursor = self.connection.cursor()
 
-    def __del__(self):
-        if self.cursor:
-            self.cursor.close()
-            self.connection.close()
-
     def execute(self, statement):
         """Return the results as a list of dicts"""
         self.cursor.execute(statement)
