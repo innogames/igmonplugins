@@ -1,8 +1,32 @@
 #!/usr/bin/env python
-'''InnoGames Monitoring Plugins - check_mysql_process_list.py
+"""InnoGames Monitoring Plugins - check_mysql_process_list.py
+
+This scripts executes SHOW PROCESSLIST and optionally SHOW ENGINE INNODB
+STATUS commands on the MySQL server and cross checks the results.  It
+implements a domain specific micro language for complicated conditions
+to be specified.  Those conditions are allowed multiple times for warning
+and critical reporting.  Here are some examples:
+
+--warning=10
+    Emit warning for more than 10 processes
+
+--critical=80%
+    Emit critical when more than 80% of the max_connections is used
+
+--warning='for 30s'
+    Emit warning if a process is in the same state for longer than 30 seconds
+
+--critical='100 on query'
+    Emit critical if more than 100 processes are executing a query
+
+--warning='10 on sleep for 1h'
+    Emit warning if more than 10 processes are sleeping for more than 1 hour
+
+--critical='50% on query'
+    Emit critical if more than 50% of max_connections are executing a query
 
 Copyright (c) 2017, InnoGames GmbH
-'''
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
 # in the Software without restriction, including without limitation the rights
@@ -21,7 +45,7 @@ Copyright (c) 2017, InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from argparse import ArgumentParser, ArgumentTypeError
+from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
 from operator import itemgetter
 from sys import exit
 from re import compile as regexp_compile
@@ -31,7 +55,7 @@ from MySQLdb import connect
 
 def parse_args():
     parser = ArgumentParser(
-        description='Parameters for checking MySQL process list'
+        formatter_class=RawTextHelpFormatter, description=__doc__
     )
     parser.add_argument('--host', default='localhost', help=(
         'Target MySQL server (default: %(default)s)'
