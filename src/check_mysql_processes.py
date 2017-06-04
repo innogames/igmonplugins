@@ -22,6 +22,12 @@ and critical reporting.  Here are some examples:
 --warning='10 on sleep for 1h'
     Emit warning if more than 10 processes are sleeping for more than 1 hour
 
+--critical='10 on query at init'
+    Emit critical if more than 10 queries are at initialization state
+
+--warning='1 on query for 2s at sending data'
+    Emit warning if a query is running for 2 seconds and at sending data state
+
 --critical='50% on query'
     Emit critical if more than 50% of max_connections are executing a query
 
@@ -33,6 +39,9 @@ and critical reporting.  Here are some examples:
 
 --warning='in transaction on sleep for 10 seconds'
     Emit warning for a transaction idle for 10 seconds
+
+--critical='in transaction at starting for 10 seconds'
+    Emit critical for a transaction at starting step for longer than 10 seconds
 
 Copyright (c) 2017, InnoGames GmbH
 """
@@ -277,6 +286,9 @@ class Check:
         '(?P<txn_time_number>[0-9]+)',
         '(?P<txn_time_unit>{time_units})?'
         ')?',
+        '(?:at',                            # State after separator
+        '(?P<txn_state>[a-z ]+?)',
+        ')?',
         ')?',
         '(?:on',                            # Command after separator
         '(?P<command>[a-z ]+?)',
@@ -285,8 +297,13 @@ class Check:
         '(?P<command_time_number>[0-9]+)',
         '(?P<command_time_unit>{time_units})?'
         ')?',
+        '(?:at',                            # State after separator
+        '(?P<command_state>[a-z ]+?)',
+        ')?',
         '\Z',
-    ]).format(time_units='|'.join(k for k, v in Interval.units)))
+    ]).format(
+        time_units='|'.join(k for k, v in Interval.units)
+    ))
 
     def __init__(self, arg):
         matches = self.pattern.match(arg)
@@ -299,7 +316,9 @@ class Check:
             int(matches.group('txn_time_number') or 0),
             matches.group('txn_time_unit') or Interval.units[0][0],
         )
+        self.txn_state = matches.group('txn_state')
         self.command = matches.group('command')
+        self.command_state = matches.group('command_state')
         self.command_time = Interval(
             int(matches.group('command_time_number') or 0),
             matches.group('command_time_unit') or Interval.units[0][0],
@@ -317,10 +336,14 @@ class Check:
             spec += ' in {}'.format(self.txn)
         if self.txn_time:
             spec += ' for {}'.format(self.txn_time)
+        if self.txn_state:
+            spec += ' at {}'.format(self.txn_state)
         if self.command:
             spec += ' on {}'.format(self.command)
         if self.command_time:
             spec += ' for {}'.format(self.command_time)
+        if self.command_state:
+            spec += ' at {}'.format(self.command_state)
         return spec
 
     def relative(self):
@@ -333,19 +356,35 @@ class Check:
                 if not self.txn_time:
                     break
                 continue
-            if self.command and process['command'].lower() != self.command:
+            if self.fail_command(process):
                 continue
-            if self.txn:
-                txn_info = db.get_txn(process['id'])
-                if not txn_info:
-                    continue
-                if txn_info['seconds'] < int(self.txn_time):
-                    continue
+            if self.txn and self.fail_txn(process, db):
+                continue
             count += 1
 
         if count >= self.get_count_limit(db):
             return self.format_problem(count)
         return None
+
+    def fail_command(self, process):
+        # Command time is checked by the caller.
+        if self.command and process['command'].lower() != self.command:
+            return True
+        if self.command_state:
+            if not process['state'].lower().startswith(self.command_state):
+                return True
+        return False
+
+    def fail_txn(self, process, db):
+        txn_info = db.get_txn(process['id'])
+        if not txn_info:
+            return True
+        if txn_info['seconds'] < int(self.txn_time):
+            return True
+        if self.txn_state:
+            if not txn_info['state'].lower().startswith(self.txn_state):
+                return True
+        return False
 
     def get_count_limit(self, db):
         if not self.relative():
