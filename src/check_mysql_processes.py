@@ -1,8 +1,50 @@
 #!/usr/bin/env python
-'''InnoGames Monitoring Plugins - check_mysql_process_list.py
+"""InnoGames Monitoring Plugins - check_mysql_process_list.py
+
+This scripts executes SHOW PROCESSLIST and optionally SHOW ENGINE INNODB
+STATUS commands on the MySQL server and cross checks the results.  It
+implements a domain specific micro language for complicated conditions
+to be specified.  Those conditions are allowed multiple times for warning
+and critical reporting.  Here are some examples:
+
+--warning=10
+    Emit warning for more than 10 processes
+
+--critical=80%
+    Emit critical when more than 80% of the max_connections is used
+
+--warning='for 30s'
+    Emit warning if a process is in the same state for longer than 30 seconds
+
+--critical='100 on query'
+    Emit critical if more than 100 processes are executing a query
+
+--warning='10 on sleep for 1h'
+    Emit warning if more than 10 processes are sleeping for more than 1 hour
+
+--critical='10 on query at init'
+    Emit critical if more than 10 queries are at initialization state
+
+--warning='1 on query for 2s at sending data'
+    Emit warning if a query is running for 2 seconds and at sending data state
+
+--critical='50% on query'
+    Emit critical if more than 50% of max_connections are executing a query
+
+--warning='50 in transaction'
+    Emit warning for more than 50 active InnoDB transactions
+
+--critical='50 in transaction for 1min'
+    Emit critical for more than 59 transactions active for longer than 1 minute
+
+--warning='in transaction on sleep for 10 seconds'
+    Emit warning for a transaction idle for 10 seconds
+
+--critical='in transaction at starting for 10 seconds'
+    Emit critical for a transaction at starting step for longer than 10 seconds
 
 Copyright (c) 2017, InnoGames GmbH
-'''
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
 # in the Software without restriction, including without limitation the rights
@@ -21,7 +63,8 @@ Copyright (c) 2017, InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from argparse import ArgumentParser, ArgumentTypeError
+from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
+from collections import defaultdict
 from operator import itemgetter
 from sys import exit
 from re import compile as regexp_compile
@@ -31,7 +74,7 @@ from MySQLdb import connect
 
 def parse_args():
     parser = ArgumentParser(
-        description='Parameters for checking MySQL process list'
+        formatter_class=RawTextHelpFormatter, description=__doc__
     )
     parser.add_argument('--host', default='localhost', help=(
         'Target MySQL server (default: %(default)s)'
@@ -41,9 +84,6 @@ def parse_args():
     ))
     parser.add_argument('--passwd', default='', help=(
         'MySQL password (default empty)'
-    ))
-    parser.add_argument('--command', help=(
-        'Filter the processes by the command'
     ))
     parser.add_argument(
         '--warning',
@@ -65,15 +105,13 @@ def parse_args():
 
 def main():
     args = parse_args()
-    database = Database(host=args.host, user=args.user, passwd=args.passwd)
-    runner = Runner(database, args.command)
-    runner.fetch_processes()
+    db = Database(host=args.host, user=args.user, passwd=args.passwd)
 
-    critical_problems = runner.get_problems(args.critical)
+    critical_problems = db.get_problems(args.critical)
     if critical_problems:
         print('CRITICAL {}'.format(', '.join(critical_problems)))
         exit(ExitCodes.critical)
-    warning_problems = runner.get_problems(args.warning)
+    warning_problems = db.get_problems(args.warning)
     if warning_problems:
         print('WARNING {}'.format(', '.join(warning_problems)))
         exit(ExitCodes.warning)
@@ -81,52 +119,119 @@ def main():
     exit(ExitCodes.ok)
 
 
-class Runner:
-    def __init__(self, database, command):
-        self.database = database
-        self.command = command
-        self.max_connections = None
-        self.processes = None
-
-    def fetch_processes(self, command=None):
-        self.processes = self.database.execute('SHOW PROCESSLIST')
-        if self.command:
-            self.processes = filter(self.filter_process, self.processes)
-        # We need to sort the entries to let the check() function stop
-        # searching early.
-        self.processes.sort(key=itemgetter('time'), reverse=True)
-
-    def filter_process(self, process):
-        return self.command == process['command']
-
-    def fetch_max_connections(self):
-        result = self.database.execute("SHOW VARIABLES LIKE 'max_connections'")
-        assert len(result) == 1
-        self.max_connections = int(result[0]['value'])
-
-    def get_problems(self, checks):
-        if any(c.relative() for c in checks) and self.max_connections is None:
-            self.fetch_max_connections()
-        return filter(bool, (
-            c(self.processes, self.max_connections) for c in checks)
-        )
-
-
 class Database:
     def __init__(self, **kwargs):
         self.connection = connect(**kwargs)
         self.cursor = self.connection.cursor()
-
-    def __del__(self):
-        if self.cursor:
-            self.cursor.close()
-            self.connection.close()
+        self.processes = None
+        self.innodb_status = None
+        self.txns = None
+        self.max_connections = None
 
     def execute(self, statement):
         """Return the results as a list of dicts"""
         self.cursor.execute(statement)
         col_names = [desc[0].lower() for desc in self.cursor.description]
         return [dict(zip(col_names, r)) for r in self.cursor.fetchall()]
+
+    def get_processes(self):
+        if self.processes is None:
+            self.processes = self.execute('SHOW PROCESSLIST')
+            # We need to sort the entries to let the check() function stop
+            # searching early.
+            self.processes.sort(key=itemgetter('time'), reverse=True)
+        return self.processes
+
+    def get_innodb_status(self):
+        if self.innodb_status is None:
+            result = self.execute('SHOW ENGINE INNODB STATUS')
+            # This is a mess not meant to be parsed.  We will parse it anyway.
+            # There must be sections inside with headers separated by lines.
+            assert len(result) == 1
+            self.innodb_status = defaultdict(list)
+            in_header = False
+            header = None
+            for line in result[0]['status'].splitlines():
+                if not line:
+                    continue
+
+                # The header start
+                if not in_header and all(c == '-' for c in line):
+                    if len(line) < 3:
+                        raise Exception('Cannot parse InnoDB status')
+                    # New header must be the next line.
+                    in_header = True
+                    header = None
+                    continue
+
+                # The header line
+                if in_header and not header:
+                    if not line.isupper():
+                        raise Exception('Cannot parse InnoDB status')
+                    header = line
+                    continue
+
+                # The header end
+                if in_header:
+                    assert header
+                    if line not in ['-' * len(header), '=' * len(header)]:
+                        raise Exception('Cannot parse InnoDB status')
+                    in_header = False
+                    continue
+
+                self.innodb_status[header].append(line)
+        return self.innodb_status
+
+    def get_txn(self, process_id):
+        if self.txns is None:
+            self.txns = {}
+            lines = self.get_innodb_status()['TRANSACTIONS']
+            # This is even bigger mess.  We will try to get the transactions
+            # anyway.  If you need that far, please do not use a database
+            # which doesn't even have a reasonable way to monitor
+            # transactions.
+            header = None
+            for line_id, line in enumerate(lines):
+                if line.startswith('---TRANSACTION '):
+                    header = line
+                    continue
+                if header is None:
+                    continue
+                if not line.startswith('MySQL thread id '):
+                    continue
+                txn_info = self.parse_transaction_header(header)
+                if not txn_info:
+                    continue
+                txn_id = int(line[len('MySQL thread id '):].split(',', 1)[0])
+                self.txns[txn_id] = txn_info
+
+        return self.txns.get(process_id)
+
+    def parse_transaction_header(self, line):
+        line = line[len('---TRANSACTION '):]
+        txn_id_str, line = line.split(', ', 1)
+        if not txn_id_str.isdigit():
+            raise Exception('Cannot parse transaction header')
+        if txn_id_str == '0' or not line.startswith('ACTIVE '):
+            return None
+        line_split = line[len('ACTIVE '):].split(None, 2)
+        if len(line_split) < 2 or line_split[1] != 'sec':
+            raise Exception('Cannot parse transaction header')
+        return {
+            'txn_id': int(txn_id_str),
+            'seconds': int(line_split[0]),
+            'state': line_split[2] if len(line_split) >= 3 else None,
+        }
+
+    def get_max_connections(self):
+        if self.max_connections is None:
+            result = self.execute("SHOW VARIABLES LIKE 'max_connections'")
+            assert len(result) == 1
+            self.max_connections = int(result[0]['value'])
+        return self.max_connections
+
+    def get_problems(self, checks):
+        return filter(bool, (c.get_problem(self) for c in checks))
 
 
 class ExitCodes:
@@ -152,6 +257,12 @@ class Interval:
 
         self.seconds = number * multiplier
 
+    def __bool__(self):
+        return bool(self.seconds)
+
+    def __nonzero__(self):
+        return bool(self.seconds)
+
     def __int__(self):
         return self.seconds
 
@@ -163,66 +274,127 @@ class Interval:
 
 
 class Check:
-    pattern = regexp_compile(
-        '\A\s*'         # Input
-        '(?:'           # | Optional count clause
-        '([0-9]+)'      # | | Number
-        '(%)?'          # | | Optional unit
-        ')?'            # | '
-        '(?:'           # | Optional time clause
-        '\s*for\s*'     # | | Separator
-        '([0-9]+)'      # | | Number
-        '({})?'         # | | Optional unit
-        ')?'            # | '
-        '\s*\Z'         # '
-        .format('|'.join(k for k, v in Interval.units))
-    )
+    pattern = regexp_compile('\s*'.join([   # Allow spaces between everything
+        '\A',
+        '(?:',                              # Count clause
+        '(?P<count_number>[0-9]+)',
+        '(?P<count_unit>%?)',
+        ')?',
+        '(?:in',                            # Transaction after separator
+        '(?P<txn>transaction)',
+        '(?:for',                           # Time clause after separator
+        '(?P<txn_time_number>[0-9]+)',
+        '(?P<txn_time_unit>{time_units})?'
+        ')?',
+        '(?:at',                            # State after separator
+        '(?P<txn_state>[a-z ]+?)',
+        ')?',
+        ')?',
+        '(?:on',                            # Command after separator
+        '(?P<command>[a-z ]+?)',
+        ')?',
+        '(?:for',                           # Time clause after separator
+        '(?P<command_time_number>[0-9]+)',
+        '(?P<command_time_unit>{time_units})?'
+        ')?',
+        '(?:at',                            # State after separator
+        '(?P<command_state>[a-z ]+?)',
+        ')?',
+        '\Z',
+    ]).format(
+        time_units='|'.join(k for k, v in Interval.units)
+    ))
 
     def __init__(self, arg):
         matches = self.pattern.match(arg)
         if not matches:
             raise ArgumentTypeError('"{}" cannot be parsed'.format(arg))
-        self.count_number = int(matches.group(1) or 1)
-        self.count_unit = matches.group(2)
-        self.time = Interval(
-            int(matches.group(3) or 0),
-            matches.group(4) or Interval.units[0][0],
+        self.count_number = int(matches.group('count_number') or 1)
+        self.count_unit = matches.group('count_unit')
+        self.txn = matches.group('txn')
+        self.txn_time = Interval(
+            int(matches.group('txn_time_number') or 0),
+            matches.group('txn_time_unit') or Interval.units[0][0],
+        )
+        self.txn_state = matches.group('txn_state')
+        self.command = matches.group('command')
+        self.command_state = matches.group('command_state')
+        self.command_time = Interval(
+            int(matches.group('command_time_number') or 0),
+            matches.group('command_time_unit') or Interval.units[0][0],
         )
 
     def __repr__(self):
-        return '{}{} for {}'.format(
-            self.count_number, self.count_unit, self.time
-        )
+        return "'{}'".format(self.__str__())
+
+    def __str__(self):
+        return str(self.count_number) + self.count_unit + self.get_spec_str()
+
+    def get_spec_str(self):
+        spec = ''
+        if self.txn:
+            spec += ' in {}'.format(self.txn)
+        if self.txn_time:
+            spec += ' for {}'.format(self.txn_time)
+        if self.txn_state:
+            spec += ' at {}'.format(self.txn_state)
+        if self.command:
+            spec += ' on {}'.format(self.command)
+        if self.command_time:
+            spec += ' for {}'.format(self.command_time)
+        if self.command_state:
+            spec += ' at {}'.format(self.command_state)
+        return spec
 
     def relative(self):
         return bool(self.count_unit)
 
-    def __call__(self, processes, max_connections=None):
+    def get_problem(self, db):
         count = 0
-        for process in processes:
-            if process['time'] >= int(self.time):
-                count += 1
-            else:
-                break
+        for process in db.get_processes():
+            if process['time'] < int(self.command_time):
+                if not self.txn_time:
+                    break
+                continue
+            if self.fail_command(process):
+                continue
+            if self.txn and self.fail_txn(process, db):
+                continue
+            count += 1
 
-        if count >= self.get_count_limit(max_connections):
+        if count >= self.get_count_limit(db):
             return self.format_problem(count)
         return None
 
-    def get_count_limit(self, max_connections=None):
+    def fail_command(self, process):
+        # Command time is checked by the caller.
+        if self.command and process['command'].lower() != self.command:
+            return True
+        if self.command_state:
+            if not process['state'].lower().startswith(self.command_state):
+                return True
+        return False
+
+    def fail_txn(self, process, db):
+        txn_info = db.get_txn(process['id'])
+        if not txn_info:
+            return True
+        if txn_info['seconds'] < int(self.txn_time):
+            return True
+        if self.txn_state:
+            if not txn_info['state'].lower().startswith(self.txn_state):
+                return True
+        return False
+
+    def get_count_limit(self, db):
         if not self.relative():
             return self.count_number
-        assert max_connections is not None
-        return self.count_number * max_connections / 100.0
+        return self.count_number * db.get_max_connections() / 100.0
 
     def format_problem(self, count):
-        problem = '{} processes'.format(count)
-        if int(self.time):
-            problem += ' longer than {}'.format(self.time)
+        problem = '{} processes{}'.format(count, self.get_spec_str())
         if self.count_number > 1 or self.count_unit:
-            problem += ' exceeds {}{}'.format(
-                self.count_number, self.count_unit
-            )
+            problem += ' exceeds ' + str(self.count_number) + self.count_unit
         return problem
 
 
