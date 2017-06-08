@@ -267,10 +267,22 @@ class Interval:
         return self.seconds
 
     def __str__(self):
-        for unit, multiplier in reversed(self.units):
-            if self.seconds > multiplier:
-                break
-        return '{}{}'.format(self.seconds / multiplier, unit)
+        # We will iterate the units to choose the most suitable one.
+        # The first one is taken as the default.
+        for index, (unit, multiplier) in enumerate(self.units):
+            if index + 1 == len(self.units):
+                # This is the biggest unit.
+                continue
+            next_multiplier = self.units[index + 1][1]
+            if self.seconds > next_multiplier * 10:
+                # We will lose some precision, but it is better to use
+                # the next one.
+                continue
+            if self.seconds % next_multiplier == 0:
+                # The next one matches nicely.
+                continue
+            break
+        return str(self.seconds // multiplier) + unit
 
 
 class Check:
