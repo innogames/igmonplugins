@@ -104,7 +104,7 @@ def process(output, critical_units, ignored_units):
                     criticals.append((problem, unit_name))
                 else:
                     warnings.append((problem, unit_name))
-            elif any(match_unit(p, unit_name) for p in ignored_units):
+            elif not any(match_unit(p, unit_name) for p in ignored_units):
                 if problem != Problem.dead:
                     warnings.append((problem, unit_name))
 
