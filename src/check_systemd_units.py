@@ -99,16 +99,22 @@ def process(output, critical_units, ignored_units):
         problem = check_unit(*unit_split[1:4])
 
         if problem is not None:
-            if unit_name in critical_units:
+            if any(match_unit(p, unit_name) for p in critical_units):
                 if problem == Problem.failed:
                     criticals.append((problem, unit_name))
                 else:
                     warnings.append((problem, unit_name))
-            elif unit_name not in ignored_units:
+            elif any(match_unit(p, unit_name) for p in ignored_units):
                 if problem != Problem.dead:
                     warnings.append((problem, unit_name))
 
     return criticals, warnings
+
+
+def match_unit(pattern, unit):
+    if pattern.endswith('@*') and '@' in unit:
+        return pattern[:-len('@*')] == unit.split('@', 1)[0]
+    return pattern == unit
 
 
 def check_unit(serv_load, serv_active, serv_sub):
