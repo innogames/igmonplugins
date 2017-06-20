@@ -231,7 +231,7 @@ class Database:
             line_split = line_split[1:]
         if len(line_split) < 2 or line_split[1] not in ['sec', 'sec,']:
             raise Exception('Cannot parse transaction header')
-        if len(line_split) > 2:
+        if state = 'ACTIVE' and len(line_split) > 2:
             state = ' '.join(line_split[2:])
 
         return {
