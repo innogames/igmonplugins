@@ -159,17 +159,19 @@ class Database:
                 if not in_header and all(c == '-' for c in line):
                     if len(line) < 3:
                         raise Exception('Cannot parse InnoDB status')
-                    # New header must be the next line.
+                    # New header should be the next line.
                     in_header = True
                     header = None
                     continue
 
                 # The header line
                 if in_header and not header:
-                    if not line.isupper():
-                        raise Exception('Cannot parse InnoDB status')
-                    header = line
-                    continue
+                    if line.isupper():
+                        header = line
+                        continue
+                    else:
+                        # Oh well, it was not header.
+                        in_header = False
 
                 # The header end
                 if in_header:
