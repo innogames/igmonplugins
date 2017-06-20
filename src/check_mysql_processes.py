@@ -229,10 +229,10 @@ class Database:
         if line_split[0].startswith('(') and line_split[0].endswith(')'):
             state = line_split[0][1:-1]
             line_split = line_split[1:]
-        if len(line_split) < 2 or line_split[1] != 'sec':
+        if len(line_split) < 2 or line_split[1] not in ['sec', 'sec,']:
             raise Exception('Cannot parse transaction header')
         if len(line_split) > 2:
-            state = line_split[2]
+            state = ' '.join(line_split[2:])
 
         return {
             'txn_id': int(txn_id_str),
