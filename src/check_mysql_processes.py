@@ -174,7 +174,7 @@ class Database:
                 # The header end
                 if in_header:
                     assert header
-                    if line not in ['-' * len(header), '=' * len(header)]:
+                    if not any(all(c == d for c in line) for d in '-='):
                         raise Exception('Cannot parse InnoDB status')
                     in_header = False
                     continue
