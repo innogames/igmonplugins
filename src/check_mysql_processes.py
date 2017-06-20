@@ -43,6 +43,9 @@ and critical reporting.  Here are some examples:
 --critical='in transaction at starting for 10 seconds'
     Emit critical for a transaction at starting step for longer than 10 seconds
 
+--warning='in transaction at prepared'
+    Emit warning for a prepared transaction
+
 Copyright (c) 2017, InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -214,15 +217,27 @@ class Database:
         txn_id_str, line = line.split(', ', 1)
         if not txn_id_str.isdigit():
             raise Exception('Cannot parse transaction header')
-        if txn_id_str == '0' or not line.startswith('ACTIVE '):
+        if txn_id_str == '0':
             return None
-        line_split = line[len('ACTIVE '):].split(None, 2)
+
+        line_split = line.split()
+        if line_split[0] in ['ACTIVE']:
+            state = line_split[0]
+            line_split = line_split[1:]
+        else:
+            return None
+        if line_split[0].startswith('(') and line_split[0].endswith(')'):
+            state = line_split[0][1:-1]
+            line_split = line_split[1:]
         if len(line_split) < 2 or line_split[1] != 'sec':
             raise Exception('Cannot parse transaction header')
+        if len(line_split) > 2:
+            state = line_split[2]
+
         return {
             'txn_id': int(txn_id_str),
             'seconds': int(line_split[0]),
-            'state': line_split[2] if len(line_split) >= 3 else None,
+            'state': state,
         }
 
     def get_max_connections(self):
