@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# InnoGames Monitoring Plugins - check_steal_time.py
+# InnoGames Monitoring Plugins - check_cpu_steal_time.py
 #
 # This script checks the steal time of all vCPUs on the regarding domain and
 # raises a warning or critical state if a reasonable threshold is reached.
@@ -31,7 +31,6 @@
 from argparse import ArgumentParser
 import subprocess
 from sys import exit
-import re
 
 
 def main():
