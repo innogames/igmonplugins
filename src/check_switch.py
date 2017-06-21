@@ -280,8 +280,10 @@ def check_ports(snmp, model, args):
         # Port is named, enabled and up.
         if (
             port_aliases[port_index].strip() != '' and
-            port_admin_states[port_index] == 1 and
-            port_oper_states[port_index] == 1
+            port_admin_states[port_index] == 1 and (
+                port_oper_states[port_index] == 1 or
+                port_oper_states[port_index] == 6  # Stack port
+            )
         ):
             local_exit = 0
             msg = 'OK: Port named, enabled and up.'
