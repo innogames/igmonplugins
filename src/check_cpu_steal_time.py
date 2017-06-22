@@ -38,7 +38,7 @@ def main():
 
     args = get_parser().parse_args()
 
-    steal = float(get_steal_time())
+    steal = get_steal_time()
 
     code = 0
 
@@ -76,9 +76,10 @@ def get_parser():
 def get_steal_time():
     """Get the actual steal time of the host"""
 
-    output = subprocess.check_output('iostat -c', shell=True)
+    output = subprocess.check_output('iostat -c 2 2', shell=True)
     output = output.split()
-    steal = output[18].replace(',', '.')
+    cpu = int(output[5].replace('(', ''))
+    steal = float(output[31].replace(',', '.')) * cpu
 
     return steal
 
