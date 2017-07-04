@@ -267,61 +267,60 @@ def check_ports(snmp, model, args):
                 continue
         elif model == 'procurve':
             if (
+                port_names[port_index].startswith('DEFAULT_VLAN') or
                 port_names[port_index].startswith('VLAN') or
-                port_names[port_index].startswith('Trk')
+                port_names[port_index].startswith('Trk') or
+                port_names[port_index].startswith('lo0')
             ):
                 continue
 
         local_exit = 1
         msg = (
-            'WARNING: Unhandled but bad status (admin: {}, oper:{})!'
+            'WARNING: Unhandled bad status (admin: {}, oper:{})!'
             .format(
                 port_admin_states[port_index], port_oper_states[port_index]
             )
         )
 
-        # The only OK cases are:
-        # Port is named, enabled and up.
-        if (
-            port_aliases[port_index].strip() != '' and
-            port_admin_states[port_index] == 1 and (
-                port_oper_states[port_index] == 1 or
-                port_oper_states[port_index] == 6  # Stack port
-            )
-        ):
-            local_exit = 0
-            msg = 'OK: Port named, enabled and up.'
+        # Stack port
+        if port_oper_states[port_index] == 6:
+            if port_admin_states[port_index] == 2:
+                local_exit = 2
+                msg = 'CRITICAL: Stack port disabled.'
+            if port_admin_states[port_index] == 1:
+                if port_aliases[port_index].strip() == '':
+                    local_exit = 1
+                    msg = 'WARNING: Stack port unnamed.'
+                else:
+                    local_exit = 0
+                    msg = 'OK: Named and working stack port.'
 
-        # Port is unnamed, disabled and down.
-        if (
-            port_aliases[port_index] == '' and
-            port_admin_states[port_index] == 2 and
-            port_oper_states[port_index] == 2
-        ):
-            local_exit = 0
-            msg = 'OK: Port unnamed, disabled and down.'
+        # Port is enabled
+        elif port_admin_states[port_index] == 1:
+            if port_aliases[port_index].strip() == '':
+                if port_oper_states[port_index] == 1:
+                    local_exit = 2
+                    msg = 'CRITICAL: Unnamed port is up.'
+                elif port_oper_states[port_index] == 2:
+                    local_exit = 1
+                    msg = 'WARNING: Unnamed port is enabled.'
+            else:
+                if port_oper_states[port_index] == 2:
+                    local_exit = 2
+                    msg = 'CRITICAL: Named port is down!'
+                elif port_oper_states[port_index] == 1:
+                    local_exit = 0
+                    msg = 'OK: Port named, enabled and up.'
 
-        # Possible error cases:
-        if (
-            port_aliases[port_index].strip() == '' and
-            port_admin_states[port_index] == 1
-        ):
-            local_exit = 1
-            msg = 'WARNING: Unnamed port is enabled!'
-
-        if (
-            port_aliases[port_index].strip() == '' and
-            port_oper_states[port_index] == 1
-        ):
-            local_exit = 2
-            msg = 'CRITICAL: Unnamed port is up!'
-
-        if (
-            port_aliases[port_index] != '' and
-            port_oper_states[port_index] == 2
-        ):
-            local_exit = 2
-            msg = 'CRITICAL: Named port is down!'
+        # Port is disabled
+        elif port_admin_states[port_index] == 2:
+            if port_aliases[port_index].strip() == '':
+                if port_oper_states[port_index] == 2:
+                    local_exit = 0
+                    msg = 'OK: Port unnamed, disabled and down.'
+            else:
+                local_exit = 2
+                msg = 'WARNING: Named port is disabled.'
 
         if local_exit > 0 or args.verbose:
             outmsg += (
