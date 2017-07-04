@@ -348,7 +348,7 @@ def check_cpu(snmp, model, args):
     if model == 'powerconnect':
         # SNMP returns such ugly string
         #     5 Secs ( 18.74%)    60 Secs ( 17.84%)   300 Secs ( 18.12%)
-        m = re.search('60 Secs \( ?([0-9]+)[0-9\.]*%\)', cpu_usage)
+        m = re.search('60 Secs \( *([0-9]+)[0-9\.]*%\)', cpu_usage)
         cpu_usage = int(m.group(1))
 
     outmsg = 'CPU usage is {}%'.format(cpu_usage)
