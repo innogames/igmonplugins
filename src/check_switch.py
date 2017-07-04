@@ -188,8 +188,8 @@ def get_snmp_table(snmp, OID):
     errorIndication, errorStatus, errorIndex, varBindTable = cmd_gen.bulkCmd(
         snmp['auth_data'],
         snmp['transport_target'],
-        0,
-        25,
+        1,
+        50,
         OID,
     )
     for varBind in varBindTable:
@@ -245,6 +245,10 @@ def check_ports(snmp, model, args):
 
     outmsg = ''
     exit_code = 0
+
+    if not port_indexes:
+        exit_code = 3
+        outmsg = 'No ports found on the switch!'
 
     for port_index in sorted(port_indexes):
 
