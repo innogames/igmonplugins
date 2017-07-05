@@ -109,8 +109,11 @@ def main(verbose=False):
             except AttributeError:
                 pass
 
+            if not cron_child_time:
+                continue
+
             #check for 1 hour time
-            if cron_child_time and int(cron_child_time) > 3600:
+            if int(cron_child_time) > 3600:
                 # Check if cron name is on ignore list
                 include = True
                 child_pid = execute('pgrep -P ' + pid).strip()
