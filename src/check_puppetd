@@ -18,7 +18,7 @@ case `uname` in
 		puppet_disabled_file="/var/lib/nagios3/.nopuppetd"
 		;;
 	Linux)
-		puppet_state_file="/var/run/puppet_lastupdate"
+		puppet_state_file="/var/tmp/puppet_lastupdate"
 		puppet_disabled_file="/var/lib/nagios3/.nopuppetd"
 		;;
 esac
