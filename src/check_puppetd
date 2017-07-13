@@ -18,7 +18,7 @@ case `uname` in
 		puppet_disabled_file="/var/lib/nagios3/.nopuppetd"
 		;;
 	Linux)
-		puppet_state_file="/var/lib/puppet/lastupdate"
+		puppet_state_file="/var/run/puppet_lastupdate"
 		puppet_disabled_file="/var/lib/nagios3/.nopuppetd"
 		;;
 esac
@@ -59,4 +59,3 @@ date_diff=$(( $date_cur - $date_puppet ))
     echo "WARNING - $date_diff sec."
     exit 1
 }
-
