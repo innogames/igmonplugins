@@ -45,7 +45,7 @@ for IFACE in `/sbin/ifconfig -l`; do
 		if echo "${IFCONFIG}" | grep -q UP; then
 
 			# For UP interface get peer's IP address and ping it.
-			IP=$(echo "${IFCONFIG}" | awk '/^[ \t]+inet/ {print $4}')  # only IPv4!
+			IP=$(echo "${IFCONFIG}" | awk '/^[ \t]+inet / {print $4}')  # only IPv4!
 
 			# Ping the tunnel endpoing. Don't resolve DNS, be quiet, send 10 pings, with 100ms delay and wait up to 1s for answer.
 			PING_RAW=$(/usr/local/bin/sudo -u root /sbin/ping -n -q -c10 -i 0.1 -W1000 "${IP}" 2>&1)
