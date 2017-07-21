@@ -29,40 +29,55 @@
 #2   CRITICAL
 #3   UNKNOWN
 
-EXIT_WARNING="no"
-EXIT_CRITICAL="no"
-
 MLINE=""
 BADIFS=""
+EXIT_CODE=0
 
 # Get a list of all interfaces.
-for iface in `/sbin/ifconfig -l`; do
+for IFACE in `/sbin/ifconfig -l`; do
 	# Work only on gre_* and gif_* interfaces.
-	if echo "${iface}" | grep -qE '^(gif|gre)_'; then
+	if echo "${IFACE}" | grep -qE '^(gif|gre)_'; then
 		# Get interface configuration, remove newlines.
-		IFCONFIG=`/sbin/ifconfig ${iface} | tr '\n' ' '`
+		IFCONFIG="$(/sbin/ifconfig ${IFACE})"
+		LOCAL_EXIT=0
 
 		# Check if interface is UP or DOWN.
 		if echo "${IFCONFIG}" | grep -q UP; then
+
 			# For UP interface get peer's IP address and ping it.
-			IP=`echo "${IFCONFIG}" | sed -E 's/.* --> ([0-9\.]+) netmask.*/\1/'`  # only IPv4!
+			IP=$(echo "${IFCONFIG}" | awk '/^[ \t]+inet/ {print $4}')  # only IPv4!
+
 			# Ping the tunnel endpoing. Don't resolve DNS, be quiet, send 10 pings, with 100ms delay and wait up to 1s for answer.
-			PING_RAW=`/usr/local/bin/sudo -u root /sbin/ping -n -q -c10 -i 0.1 -W1000 "${IP}"`
-			# 10 packets transmitted, 0 packets received, 100.0% packet loss
-			PING=`echo "${PING_RAW}" | grep "round-trip"  | sed -E 's/.* = [0-9\.]+\/([0-9]+)\.[0-9]+\/.*/\1/'`
-			# 10 packets transmitted, 0 packets received, 100.0% packet loss
-			LOSS=`echo "${PING_RAW}" | grep "packet loss" | sed -E 's/.*, ([0-9]+)\..* packet loss/\1/'`
-	
-			THISIF="${iface}: UP, ping ${PING}ms, loss ${LOSS}%"
+			PING_RAW=$(/usr/local/bin/sudo -u root /sbin/ping -n -q -c10 -i 0.1 -W1000 "${IP}" 2>&1)
+			PING_EXIT=$?
 
-			[ "${LOSS}" -gt  20 ] && EXIT_CRITICAL="yes"
-			[ "${PING}" -gt 350 ] && EXIT_WARNING="yes"
+			if [ $PING_EXIT -eq 0 ] || [ $PING_EXIT -eq 2 ]; then
+				# round-trip min/avg/max/stddev = 0.164/0.286/0.440/0.087 ms
+				PING=$(echo "${PING_RAW}" | awk 'BEGIN {FS="[/ ]"}; /round-trip/ {print $8}')
+				PING_INT=${PING%.*}
 
-			[ "${LOSS}" -gt  20 ] || [ "${PING}" -gt 350 ] && BADIFS="${iface}, ${BADIFS}"
+				# 10 packets transmitted, 0 packets received, 100.0% packet loss
+				LOSS=$(echo "${PING_RAW}" | awk '/packet loss/ {print $7}')
+				LOSS=${LOSS%\%*}
+				LOSS_INT=${LOSS%.*}
+
+				THISIF="${IFACE}: UP, ping ${PING}ms, loss ${LOSS}%"
+
+				[ "${PING_INT}" -gt 200 ] && LOCAL_EXIT=1
+				[ "${LOSS_INT}" -gt  20 ] && LOCAL_EXIT=2
+			else
+				THISIF="${IFACE}: Ping failure: $PING_RAW"
+				LOCAL_EXIT=2
+			fi
+
+
+			[ "$LOCAL_EXIT" -ne 0 ] && BADIFS="${IFACE}, ${BADIFS}"
 		else
-			EXIT_WARNING="yes"
-			THISIF="${iface}: ifconfig down"
+			LOCAL_EXIT=1
+			THISIF="${IFACE}: ifconfig down"
 		fi
+
+		[ $LOCAL_EXIT -gt $EXIT_CODE ] && EXIT_CODE=$LOCAL_EXIT
 
 		MLINE="${THISIF};${MLINE}"
 	fi
@@ -73,11 +88,7 @@ if [ -n "$BADIFS" ]; then
 else
 	echo "All tunnels are fine"
 fi
-echo
+
 echo "${MLINE}" | tr ';' '\n'
 
-[ "${EXIT_CRITICAL}" == "yes" ] && exit 2
-[ "${EXIT_WARNING}"  == "yes" ] && exit 1 
-
-exit 0 # OK if no trouble
-
+exit $EXIT_CODE
