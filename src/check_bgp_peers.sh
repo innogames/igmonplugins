@@ -29,17 +29,17 @@
 #2   CRITICAL
 #3   UNKNOWN
 
-birdc 'show protocols' | awk '$2=="BGP" { ORS=" "; print $1":"; for (i=6; i<=NF; i++) print $i; ORS="\n"; print ""}' > /tmp/bgpstatus
+birdc 'show protocols' | awk '$2=="BGP" { ORS=" "; print $1":"; for (i=3; i<=NF; i++) print $i; ORS="\n"; print ""}' > /tmp/bgpstatus
 
 while read proto; do
     router=${proto%%:*}
-    status=${proto#*:}
-    status=${status# *}
+    message=${proto#*:}
+    status=${message##* }
 
     if [ "$status" != "Established" ]; then
         CRIT="yes"
     fi
-    routers="${routers}${router}: ${status}"$'\n'
+    routers="${routers}${router}: ${message}"$'\n'
 done < /tmp/bgpstatus
 
 if [ -n "$CRIT" ]; then
