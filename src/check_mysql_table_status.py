@@ -30,7 +30,7 @@ Copyright (c) 2017, InnoGames GmbH
 from argparse import ArgumentParser, RawTextHelpFormatter
 from sys import exit
 
-from MySQLdb import connect
+from mysql.connector import connect
 
 DEFAULT_MODES = ['rows', 'data_length', 'index_length']
 MESSAGE_TYPES = ['ok', 'warning', 'critical', 'perf']
