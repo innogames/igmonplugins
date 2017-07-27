@@ -45,6 +45,11 @@ def parse_arguments():
         formatter_class=RawTextHelpFormatter, description=__doc__
     )
     parser.add_argument('--host', help='hostname', default='localhost')
+    parser.add_argument(
+        '--unix-socket',
+        default='/var/run/mysqld/mysqld.sock',
+        help='Target unix socket (default: %(default)s)'
+    )
     parser.add_argument('--port', type=int, default=3306)
     parser.add_argument('--user', help='username')
     parser.add_argument('--passwd', help='password')
@@ -62,10 +67,17 @@ def parse_arguments():
 
 def main():
     arguments = parse_arguments()
-    database = Database(**{
-        k: v for k, v in vars(arguments).items()
-        if k in ('host', 'port', 'user', 'passwd') and v is not None
-    })
+    connection_kwargs = {}
+    if arguments.host == 'localhost':
+        connection_kwargs['unix_socket'] = arguments.unix_socket
+    else:
+        connection_kwargs['host'] = arguments.host
+        connection_kwargs['port'] = arguments.port
+    if arguments.user:
+        connection_kwargs['user'] = arguments.user
+        if arguments.passwd:
+            connection_kwargs['passwd'] = arguments.passwd
+    database = Database(connect(**connection_kwargs))
     output_classes = [OutputTables]
     if arguments.avg:
         output_classes.append(OutputAvg)
@@ -202,8 +214,8 @@ class Value(object):
 
 
 class Database(object):
-    def __init__(self, **kwargs):
-        self.connection = connect(**kwargs)
+    def __init__(self, connection):
+        self.connection = connection
         self.cursor = self.connection.cursor()
 
     def select(self, query):
