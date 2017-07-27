@@ -248,7 +248,7 @@ class Database:
         return self.max_connections
 
     def get_problems(self, checks):
-        return filter(bool, (c.get_problem(self) for c in checks))
+        return list(filter(bool, (c.get_problem(self) for c in checks)))
 
 
 class ExitCodes:
