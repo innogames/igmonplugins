@@ -72,7 +72,7 @@ from operator import itemgetter
 from sys import exit
 from re import compile as regexp_compile
 
-from MySQLdb import connect
+from mysql.connector import connect
 
 
 def parse_args():
