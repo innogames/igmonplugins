@@ -79,15 +79,24 @@ def parse_args():
     parser = ArgumentParser(
         formatter_class=RawTextHelpFormatter, description=__doc__
     )
-    parser.add_argument('--host', default='localhost', help=(
-        'Target MySQL server (default: %(default)s)'
-    ))
-    parser.add_argument('--user', default='user', help=(
-        'MySQL user (default: %(default)s)'
-    ))
-    parser.add_argument('--passwd', default='', help=(
-        'MySQL password (default empty)'
-    ))
+    parser.add_argument(
+        '--host',
+        default='localhost',
+        help='Target MySQL server (default: %(default)s)'
+    )
+    parser.add_argument(
+        '--unix-socket',
+        default='/var/run/mysqld/mysqld.sock',
+        help='Target unix socket (default: %(default)s)'
+    )
+    parser.add_argument(
+        '--user',
+        help='MySQL user (default: %(default)s)'
+    )
+    parser.add_argument(
+        '--passwd',
+        help='MySQL password (default empty)'
+    )
     parser.add_argument(
         '--warning',
         nargs='*',
@@ -108,7 +117,16 @@ def parse_args():
 
 def main():
     args = parse_args()
-    db = Database(host=args.host, user=args.user, passwd=args.passwd)
+    connection_kwargs = {}
+    if args.host == 'localhost':
+        connection_kwargs['unix_socket'] = args.unix_socket
+    else:
+        connection_kwargs['host'] = args.host
+    if args.user:
+        connection_kwargs['user'] = args.user
+        if args.passwd:
+            connection_kwargs['passwd'] = args.passwd
+    db = Database(connect(**connection_kwargs))
 
     critical_problems = db.get_problems(args.critical)
     if critical_problems:
@@ -123,9 +141,9 @@ def main():
 
 
 class Database:
-    def __init__(self, **kwargs):
-        self.connection = connect(**kwargs)
-        self.cursor = self.connection.cursor()
+    def __init__(self, connection):
+        self.connection = connection
+        self.cursor = connection.cursor()
         self.processes = None
         self.innodb_status = None
         self.txns = None
