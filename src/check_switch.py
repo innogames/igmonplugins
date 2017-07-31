@@ -60,6 +60,8 @@ CPU_OIDS = {
     'procurve': '.1.3.6.1.4.1.11.2.14.11.5.1.9.6.1.0',
     'powerconnect': 'iso.3.6.1.4.1.674.10895.5000.2.6132.1.1.1.1.4.9.0',
     'extreme': '.1.3.6.1.4.1.1916.1.32.1.2.0',
+    # 1-minute average for the 1st cpu of stack because we don't stack them.
+    'force10_mxl': '1.3.6.1.4.1.6027.3.19.1.2.8.1.3.1',
 }
 
 
@@ -229,6 +231,8 @@ def get_switch_model(snmp):
         return 'procurve'
     elif 'ExtremeXOS' in model:
         return 'extreme'
+    elif 'Dell Networking OS' in model:
+        return 'force10_mxl'
 
     raise SwitchException('Unknown switch model')
 
@@ -350,6 +354,8 @@ def check_cpu(snmp, model, args):
         #     5 Secs ( 18.74%)    60 Secs ( 17.84%)   300 Secs ( 18.12%)
         m = re.search('60 Secs \( *([0-9]+)[0-9\.]*%\)', cpu_usage)
         cpu_usage = int(m.group(1))
+    else:
+        cpu_usage = int(cpu_usage)
 
     outmsg = 'CPU usage is {}%'.format(cpu_usage)
 
