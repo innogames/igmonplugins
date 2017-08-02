@@ -247,6 +247,11 @@ def check_ports(snmp, model, args):
     port_names = get_snmp_table(snmp, OIDS['if_name'])
     port_aliases = get_snmp_table(snmp, OIDS['if_alias'])
 
+    # Strip port aliases.
+    # The MXL switch returns 0x00 0x00 for an unnamed port.
+    for port_name, port_alias in port_aliases.items():
+        port_aliases[port_name] = port_alias.strip('\0')
+
     outmsg = ''
     exit_code = 0
 
@@ -277,6 +282,12 @@ def check_ports(snmp, model, args):
                 port_names[port_index].startswith('lo0')
             ):
                 continue
+        elif model == 'force10_mxl':
+            if (
+                port_names[port_index].startswith('Vlan') or
+                port_names[port_index].startswith('NULL')
+            ):
+                continue
 
         local_exit = 1
         msg = (
@@ -292,7 +303,7 @@ def check_ports(snmp, model, args):
                 local_exit = 2
                 msg = 'CRITICAL: Stack port disabled.'
             if port_admin_states[port_index] == 1:
-                if port_aliases[port_index].strip() == '':
+                if not port_aliases[port_index]:
                     local_exit = 1
                     msg = 'WARNING: Stack port unnamed.'
                 else:
@@ -301,7 +312,7 @@ def check_ports(snmp, model, args):
 
         # Port is enabled
         elif port_admin_states[port_index] == 1:
-            if port_aliases[port_index].strip() == '':
+            if not port_aliases[port_index]:
                 if port_oper_states[port_index] == 1:
                     local_exit = 2
                     msg = 'CRITICAL: Unnamed port is up.'
@@ -318,7 +329,7 @@ def check_ports(snmp, model, args):
 
         # Port is disabled
         elif port_admin_states[port_index] == 2:
-            if port_aliases[port_index].strip() == '':
+            if not port_aliases[port_index]:
                 if port_oper_states[port_index] == 2:
                     local_exit = 0
                     msg = 'OK: Port unnamed, disabled and down.'
