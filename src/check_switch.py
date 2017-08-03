@@ -285,7 +285,9 @@ def check_ports(snmp, model, args):
         elif model == 'force10_mxl':
             if (
                 port_names[port_index].startswith('Vlan') or
-                port_names[port_index].startswith('NULL')
+                port_names[port_index].startswith('NULL') or
+                port_names[port_index].startswith('ManagementEthernet') or
+                port_names[port_index].startswith('Port-channel')
             ):
                 continue
 
