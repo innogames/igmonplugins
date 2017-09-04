@@ -149,6 +149,9 @@ class Database:
         self.txns = None
         self.max_connections = None
 
+    def __del__(self):
+        self.connection.close()
+
     def execute(self, statement):
         """Return the results as a list of dicts"""
         self.cursor.execute(statement)

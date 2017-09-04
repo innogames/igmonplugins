@@ -218,6 +218,9 @@ class Database(object):
         self.connection = connection
         self.cursor = self.connection.cursor()
 
+    def __del__(self):
+        self.connection.close()
+
     def select(self, query):
         self.cursor.execute(query)
         return self.cursor.fetchall()
