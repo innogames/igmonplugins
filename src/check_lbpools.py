@@ -130,8 +130,15 @@ def compare_pools(pools, testtool, send):
                 in_testtool = True
 
             optimal_nodes = len(pool_v['nodes'])
-            min_nodes = pool_v.get('min_nodes')
-            max_nodes = pool_v.get('max_nodes')
+
+            # We want to keep "None" text as it is nicer
+            # than 0 for human perception.
+            min_nodes = pool_v.get('min_nodes', None)
+            if min_nodes == 0:
+                min_nodes = None
+            max_nodes = pool_v.get('max_nodes', None)
+            if max_nodes == 0:
+                max_nodes = None
 
             if pool_v['healthchecks']:
                 if in_testtool:
