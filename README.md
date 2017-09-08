@@ -6,6 +6,14 @@ InnoGames.  We have packages for more complicated checks.  This
 repository is only for standalone simple scripts which don't worth
 having separate packages.  Please don't bloat it.
 
+Language
+--------
+
+Python is our preferred language at InnoGames System Administration.
+Please write the new plugins in Python unless you have a very good
+reason to use another language.  Particularly any kind of shell
+scripting is not acceptable for anything new.
+
 Style Guide
 -----------
 
