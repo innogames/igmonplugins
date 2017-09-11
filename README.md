@@ -17,10 +17,10 @@ scripting is not acceptable for anything new.
 Style Guide
 -----------
 
-The scripts are named with lower-case underscore notation.  The new
-ones should have the file prefixes.  The checks should be prefixed
-with "check\_".  Not portable ones should include the operating
-system they are working on in their names.
+The scripts are named with lower-case underscore notation.  The scripts
+must have file extensions.  The checks should be prefixed with "check\_".
+Not portable ones should include the operating system they are working
+on in their names.
 
 License
 -------
