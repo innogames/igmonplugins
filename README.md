@@ -14,6 +14,9 @@ Please write the new plugins in Python unless you have a very good
 reason to use another language.  Particularly any kind of shell
 scripting is not acceptable for anything new.
 
+The scripts should run on Python 3.5 and later.  Python 2.7 compatibility
+is optional but recommended for the ones that are generally useful.
+
 Style Guide
 -----------
 
