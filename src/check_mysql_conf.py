@@ -63,6 +63,12 @@ def main():
         for k, v in vars(args).items()
         if k in ['host', 'user', 'passwd'] and v
     )
+    command = [
+        args.exe,
+        '--ignore-variables=wsrep_sst_auth',
+        '--report-width=140',
+        conn_str,
+    ]
 
     # Start the check processes in parallel
     check_procs = []
@@ -73,7 +79,7 @@ def main():
                     break
             else:
                 continue
-        proc = Popen([args.exe, conn_str, conf_file], stdout=PIPE)
+        proc = Popen(command + [conf_file], stdout=PIPE)
         check_procs.append(proc)
 
     # Wait for all check processes to finish
