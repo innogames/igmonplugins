@@ -200,10 +200,9 @@ def compare_pools(pools, testtool, send):
             nsca = subprocess.Popen(
                 [
                     '/usr/local/sbin/send_nsca',
-                    '-H',
-                    '{}-monitor.ig.local.'.format(monitor),
-                    '-c',
-                    '/usr/local/etc/nagios/send_nsca.cfg',
+                    '-H', '{}-monitor.ig.local.'.format(monitor),
+                    '-to', '20',
+                    '-c', '/usr/local/etc/nagios/send_nsca.cfg',
                 ],
                 stdin=subprocess.PIPE,
             )
