@@ -152,8 +152,7 @@ def main(args):
         if branch and
         (
             not branch['protected'] or
-            branch['developers_can_merge'] or
-            branch['developers_can_push']
+            branch['developers_can_merge'] or branch['developers_can_push']
         )
     ]
 
