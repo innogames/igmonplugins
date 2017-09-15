@@ -115,6 +115,7 @@ def main(args):
     else:
         projects = fetch_projects(base_url, api, args.project, auth=auth)
 
+    projects = list(filter(None, projects))
     if not projects:
         print('No projects found')
         exit(3)
