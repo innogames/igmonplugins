@@ -53,7 +53,8 @@ from requests.utils import quote
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--base-url',
+    # todo: make --base-url a positional argument
+    parser.add_argument('--base-url', required=True,
                         help='the base url of the application you want to '
                              'check (e.g. https://sub.example.com)')
     parser.add_argument('--auth', choices=('basic', 'token'),
