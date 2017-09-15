@@ -83,6 +83,12 @@ def parse_args():
     parser.add_argument('--branch',
                         help='the branch which should be protected, '
                              'default is the default branch of the project')
+    parser.add_argument(
+        '--api-version',
+        help=('The api version in form of "v3".  If not specified the script '
+              'tries to fetch current api version through the gitlab version '
+              'endpoint.  Right now it will try from api version 4 down to 3.')
+    )
     return parser.parse_args()
 
 
@@ -90,6 +96,14 @@ def main(args):
     base_url = args.base_url
 
     auth = parse_auth_argument(args)
+
+    api = args.api_version
+    if not api:
+        api = fetch_api_version(base_url, auth=auth)
+
+    if not api:
+        print('Api version could not be found.')
+        exit(3)
 
     if args.group:
         projects = fetch_group_projects(base_url, args.group, args.project,
