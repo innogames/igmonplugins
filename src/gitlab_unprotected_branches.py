@@ -191,6 +191,18 @@ def parse_auth_argument(args):
     return auth
 
 
+def fetch_api_version(base_url, auth=None):
+    versions = ('v3', 'v4')
+    for version in reversed(versions):
+        endpoint = '/api/{api}/version'.format(api=version)
+        response = do_request('head', base_url, endpoint, auth=auth)
+
+        if response.ok:
+            return version
+
+    return None
+
+
 def fetch_project(base_url, project, auth=None):
     """
         :return: project
