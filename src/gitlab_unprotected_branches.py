@@ -53,7 +53,8 @@ from requests.utils import quote
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--base-url',
+    # todo: make --base-url a positional argument
+    parser.add_argument('--base-url', required=True,
                         help='the base url of the application you want to '
                              'check (e.g. https://sub.example.com)')
     parser.add_argument('--auth', choices=('basic', 'token'),
@@ -83,6 +84,12 @@ def parse_args():
     parser.add_argument('--branch',
                         help='the branch which should be protected, '
                              'default is the default branch of the project')
+    parser.add_argument(
+        '--api-version',
+        help=('The api version in form of "v3".  If not specified the script '
+              'tries to fetch current api version through the gitlab version '
+              'endpoint.  Right now it will try from api version 4 down to 3.')
+    )
     return parser.parse_args()
 
 
@@ -91,16 +98,25 @@ def main(args):
 
     auth = parse_auth_argument(args)
 
+    api = args.api_version
+    if not api:
+        api = fetch_api_version(base_url, auth=auth)
+
+    if not api:
+        print('Api version could not be found.')
+        exit(3)
+
     if args.group:
-        projects = fetch_group_projects(base_url, args.group, args.project,
-                                        auth=auth)
+        projects = fetch_group_projects(base_url, api, args.group,
+                                        args.project, auth=auth)
     elif (args.project and
           # if args.project represents an int or is like 'group/project'
           ('/' in args.project or str(int(args.project)) == args.project)):
-        projects = [fetch_project(base_url, args.project, auth=auth)]
+        projects = [fetch_project(base_url, api, args.project, auth=auth)]
     else:
-        projects = fetch_projects(base_url, args.project, auth=auth)
+        projects = fetch_projects(base_url, api, args.project, auth=auth)
 
+    projects = list(filter(None, projects))
     if not projects:
         print('No projects found')
         exit(3)
@@ -118,7 +134,7 @@ def main(args):
         if not branch:
             continue
         branch_requests.append(get_branch_request(
-            base_url, project['id'], branch, auth=auth))
+            base_url, api, project['id'], branch, auth=auth))
 
     # map the branch responses with their project
     branches = zip(
@@ -136,8 +152,7 @@ def main(args):
         if branch and
         (
             not branch['protected'] or
-            branch['developers_can_merge'] or
-            branch['developers_can_push']
+            branch['developers_can_merge'] or branch['developers_can_push']
         )
     ]
 
@@ -191,7 +206,19 @@ def parse_auth_argument(args):
     return auth
 
 
-def fetch_project(base_url, project, auth=None):
+def fetch_api_version(base_url, auth=None):
+    versions = ('v3', 'v4')
+    for version in reversed(versions):
+        endpoint = '/api/{api}/version'.format(api=version)
+        response = do_request('head', base_url, endpoint, auth=auth)
+
+        if response.ok:
+            return version
+
+    return None
+
+
+def fetch_project(base_url, api, project, auth=None):
     """
         :return: project
         :rtype: dict
@@ -199,8 +226,8 @@ def fetch_project(base_url, project, auth=None):
     if not project:
         return None
     project = quote(str(project), '')
-    endpoint = ('/api/v3/projects/{project}'
-                .format(project=project))
+    endpoint = ('/api/{api}/projects/{project}'
+                .format(api=api, project=project))
     response = do_request('get', base_url, endpoint, auth=auth)
     if response.status_code != 200:
         return None
@@ -209,12 +236,12 @@ def fetch_project(base_url, project, auth=None):
     return response
 
 
-def fetch_projects(base_url, search=None, auth=None):
+def fetch_projects(base_url, api, search=None, auth=None):
     """
         :return: projects
         :rtype: list of dict
     """
-    endpoint = '/api/v3/projects'
+    endpoint = '/api/{api}/projects'.format(api=api)
     params = {}
     if search:
         params['search'] = search
@@ -226,7 +253,7 @@ def fetch_projects(base_url, search=None, auth=None):
     return response
 
 
-def fetch_group_projects(base_url, group, project=None, auth=None):
+def fetch_group_projects(base_url, api, group, project=None, auth=None):
     """
         :return: projects
         :rtype: list of dict
@@ -234,8 +261,8 @@ def fetch_group_projects(base_url, group, project=None, auth=None):
     if not group:
         return None
     group = quote(str(group), '')
-    endpoint = ('/api/v3/groups/{group}/projects'
-                .format(group=group))
+    endpoint = ('/api/{api}/groups/{group}/projects'
+                .format(api=api, group=group))
     params = {}
     if project:
         params['search'] = project
@@ -247,13 +274,13 @@ def fetch_group_projects(base_url, group, project=None, auth=None):
     return response
 
 
-def get_branch_request(base_url, project, branch, auth=None):
+def get_branch_request(base_url, api, project, branch, auth=None):
     if not project or not branch:
         return None
     project = quote(str(project), '')
     branch = quote(str(branch), '')
-    endpoint = ('/api/v3/projects/{project}/repository/branches/{branch}'
-                .format(project=project, branch=branch))
+    endpoint = ('/api/{api}/projects/{project}/repository/branches/{branch}'
+                .format(api=api, project=project, branch=branch))
     return get_request('get', base_url, endpoint, auth=auth)
 
 
