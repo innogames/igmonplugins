@@ -61,34 +61,26 @@ def main():
     for mem_type, sysctl in MEMORY_TYPES.items():
         local_code = ExitCodes.ok
         status = 'ok'
+        cur_value = DataValue(mi[sysctl])
+        max_value = DataValue(mi['physmem'])
+
         for threshold in ['warning', 'critical']:
-            if (
-                mi[sysctl] > mi['physmem'] *
-                getattr(args, mem_type + '_' + threshold) * 0.01
-            ):
+            limit = getattr(args, mem_type + '_' + threshold)
+            if cur_value > limit.scale(max_value):
                 if getattr(ExitCodes, threshold) > local_code:
                     status = threshold
                     exit_code = getattr(ExitCodes, threshold)
-        if status == 'ok':
-            exit_multiline += (
-                '{}: {} memory {}MiB <= {}MiB * {}%\n'
-                .format(
-                    status.upper(),
-                    mem_type,
-                    mi[sysctl]/1048576,
-                    mi['physmem']/1048576,
-                    getattr(args, mem_type + '_warning')
-                ))
-        else:
-            exit_multiline += (
-                '{}: {} memory {}MiB > {}MiB * {}%\n'
-                .format(
-                    status.upper(),
-                    mem_type,
-                    mi[sysctl]/1048576,
-                    mi['physmem']/1048576,
-                    getattr(args, mem_type + '_' + status)
-                ))
+
+        exit_multiline += '{}: {} memory {} {} {} of total {}\n'.format(
+            status.upper(),
+            mem_type,
+            cur_value,
+            '<=' if status == 'ok' else '>',
+            getattr(args, mem_type + '_' + (
+                'warning' if status == 'ok' else status
+            )),
+            max_value,
+        )
 
     if exit_code == 0:
         print('Memory allocation within limits')
@@ -103,13 +95,15 @@ def parse_args():
     parser = ArgumentParser()
     for memory_type in MEMORY_TYPES.keys():
         parser.add_argument(
-            '--{}-warning'.format(memory_type), default=50,
-            metavar='%', type=int,
+            '--{}-warning'.format(memory_type),
+            default='50%',
+            type=DataValue,
             help='Warning threshold for {} memory'.format(memory_type),
         )
         parser.add_argument(
-            '--{}-critical'.format(memory_type), default=75,
-            metavar='%', type=int,
+            '--{}-critical'.format(memory_type),
+            default='75%',
+            type=DataValue,
             help='Critical threshold for {} memory'.format(memory_type),
         )
     return parser.parse_args()
@@ -137,6 +131,69 @@ def parse_memory_info():
             memory_info[name] = int(line[1]) * pagesize
 
     return memory_info
+
+
+class DataValue(object):
+    units = [
+        ('B', 1),
+        ('KiB', 1024),
+        ('MiB', 1024 ** 2),
+        ('GiB', 1024 ** 3),
+        ('TiB', 1024 ** 4),
+        ('PiB', 1024 ** 5),
+        ('EiB', 1024 ** 6),
+        ('ZiB', 1024 ** 7),
+        ('YiB', 1024 ** 8),
+        ('%', None),
+    ]
+
+    def __init__(self, value):
+        """Parse the value"""
+        for unit in reversed(self.units):
+            if str(value).endswith(unit[0]):
+                self.value = float(value[:-len(unit[0])])
+                self.unit = unit
+                break
+        else:
+            self.value = float(value)
+            self.unit = None
+
+    def __str__(self):
+        """If necessary change the value to number + unit format by rounding"""
+        if self.unit:
+            unit = self.unit
+            value = self.value
+        else:
+            unit = self.choose_unit()
+            value = self.value / unit[1]
+        return '{:.2f}{}'.format(value, unit[0])
+
+    def __float__(self):
+        """If necessary change the value to number format"""
+        if self.unit:
+            if not self.unit[1]:
+                raise Exception('Relative limits cannot be compared')
+            return self.value * self.unit[1]
+        return self.value
+
+    def __lt__(self, other):
+        return other is not None and float(self) < float(other)
+
+    def __gt__(self, other):
+        return other is not None and float(self) > float(other)
+
+    def choose_unit(self):
+        """Choose the appropriate unit for the value"""
+        assert not self.unit
+        for unit in reversed(self.units):
+            if unit[1] and self.value > unit[1]:
+                break
+        return unit
+
+    def scale(self, max_value):
+        if self.unit and self.unit[0] == '%':
+            return type(self)(float(max_value) * self.value * 0.01)
+        return self
 
 
 if __name__ == '__main__':
