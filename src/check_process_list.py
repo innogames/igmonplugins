@@ -34,6 +34,8 @@ Copyright (c) 2016, InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from __future__ import print_function
+
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import defaultdict
 from operator import itemgetter
@@ -93,7 +95,7 @@ def main():
         status = 'OK'
         exit_code = 0
 
-    print(' '.join((status, '; '.join(m for m in messages if m))))
+    print(status, '; '.join(m for m in messages if m))
     exit(exit_code)
 
 
