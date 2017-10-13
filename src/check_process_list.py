@@ -9,12 +9,13 @@ supported variable.  See your man pages for the list of them.
 The script is capable of executing multiple operators on the processes.
 Some examples are:
 
-    --exclude 'pid == 0'
-    --warning 'etime >= 3600'
-    --critical 'user != root'
+    --match 'command == ssh-agent'
     --parent 'command ~= cron'
+    --exclude 'pid == 0'
+    --warning 'etime >= 3600'   # TODO Make this actually working
+    --critical 'user != root'
 
-Copyright (c) 2016, InnoGames GmbH
+Copyright (c) 2017, InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -34,6 +35,8 @@ Copyright (c) 2016, InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from __future__ import print_function
+
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import defaultdict
 from operator import itemgetter
@@ -42,7 +45,7 @@ from subprocess import Popen, PIPE
 from sys import exit
 
 # The option arguments which accept a check
-CHECK_ARGS = ('exclude', 'warning', 'critical', 'parent')
+CHECK_ARGS = ['match', 'parent', 'exclude', 'warning', 'critical']
 
 
 def main():
@@ -63,11 +66,16 @@ def main():
         columns.insert(0, 'ppid')
 
     processes = get_processes(columns)
-    check_groups = [
+    check_groups = [    # First match wins
         ('exclude', args.exclude),
-        ('warning', args.warning),
         ('critical', args.critical),
+        ('warning', args.warning),
+        ('ok', None),
     ]
+
+    if args.match:
+        processes = (p for p in processes if execute_checks(p, args.match))
+
     if args.parent:
         try:
             processes = filter_process_family(processes, args.parent, [])
@@ -82,18 +90,19 @@ def main():
         )))
 
     processes = filter_processes(processes, check_groups)
-    messages = get_messages(processes, [c[0] for c in reversed(check_groups)])
-    if messages[0]:
+    messages = get_messages(processes, [c[0] for c in check_groups])
+
+    if messages[-3]:
         status = 'CRITICAL'
         exit_code = 2
-    elif messages[1]:
+    elif messages[-2]:
         status = 'WARNING'
         exit_code = 1
     else:
         status = 'OK'
         exit_code = 0
 
-    print(' '.join((status, '; '.join(m for m in messages if m))))
+    print(status, '; '.join(m for m in messages if m))
     exit(exit_code)
 
 
@@ -122,7 +131,7 @@ def get_processes(columns):
     with ps.stdout as fd:
         for line in iter(fd.readline, b''):
             values = (
-                cast(v.decode('utf8'))
+                cast(v.strip().decode('utf8'))
                 for v in line.split(None, len(columns) - 1)
             )
             yield dict(zip(columns, values))
@@ -134,9 +143,17 @@ def filter_processes(processes, check_groups):
     """Filter processes using the given checks and mark them"""
     for process in processes:
         for mark, checks in check_groups:
-            if execute_checks(process, checks, mark):
-                yield process
-                break
+            if checks is None:
+                matching_check = None
+            else:
+                matching_check = execute_checks(process, checks)
+                if not matching_check:
+                    continue
+
+            process['mark'] = mark
+            process['matching_check'] = matching_check
+            yield process
+            break
 
 
 def filter_process_family(processes, parent_checks, child_checks):
@@ -170,14 +187,12 @@ def filter_process_family(processes, parent_checks, child_checks):
             yield process
 
 
-def execute_checks(process, checks, mark):
-    """Execute checks on a process and mark it"""
+def execute_checks(process, checks):
+    """Execute checks on a process"""
     for check in checks:
         if check(process):
-            process['mark'] = mark
-            process['matching_check'] = check
-            return True
-    return False
+            return check
+    return None
 
 
 def get_messages(processes, marks):
@@ -200,6 +215,8 @@ def cast(value):
     """Cast the values"""
     if value.isdigit():
         return int(value)
+    if all(v.isdigit() for v in value.split('.', 1)):
+        return float(value)
     return value
 
 
