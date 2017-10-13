@@ -9,9 +9,10 @@ supported variable.  See your man pages for the list of them.
 The script is capable of executing multiple operators on the processes.
 Some examples are:
 
+    --match 'command == ssh-agent'
     --parent 'command ~= cron'
     --exclude 'pid == 0'
-    --warning 'etime >= 3600'
+    --warning 'etime >= 3600'   # TODO Make this actually working
     --critical 'user != root'
 
 Copyright (c) 2017, InnoGames GmbH
@@ -44,7 +45,7 @@ from subprocess import Popen, PIPE
 from sys import exit
 
 # The option arguments which accept a check
-CHECK_ARGS = ['parent', 'exclude', 'warning', 'critical']
+CHECK_ARGS = ['match', 'parent', 'exclude', 'warning', 'critical']
 
 
 def main():
@@ -71,6 +72,10 @@ def main():
         ('warning', args.warning),
         ('ok', None),
     ]
+
+    if args.match:
+        processes = (p for p in processes if execute_checks(p, args.match))
+
     if args.parent:
         try:
             processes = filter_process_family(processes, args.parent, [])
