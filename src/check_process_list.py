@@ -124,7 +124,7 @@ def get_processes(columns):
     with ps.stdout as fd:
         for line in iter(fd.readline, b''):
             values = (
-                cast(v.decode('utf8'))
+                cast(v.strip().decode('utf8'))
                 for v in line.split(None, len(columns) - 1)
             )
             yield dict(zip(columns, values))
