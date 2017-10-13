@@ -9,12 +9,12 @@ supported variable.  See your man pages for the list of them.
 The script is capable of executing multiple operators on the processes.
 Some examples are:
 
+    --parent 'command ~= cron'
     --exclude 'pid == 0'
     --warning 'etime >= 3600'
     --critical 'user != root'
-    --parent 'command ~= cron'
 
-Copyright (c) 2016, InnoGames GmbH
+Copyright (c) 2017, InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -44,7 +44,7 @@ from subprocess import Popen, PIPE
 from sys import exit
 
 # The option arguments which accept a check
-CHECK_ARGS = ('exclude', 'warning', 'critical', 'parent')
+CHECK_ARGS = ['parent', 'exclude', 'warning', 'critical']
 
 
 def main():
@@ -65,10 +65,10 @@ def main():
         columns.insert(0, 'ppid')
 
     processes = get_processes(columns)
-    check_groups = [
+    check_groups = [    # First match wins
         ('exclude', args.exclude),
-        ('warning', args.warning),
         ('critical', args.critical),
+        ('warning', args.warning),
     ]
     if args.parent:
         try:
@@ -84,11 +84,12 @@ def main():
         )))
 
     processes = filter_processes(processes, check_groups)
-    messages = get_messages(processes, [c[0] for c in reversed(check_groups)])
-    if messages[0]:
+    messages = get_messages(processes, [c[0] for c in check_groups])
+
+    if messages[-2]:
         status = 'CRITICAL'
         exit_code = 2
-    elif messages[1]:
+    elif messages[-1]:
         status = 'WARNING'
         exit_code = 1
     else:
