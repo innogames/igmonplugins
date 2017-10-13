@@ -200,6 +200,8 @@ def cast(value):
     """Cast the values"""
     if value.isdigit():
         return int(value)
+    if all(v.isdigit() for v in value.split('.', 1)):
+        return float(value)
     return value
 
 
