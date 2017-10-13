@@ -69,6 +69,7 @@ def main():
         ('exclude', args.exclude),
         ('critical', args.critical),
         ('warning', args.warning),
+        ('ok', None),
     ]
     if args.parent:
         try:
@@ -86,10 +87,10 @@ def main():
     processes = filter_processes(processes, check_groups)
     messages = get_messages(processes, [c[0] for c in check_groups])
 
-    if messages[-2]:
+    if messages[-3]:
         status = 'CRITICAL'
         exit_code = 2
-    elif messages[-1]:
+    elif messages[-2]:
         status = 'WARNING'
         exit_code = 1
     else:
@@ -137,9 +138,17 @@ def filter_processes(processes, check_groups):
     """Filter processes using the given checks and mark them"""
     for process in processes:
         for mark, checks in check_groups:
-            if execute_checks(process, checks, mark):
-                yield process
-                break
+            if checks is None:
+                matching_check = None
+            else:
+                matching_check = execute_checks(process, checks)
+                if not matching_check:
+                    continue
+
+            process['mark'] = mark
+            process['matching_check'] = matching_check
+            yield process
+            break
 
 
 def filter_process_family(processes, parent_checks, child_checks):
@@ -173,14 +182,12 @@ def filter_process_family(processes, parent_checks, child_checks):
             yield process
 
 
-def execute_checks(process, checks, mark):
-    """Execute checks on a process and mark it"""
+def execute_checks(process, checks):
+    """Execute checks on a process"""
     for check in checks:
         if check(process):
-            process['mark'] = mark
-            process['matching_check'] = check
-            return True
-    return False
+            return check
+    return None
 
 
 def get_messages(processes, marks):
