@@ -140,7 +140,7 @@ def compare_pools(pools, testtool, send):
             if max_nodes == 0:
                 max_nodes = None
 
-            if pool_v['healthchecks']:
+            if pool_v['health_checks']:
                 if in_testtool:
                     if num_nodes == 0:
                         exit_code = exit_crit
