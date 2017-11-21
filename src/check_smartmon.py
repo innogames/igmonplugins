@@ -24,7 +24,7 @@
 #
 
 import io,sys,glob,os,time
-import datetime,platform
+import datetime
 from socket import gethostname
 
 # There are three default config variables in here:
@@ -112,8 +112,7 @@ try:
 except IOError as e:
     pass
 
-os_major = platform.dist()[1].split('.')[0]
-if os_major == "8":
+if os.path.exists('/bin/systemctl'):
     import subprocess as sp
     DEVNULL = open(os.devnull, 'wb')
     proc = sp.Popen(['/bin/systemctl', '-n', '0', 'status', 'smartmontools'], stdout=DEVNULL, stderr=DEVNULL)
