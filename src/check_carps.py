@@ -50,7 +50,7 @@ except:
 	sys.exit(exit_unknown)
 
 known_hwlbs = { key for iface_dict in carp_settings.ifaces.values() for key in iface_dict.keys() }
-if hostname in known_hwlbs:
+if hostname in known_hwlbs or hostname + '.ig.local' in known_hwlbs:
 	my_role = "MASTER"
 else:
 	my_role = "BACKUP"
