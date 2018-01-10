@@ -106,12 +106,22 @@ def main(args):
             for plugin in plugins)
     )
 
-    expires = [
-        (plugin, response.json())
-        for plugin, response in responses
-        if response and datetime.utcfromtimestamp(
-            response.json()['maintenanceExpiryDate'] / 1000) < deadline
-    ]
+    expires = []
+    for plugin, response in responses:
+        if not response:
+            continue
+
+        json = response.json()
+        if 'maintenanceExpiryDate' not in json:
+            continue
+
+        expire_time = datetime.utcfromtimestamp(
+            json['maintenanceExpiryDate'] / 1000
+        )
+        if not expire_time < deadline:
+            continue
+
+        expires.append((plugin, json))
 
     if not expires:
         print('OK: No license will expire soon')
