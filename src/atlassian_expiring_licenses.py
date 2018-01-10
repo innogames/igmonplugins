@@ -109,8 +109,10 @@ def main(args):
     expires = [
         (plugin, response.json())
         for plugin, response in responses
-        if response and datetime.utcfromtimestamp(
-            response.json()['maintenanceExpiryDate'] / 1000) < deadline
+        if response and 'maintenanceExpiryDate' in response.json()
+        and datetime.utcfromtimestamp(
+            response.json()['maintenanceExpiryDate'] / 1000
+        ) < deadline
     ]
 
     if not expires:
