@@ -14,6 +14,7 @@ Some examples are:
     --exclude 'pid == 0'
     --warning 'etime >= 3600'   # TODO Make this actually working
     --critical 'user != root'
+    --warning 'cputime/min > 00:00:40'
 
 Copyright (c) 2017, InnoGames GmbH
 """
@@ -39,13 +40,22 @@ from __future__ import print_function
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import defaultdict
+from datetime import datetime, timedelta
 from operator import itemgetter
-from re import compile
+from os.path import isfile
+from re import compile as regexp_compile
 from subprocess import Popen, PIPE
 from sys import exit
 
 # The option arguments which accept a check
 CHECK_ARGS = ['match', 'parent', 'exclude', 'warning', 'critical']
+
+TIMEDELTA_PATTERN = regexp_compile(
+    '\A([0-9]+-)?'              # We are not interested with the days part
+    '(?P<hours>[0-9]{1,2}):'
+    '(?P<minutes>[0-9]{1,2}):'
+    '(?P<seconds>[0-9]{1,2})\Z'
+)
 
 
 def main():
@@ -59,9 +69,9 @@ def main():
     columns = ['pid', 'command']
     for arg_name in CHECK_ARGS:
         for check in getattr(args, arg_name):
-            if check.key not in columns:
+            if check.var not in columns:
                 # "command" has to go at last because it can contain spaces.
-                columns.insert(-1, check.key)
+                columns.insert(-1, check.var)
     if args.parent:
         columns.insert(0, 'ppid')
 
@@ -128,13 +138,15 @@ def get_processes(columns):
     for column in columns:
         cmd += ('-o', column + '=')
     ps = Popen(cmd, stdout=PIPE)
+
     with ps.stdout as fd:
         for line in iter(fd.readline, b''):
             values = (
                 cast(v.strip().decode('utf8'))
                 for v in line.split(None, len(columns) - 1)
             )
-            yield dict(zip(columns, values))
+            yield Process(zip(columns, values))
+
     if ps.wait() != 0:
         raise Exception('Command "{}" failed'.format(' '.join(cmd)))
 
@@ -213,17 +225,26 @@ def get_messages(processes, marks):
 
 def cast(value):
     """Cast the values"""
+
     if value.isdigit():
         return int(value)
+
     if all(v.isdigit() for v in value.split('.', 1)):
         return float(value)
+
+    matches = TIMEDELTA_PATTERN.match(value)
+    if matches:
+        return timedelta(**{
+            k: int(v or 0) for k, v in matches.groupdict().items()
+        })
+
     return value
 
 
 class Check:
     """Check consists of the variable name, operator, and a value"""
     operators = {
-        '~=': lambda b: compile(b).match,
+        '~=': lambda b: regexp_compile(b).match,
         '==': lambda b: lambda a: a == b,
         '!=': lambda b: lambda a: a != b,
         '<=': lambda b: lambda a: a <= b,
@@ -232,27 +253,98 @@ class Check:
         '>': lambda b: lambda a: a > b,
     }
 
-    def __init__(self, key, symbol, value):
-        self.key = key
+    def __init__(self, var, symbol, value, divider=None):
+        self.var = var
         self.symbol = symbol
         self.value = value
         self.executor = self.operators[symbol](value)
+        if divider:
+            if divider != 'min':
+                raise NotImplemented('Only "/min" is supported')
+            self.divider = timedelta(minutes=1)
+        else:
+            self.divider = None
 
     def __str__(self):
-        return '{} {} {}'.format(self.key, self.symbol, self.value)
+        key = self.var
+        if self.divider:
+            key += ' / {}'.format(self.divider)
+
+        return '{} {} {}'.format(key, self.symbol, self.value)
 
     def __call__(self, process):
-        return self.executor(process[self.key])
+        if self.divider:
+            value = process.get_scaled_value(self.var, self.divider)
+            if not value:
+                return False
+        else:
+            value = process[self.var]
+
+        return self.executor(value)
 
     @classmethod
     def parse(cls, pair):
         for symbol in sorted(cls.operators.keys(), key=len, reverse=True):
             if symbol in pair:
                 index = pair.index(symbol)
-                key = pair[:index].strip()
+                right_split = pair[:index].split('/', 1)
+                var = right_split[0].strip()
+                if len(right_split) > 1:
+                    divider = right_split[1].strip()
+                else:
+                    divider = None
+
                 value = cast(pair[(index + len(symbol)):].strip())
-                return cls(key, symbol, value)
+
+                return cls(var, symbol, value, divider)
+
         raise ValueError('Cannot parse {}'.format(pair))
+
+
+class Process(dict):
+    def __init__(self, *args, **kwargs):
+        super(Process, self).__init__(*args, **kwargs)
+        self.prev_values = {}
+
+    def get_scaled_value(self, var, divider):
+        ts = datetime.now()
+        value = self[var]
+        if var not in self.prev_values:
+            self.update_prev_value(var, ts)
+        if self.prev_values[var] is None:
+            return None
+
+        diff = value - self.prev_values[var]
+        if isinstance(diff, timedelta):
+            # TODO: Don't use .total_seconds()
+            diff = int(diff.total_seconds())
+
+        return (divider * diff) / int((ts - self.prev_ts).total_seconds())
+
+    def update_prev_value(self, var, ts):
+        filename = '/tmp/check_process_list_{}_{}'.format(self['pid'], var)
+        exists = isfile(filename)
+
+        with open(filename, 'r+' if exists else 'w') as fd:
+            if exists:
+                content = fd.read()
+                fd.seek(0)
+                fd.truncate()
+            fd.write('{}\t{}\n'.format(ts.isoformat(), self[var]))
+
+        if not exists:
+            self.prev_values[var] = None
+            return
+
+        content_split = content.strip().split(None, 1)
+
+        left_split = content_split[0].split('.')
+        self.prev_ts = datetime.strptime(left_split[0], '%Y-%m-%dT%H:%M:%S')
+        if len(left_split) > 1:
+            ms = int(left_split[1].rstrip('Z'))
+            self.prev_ts += timedelta(microseconds=ms)
+
+        self.prev_values[var] = cast(content_split[1])
 
 
 class NoProcess(Exception):
