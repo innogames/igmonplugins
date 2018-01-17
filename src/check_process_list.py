@@ -315,11 +315,8 @@ class Process(dict):
             return None
 
         diff = value - self.prev_values[var]
-        if isinstance(diff, timedelta):
-            # TODO: Don't use .total_seconds()
-            diff = int(diff.total_seconds())
 
-        return (divider * diff) / int((self.ts - self.prev_ts).total_seconds())
+        return diff * (divider / (self.ts - self.prev_ts))
 
     def update_prev_value(self, var):
         filename = '/tmp/check_process_list_{}_{}'.format(self['pid'], var)
