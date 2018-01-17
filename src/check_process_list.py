@@ -134,6 +134,7 @@ def parse_args():
 
 def get_processes(columns):
     """Get all processes from the "ps" output"""
+    ts = datetime.now()
     cmd = ('ps', '-A')
     for column in columns:
         cmd += ('-o', column + '=')
@@ -145,7 +146,7 @@ def get_processes(columns):
                 cast(v.strip().decode('utf8'))
                 for v in line.split(None, len(columns) - 1)
             )
-            yield Process(zip(columns, values))
+            yield Process(zip(columns, values), ts)
 
     if ps.wait() != 0:
         raise Exception('Command "{}" failed'.format(' '.join(cmd)))
@@ -302,15 +303,16 @@ class Check:
 
 
 class Process(dict):
-    def __init__(self, *args, **kwargs):
-        super(Process, self).__init__(*args, **kwargs)
+    def __init__(self, other, ts):
+        super(Process, self).__init__(other)
+        self.ts = ts
+        self.prev_ts = None
         self.prev_values = {}
 
     def get_scaled_value(self, var, divider):
-        ts = datetime.now()
         value = self[var]
         if var not in self.prev_values:
-            self.update_prev_value(var, ts)
+            self.update_prev_value(var)
         if self.prev_values[var] is None:
             return None
 
@@ -319,9 +321,9 @@ class Process(dict):
             # TODO: Don't use .total_seconds()
             diff = int(diff.total_seconds())
 
-        return (divider * diff) / int((ts - self.prev_ts).total_seconds())
+        return (divider * diff) / int((self.ts - self.prev_ts).total_seconds())
 
-    def update_prev_value(self, var, ts):
+    def update_prev_value(self, var):
         filename = '/tmp/check_process_list_{}_{}'.format(self['pid'], var)
         exists = isfile(filename)
 
@@ -330,7 +332,7 @@ class Process(dict):
                 content = fd.read()
                 fd.seek(0)
                 fd.truncate()
-            fd.write('{}\t{}\n'.format(ts.isoformat(), self[var]))
+            fd.write('{}\t{}\n'.format(self.ts.isoformat(), self[var]))
 
         if not exists:
             self.prev_values[var] = None
