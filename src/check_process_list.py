@@ -51,10 +51,10 @@ from sys import exit
 CHECK_ARGS = ['match', 'parent', 'exclude', 'warning', 'critical']
 
 TIMEDELTA_PATTERN = regexp_compile(
-    '\A([0-9]+-)?'              # We are not interested with the days part
-    '(?P<hours>[0-9]{1,2}):'
-    '(?P<minutes>[0-9]{1,2}):'
-    '(?P<seconds>[0-9]{1,2})\Z'
+    '\A([0-9]+\-)?'             # We are not interested with the days part
+    '((?P<hours>[0-9]+):)?'
+    '(?P<minutes>[0-9]+):'
+    '(?P<seconds>[0-9]+(\.[0-9]+)?)\Z'
 )
 
 
@@ -235,7 +235,7 @@ def cast(value):
     matches = TIMEDELTA_PATTERN.match(value)
     if matches:
         return timedelta(**{
-            k: int(v or 0) for k, v in matches.groupdict().items()
+            k: float(v or 0) for k, v in matches.groupdict().items()
         })
 
     return value
