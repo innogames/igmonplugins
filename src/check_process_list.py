@@ -227,10 +227,10 @@ def get_messages(processes, marks):
 def cast(value):
     """Cast the values"""
 
-    if value.isdigit():
+    numeric_value = value[(1 if value.startswith('-') else 0):]
+    if numeric_value.isdigit():
         return int(value)
-
-    if all(v.isdigit() for v in value.split('.', 1)):
+    if all(v.isdigit() for v in numeric_value.split('.', 1)):
         return float(value)
 
     matches = TIMEDELTA_PATTERN.match(value)
