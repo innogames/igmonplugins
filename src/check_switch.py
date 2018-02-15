@@ -61,7 +61,7 @@ CPU_OIDS = {
     'powerconnect': 'iso.3.6.1.4.1.674.10895.5000.2.6132.1.1.1.1.4.9.0',
     'extreme': '.1.3.6.1.4.1.1916.1.32.1.2.0',
     # 1-minute average for the 1st cpu of stack because we don't stack them.
-    'force10_mxl': '1.3.6.1.4.1.6027.3.19.1.2.8.1.3.1',
+    'force10_mxl': '1.3.6.1.4.1.6027.3.26.1.4.4.1.4.2.1.1',
 }
 
 
