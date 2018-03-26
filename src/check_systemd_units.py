@@ -26,9 +26,11 @@ class Problem:
 
     # From more important to less
     failed = 0
-    dead = 1
-    not_loaded_but_not_inactive = 2
-    not_loaded_but_not_dead = 3
+    activating_auto_restart = 1
+    dead = 2
+    activating = 3
+    not_loaded_but_not_inactive = 4
+    not_loaded_but_not_dead = 5
 
 
 def parse_args():
@@ -100,7 +102,7 @@ def process(output, critical_units, ignored_units):
 
         if problem is not None:
             if any(match_unit(p, unit_name) for p in critical_units):
-                if problem == Problem.failed:
+                if problem < Problem.dead:
                     criticals.append((problem, unit_name))
                 else:
                     warnings.append((problem, unit_name))
@@ -125,6 +127,11 @@ def check_unit(serv_load, serv_active, serv_sub):
 
         if serv_sub == 'dead':
             return Problem.dead
+
+        if serv_active == 'activating':
+            if serv_sub == 'auto-restart':
+                return Problem.activating_auto_restart
+            return Problem.activating
     else:
         if serv_active != 'inactive':
             return Problem.not_loaded_but_not_inactive
