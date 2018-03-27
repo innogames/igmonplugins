@@ -51,8 +51,8 @@ from sys import exit
 CHECK_ARGS = ['match', 'parent', 'exclude', 'warning', 'critical']
 
 TIMEDELTA_PATTERN = regexp_compile(
-    '\A([0-9]+\-)?'             # We are not interested with the days part
-    '((?P<hours>[0-9]+):)?'
+    '\A(((?P<days>[0-9]+)(\-| *days?,? *))?'
+    '((?P<hours>[0-9]+):))?'
     '(?P<minutes>[0-9]+):'
     '(?P<seconds>[0-9]+(\.[0-9]+)?)\Z'
 )
