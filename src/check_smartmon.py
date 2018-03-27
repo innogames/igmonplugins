@@ -122,7 +122,7 @@ for manufacturer in HDD_NAMES:
             if ALERTS[manufacturer][smart_id].get('or') != smart_value:
                 if smart_value < ALERTS[manufacturer][smart_id]['min']:
                     senddata.append(
-                        '%s: [id={}] "{}" is "{}" '
+                        '{}: [id={}] "{}" is "{}" '
                         'which is lower than "{}"\n'.format(
                             manufacturer, smart_id,
                             ALERTS[manufacturer][smart_id]['description'],
