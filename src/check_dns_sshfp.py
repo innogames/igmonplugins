@@ -55,8 +55,7 @@ def main():
         record_id = (record.algorithm, record.fp_type)
         if record_id not in host_keys:
             print('WARNING host key for fingerprint does not exist')
-            # exit(1) TODO: Enable this
-            exit(0)
+            exit(1)
         if record.fingerprint != host_keys[record_id].fingerprint:
             print('WARNING host key fingerprint is inconsistent')
             exit(1)
