@@ -28,9 +28,9 @@ class Problem:
     failed = 0
     activating_auto_restart = 1
     dead = 2
-    activating = 3
     not_loaded_but_not_inactive = 4
     not_loaded_but_not_dead = 5
+    unknown_status_auto_restart = 6
 
 
 def parse_args():
@@ -70,7 +70,6 @@ def main(check_all, critical_units, ignored_units):
     if not check_all:
         for unit in critical_units:
             command += ' ' + unit
-
     try:
         output = subprocess.check_output(command.split())
     except subprocess.CalledProcessError as error:
@@ -98,7 +97,7 @@ def process(output, critical_units, ignored_units):
     for line in output.splitlines():
         unit_split = line.strip().split(None, 4)
         unit_name = unit_split[0]
-        problem = check_unit(*unit_split[1:4])
+        problem = check_unit(*unit_split[0:4])
 
         if problem is not None:
             if any(match_unit(p, unit_name) for p in critical_units):
@@ -119,7 +118,7 @@ def match_unit(pattern, unit):
     return pattern == unit
 
 
-def check_unit(serv_load, serv_active, serv_sub):
+def check_unit(unit_name, serv_load, serv_active, serv_sub):
     """Detect problems of a unit"""
     if serv_load == 'loaded':
         if serv_active == 'failed' or serv_sub == 'failed':
@@ -128,16 +127,28 @@ def check_unit(serv_load, serv_active, serv_sub):
         if serv_sub == 'dead':
             return Problem.dead
 
-        if serv_active == 'activating':
-            if serv_sub == 'auto-restart':
+        if serv_sub == 'auto-restart':
+            status = get_exitcode(unit_name)
+            if status == 3:
+                return Problem.unknown_status_auto_restart
+            elif status != 0:
                 return Problem.activating_auto_restart
-            return Problem.activating
     else:
         if serv_active != 'inactive':
             return Problem.not_loaded_but_not_inactive
 
         if serv_sub != 'dead':
             return Problem.not_loaded_but_not_dead
+
+
+def get_exitcode(unit_name):
+    """Return ExecMainStatus of a given unit"""
+    command = 'systemctl show -pExecMainStatus {}'.format(unit_name)
+    try:
+        output = subprocess.check_output(command.split())
+    except subprocess.CalledProcessError as error:
+        return 3
+    return (int(output.lstrip('ExecMainStatus=')))
 
 
 def get_message(problems):
