@@ -2,7 +2,7 @@
 #
 # InnoGames Monitoring Plugins - check_cron_runtime.py
 #
-# Copyright (c) 2016, InnoGames GmbH
+# Copyright (c) 2018, InnoGames GmbH
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -32,6 +32,7 @@ exclude_list = [
     'am_stockpile_distribution',
 ]
 
+
 def parse_args():
     """The argument parser"""
 
@@ -47,11 +48,11 @@ def parse_args():
     )
     parser.add_argument(
         '--verbose',
-        dest='verbose',
         action='store_true',
         help='Increase verbosity',
     )
     return vars(parser.parse_args())
+
 
 def main(verbose=False):
     """The main program"""
@@ -59,20 +60,18 @@ def main(verbose=False):
     # Dictionary of pids containing th command that is running
     ps_aux = get_ps_aux()
 
-    #pids = psutil.pids()
-
-    #Nagios Return codes
+    # Nagios Return codes
     ok_code = 0
     warn_code = 1
     crit_code = 2
     un_code = 3
 
-    #pre check ps version
+    # pre check ps version
     if '3.2.8' in execute('ps --version').strip('\n').split(' ')[2]:
         print('PS version 3.2.9 or above needed to run this script')
         exit(int(un_code))
 
-    #Check for main Cron, Return CRITICAL if not running
+    # Check for main Cron, Return CRITICAL if not running
     try:
         parent_cron_pid = execute('pgrep -o cron').strip('\n')
     except AttributeError:
@@ -86,7 +85,7 @@ def main(verbose=False):
     # Usage: pgrep -P pid
     cron_childs = execute('pgrep -P ' + parent_cron_pid)
 
-    #Exit with CRITICAL if no child cron running
+    # Exit with CRITICAL if no child cron running
     if not cron_childs:
         print('No child crons running')
         exit(int(ok_code))
@@ -101,18 +100,19 @@ def main(verbose=False):
         print('Cron Childs: ' + str(cron_child_list))
 
     cron_pid_more_than1 = []
-    ok_flag = warn_flag = un_flag = 0
+    ok_flag = warn_flag = 0
     for pid in cron_child_list:
         if pid:
             try:
-                cron_child_time = execute("ps -o 'etimes=' " + pid).strip('    ').strip('\n')
+                cron_child_time = execute("ps -o 'etimes=' " + pid)
+                cron_child_time = cron_child_time.strip('    ').strip('\n')
             except AttributeError:
                 pass
 
             if not cron_child_time:
                 continue
 
-            #check for 1 hour time
+            # check for 1 hour time
             if int(cron_child_time) > 3600:
                 # Check if cron name is on ignore list
                 include = True
@@ -131,17 +131,17 @@ def main(verbose=False):
                 print('UNKNOWN PID execution TIME')
                 exit(int(un_code))
 
-    #print cron_pid_more_than1
     if warn_flag:
 
         msg = '|'.join(str(pid) for pid in cron_pid_more_than1)
-        print msg
+        print(msg)
         for i in cron_pid_more_than1:
             get_child(i)
         exit(int(warn_code))
     if ok_flag:
         print('No CRON running more than 1 hour')
         exit(int(ok_code))
+
 
 def get_ps_aux():
     pids = {}
@@ -152,12 +152,17 @@ def get_ps_aux():
             pids[the_pid] = the_command
     return pids
 
+
 def get_child(ppid):
     childs = execute('pgrep -P ' + ppid)
     if childs:
         for child in childs.strip('\n').split():
-       	    print '|' + (execute('ps -ef | grep ' + child + ' | grep -v grep'))
+            exec_out = execute(
+                    'ps -ef | grep {} | grep -wv grep'.format(child)
+                )
+            print('|' + exec_out)
             get_child(child)
+
 
 def execute(cmd):
     content = ''
@@ -179,6 +184,7 @@ def execute(cmd):
         return True
 
     return content
+
 
 if __name__ == '__main__':
     main(**parse_args())
