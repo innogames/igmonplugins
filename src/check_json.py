@@ -12,6 +12,7 @@ Operators: ~=, ==, !=, <=, >=, <, >
 Requires:
     jsonpath_rw
     requests
+    requests-toolbelt
     validators
 
 Examples:
@@ -66,7 +67,8 @@ from json import loads, JSONDecodeError
 from jsonpath_rw import parse
 from os.path import isfile
 from re import compile
-from requests import request, RequestException
+from requests import RequestException, Session
+from requests_toolbelt.adapters import host_header_ssl
 from validators import url
 
 
@@ -77,6 +79,7 @@ def parse_args():
     parser.add_argument('-s', '--source', help='source of json to check')
     parser.add_argument('-t', '--timeout', type=int, default=3000,
                         help='timeout in ms for requests')
+    parser.add_argument('--host', help='host in case of ssl verification')
     parser.add_argument('-w', '--warning', action='append',
                         type=Check.from_string, default=[],
                         help='define warning conditions')
@@ -94,7 +97,7 @@ def main():
 
     status, reason = runner.run()
 
-    print('{} | {}'.format(status, reason))
+    print('{} | {}'.format(status.name, reason))
     exit(status.value)
 
 
@@ -168,9 +171,10 @@ class Check:
 class Runner:
     """Run the whole thing"""
 
-    def __init__(self, source, timeout, warning, critical):
+    def __init__(self, source, timeout, host, warning, critical):
         self.source = source
         self.timeout = timeout
+        self.host = host
         self.checks = {
             ExitCodes.WARNING: warning,
             ExitCodes.CRITICAL: critical,
@@ -181,7 +185,7 @@ class Runner:
         if isfile(self.source):
             content = self._load_file(self.source)
         elif url(self.source):
-            content = self._load_url(self.source, self.timeout)
+            content = self._load_url(self.source, self.timeout, self.host)
         else:
             content = self.source
 
@@ -196,8 +200,8 @@ class Runner:
             data = self.load()
         except JSONDecodeError:
             return ExitCodes.UNKNOWN, 'Invalid JSON'
-        except (RequestException, IOError):
-            return ExitCodes.UNKNOWN, 'Could not load data'
+        except (RequestException, IOError) as e:
+            return ExitCodes.UNKNOWN, 'Could not load data: ' + str(e)
 
         # if we have criticals, we need to prioritize them, obviously
         for severity in [ExitCodes.CRITICAL, ExitCodes.WARNING]:
@@ -225,9 +229,15 @@ class Runner:
             return f.read()
 
     @staticmethod
-    def _load_url(source, timeout):
+    def _load_url(source, timeout, host):
         """Load contents from URL"""
-        response = request('GET', source, timeout=timeout)
+        headers = {}
+        if host:
+            headers.update({'HOST': host})
+
+        sess = Session()
+        sess.mount('https://', host_header_ssl.HostHeaderSSLAdapter())
+        response = sess.get(source, timeout=timeout, headers=headers)
 
         return response.text if response else None
 
