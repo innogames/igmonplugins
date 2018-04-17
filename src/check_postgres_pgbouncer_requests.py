@@ -8,7 +8,7 @@
 # Values for the database to be monitored, the used port of pgbouncer and
 # the warning and critical thresholds can be specified using parameters.
 #
-# Copyright (c) 2017, InnoGames GmbH
+# Copyright (c) 2018, InnoGames GmbH
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -29,9 +29,10 @@
 # THE SOFTWARE.
 #
 
-from argparse import ArgumentParser
 import subprocess
+
 from sys import exit
+from argparse import ArgumentParser
 
 
 def main():
@@ -91,11 +92,29 @@ def get_pgbouncer_requests(port, dbname):
     :return: int
     """
 
-    output = subprocess.check_output('psql -p {} pgbouncer -Atc '
-                                     '"show stats;"'.format(port), shell=True)
-    requests = output.split(dbname)[1].split('|')[5]
+    output = subprocess.check_output(
+            'psql -p {} pgbouncer -Ac "show stats;"'.format(port), shell=True)
 
-    return requests
+    rows = output.split('\n')
+    header = rows.pop(0).split('|')
+
+    # Fields changed across version 1.7.x to > 1.8.x so lets use header column
+    # to be future safe or fail with proper error.
+    if 'avg_req' in header:
+        index = header.index('avg_req')
+    elif 'avg_query_count' in header:
+        index = header.index('avg_query_count')
+    else:
+        print('No column avg_req or avg_query_count found - check version!')
+        exit(1)
+
+    for db_columns in rows:
+        columns = db_columns.split('|')
+        if columns[0] == dbname:
+            return columns[index]
+
+    print('No database {} found'.format(dbname))
+    exit(1)
 
 
 if __name__ == '__main__':
