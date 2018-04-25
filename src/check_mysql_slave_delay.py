@@ -30,13 +30,18 @@ parser = optparse.OptionParser()
 parser.add_option('-w', '--warning', help='Warning limit of seconds behind master', dest='WARN_SEC_BEHIND_MASTER', action='store', type='int', default=60)
 parser.add_option('-c', '--critical', help='Critical limit of seconds behind master', dest='CRIT_SEC_BEHIND_MASTER', action='store', type='int', default=120)
 parser.add_option('-n', '--name', help='Name of slave to check (for multi-source replication)', action='store')
+parser.add_option('-u', '--user', help='Name of user for mysql connection', action='store')
+parser.add_option('-p', '--password', help='Password of user for mysql connection', action='store')
 (opts, args) = parser.parse_args()
 
 CONFIG="/etc/mysql/my.cnf"
 ERR={'CRITICAL':2, 'WARNING':1, 'OK':0}
 
 def get_server_status():
-    db = mdb.connect(user="root", read_default_file=CONFIG)
+    if opts.user:
+        db = mdb.connect(user=opts.user, passwd=opts.password, read_default_file=CONFIG)
+    else:
+        db = mdb.connect(read_default_file=CONFIG)
     cur = db.cursor(mdb.cursors.DictCursor)
     if opts.name:
         cur.execute("SHOW SLAVE '" + opts.name + "' STATUS")
