@@ -85,8 +85,8 @@ def parse_args():
         multiple possible
         EXAMPLE: --config /etc/logrotate.d/foe-logs /etc/logrotate.d/foe-logs2
         ''',
-        nargs='*',
-        type=str,
+        action='append',
+        default=[],
     )
 
     parser.add_argument(
@@ -96,9 +96,8 @@ def parse_args():
         multiple possible
         EXAMPLE: --exclude /var/log/lastlog /var/log/faillog
         ''',
-        nargs='*',
-        type=str,
-        default=''
+        action='append',
+        default=[],
     )
 
     return parser.parse_args()
