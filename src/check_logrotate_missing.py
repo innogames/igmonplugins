@@ -41,32 +41,26 @@ import xml.etree.ElementTree as ET
 from argparse import ArgumentParser, RawTextHelpFormatter
 
 
-class RotationConfigDoesNotExist(Exception):
-    pass
-
-
 def main():
-    """Main entrypoint for script"""
+    """The entry point"""
 
     args = parse_args()
 
     try:
         logrotate_missing = check_logrotation_config(args.config, args.exclude)
-    except RotationConfigDoesNotExist as e:
-        code = 3
-        print(e)
-        exit(code)
-
-    code = 0
+    except IOError as error:
+        print('UNKNOWN: ' + str(error))
+        exit(3)
 
     if logrotate_missing:
-        code = 1
-        for logfile in logrotate_missing:
-            print(logfile)
-    else:
-        print('OK')
+        print(
+            'WARNING: logrotate configuration is missing for ' +
+            ', '.join(logrotate_missing)
+        )
+        exit(1)
 
-    exit(code)
+    print('OK')
+    exit(0)
 
 
 def parse_args():
@@ -132,11 +126,8 @@ def check_logrotation_config(config, exclude):
         conf_type = mimetypes.guess_type(conf)[0]
 
         if conf_type and 'xml' in conf_type:
-            try:
-                tree = ET.parse(conf)
-            except IOError:
-                raise RotationConfigDoesNotExist('{} does not exist'.format(
-                    conf))
+            tree = ET.parse(conf)
+
             # logback
             for lblog in tree.getroot().findall('appender'):
                     lblog_file = lblog.find('file')
@@ -150,14 +141,10 @@ def check_logrotation_config(config, exclude):
                         configured_logs.add(jlog_file)
         # logrotate
         else:
-            try:
-                with open(conf) as in_file:
-                    for line in in_file:
-                        if line.startswith('/'):
-                            configured_logs.add(line.rstrip('{\n\t '))
-            except IOError:
-                raise RotationConfigDoesNotExist('{} does not exist'.format(
-                     conf))
+            with open(conf) as in_file:
+                for line in in_file:
+                    if line.startswith('/'):
+                        configured_logs.add(line.rstrip('{\n\t '))
 
         log_dirs = {os.path.dirname(c) for c in configured_logs}
 
