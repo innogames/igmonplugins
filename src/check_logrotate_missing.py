@@ -152,7 +152,7 @@ def check_logrotation_config(config, exclude):
             logfiles = glob.glob(log_dir + '/*log')
             for logfile in logfiles:
                 if not any(logfile == l for l in configured_logs):
-                    if logfile not in exclude:
+                    if logfile not in exclude and os.path.isfile(logfile):
                         unconfigured_logs.add(logfile)
 
         unconfigured_logs -= configured_logs
