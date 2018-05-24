@@ -56,21 +56,20 @@ def main():
     else:
         status = 'OK'
 
-    print('Memory {} {} MiB {}% free|{}'.format(
+    print('Memory {} {:.0f} MiB {}% free|{:.1f}'.format(
         status, hypervisor_free, hypervisor_allocated, hypervisor_free
     ))
 
     if args.verbose:
         print('')
-        for name, memory in domain_memory.iteritems():
-            if args.verbose:
-                print('{}: {} MiB'.format(name, memory))
+        for name, memory in domain_memory.items():
+            print('{}: {:.2f} MiB'.format(name, memory))
         print('')
-        print('usable: {} MiB'.format(hypervisor_memory))
-        print('used: {} MiB'.format(domain_allocated))
-        print('free: {} MiB'.format(hypervisor_free))
-        print('reserved incl.: {} MiB'.format(args.reserved))
-        print('overhead incl.: {} MiB'.format(args.overhead))
+        print('usable: {:.2f} MiB'.format(hypervisor_memory))
+        print('used: {:.2f} MiB'.format(domain_allocated))
+        print('free: {:.2f} MiB'.format(hypervisor_free))
+        print('reserved incl.: {:.2f} MiB'.format(args.reserved))
+        print('overhead incl.: {:.2f} MiB'.format(args.overhead))
 
     exit(code)
 
