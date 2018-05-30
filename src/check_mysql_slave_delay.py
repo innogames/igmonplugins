@@ -23,7 +23,8 @@
 # THE SOFTWARE.
 #
 
-import os, MySQLdb as mdb
+import os
+from mysql.connector import connect
 import optparse
 
 parser = optparse.OptionParser()
@@ -32,22 +33,22 @@ parser.add_option('-c', '--critical', help='Critical limit of seconds behind mas
 parser.add_option('-n', '--name', help='Name of slave to check (for multi-source replication)', action='store')
 parser.add_option('-u', '--user', help='Name of user for mysql connection', action='store')
 parser.add_option('-p', '--password', help='Password of user for mysql connection', action='store')
+parser.add_option('--unix-socket', default='/var/run/mysqld/mysqld.sock')
 (opts, args) = parser.parse_args()
 
-CONFIG="/etc/mysql/my.cnf"
 ERR={'CRITICAL':2, 'WARNING':1, 'OK':0}
 
 def get_server_status():
     if opts.user:
-        db = mdb.connect(user=opts.user, passwd=opts.password, read_default_file=CONFIG)
+        db = connect(user=opts.user, passwd=opts.password, unix_socket=opts.unix_socket)
     else:
-        db = mdb.connect(read_default_file=CONFIG)
-    cur = db.cursor(mdb.cursors.DictCursor)
+        db = connect(unix_socket=opts.unix_socket)
+    cur = db.cursor()
     if opts.name:
         cur.execute("SHOW SLAVE '" + opts.name + "' STATUS")
     else:
         cur.execute("SHOW SLAVE STATUS")
-    res = cur.fetchall()
+    res = [dict(zip(cur.column_names, r)) for r in cur.fetchall()]
     cur.close()
     db.close()
     return res[0]
@@ -65,5 +66,5 @@ def check_server():
     return['OK', msg]
 
 status = check_server()
-print ": ".join(status)
+print(": ".join(status))
 exit(ERR[status[0]])
