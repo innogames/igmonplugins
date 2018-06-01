@@ -63,3 +63,6 @@ target/
 
 #pyCharm conf
 .idea
+
+# Atom
+.ropeproject
