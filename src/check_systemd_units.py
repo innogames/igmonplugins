@@ -71,7 +71,7 @@ def main(check_all, critical_units, ignored_units):
         for unit in critical_units:
             command += ' ' + unit
     try:
-        output = subprocess.check_output(command.split())
+        output = subprocess.check_output(command.split()).decode()
     except subprocess.CalledProcessError as error:
         print('UNKNOWN: ' + str(error))
         exit_code = 3
