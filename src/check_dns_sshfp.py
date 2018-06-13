@@ -35,7 +35,10 @@ from dns.resolver import query as dns_query
 
 
 def main():
-    fqdn = getfqdn()
+
+    # If we don't append the trailing dot, the query would try the DNS search
+    # path.
+    fqdn = getfqdn() + '.'
     result = dns_query(fqdn, SSHFP, raise_on_no_answer=False)
 
     if not result.rrset:
