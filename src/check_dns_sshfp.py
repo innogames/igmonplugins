@@ -28,6 +28,7 @@ from socket import getfqdn
 from subprocess import check_output
 from sys import exit
 
+from dns.exception import DNSException
 from dns.rdata import from_text as dns_from_text
 from dns.rdataclass import IN
 from dns.rdatatype import SSHFP
@@ -39,9 +40,10 @@ def main():
     # If we don't append the trailing dot, the query would try the DNS search
     # path.
     fqdn = getfqdn() + '.'
-    result = dns_query(fqdn, SSHFP, raise_on_no_answer=False)
 
-    if not result.rrset:
+    try:
+        result = dns_query(fqdn, SSHFP)
+    except DNSException:
         print('WARNING got no host key fingerprint')
         exit(1)
 
