@@ -37,7 +37,7 @@ class CheckTimers(object):
         CRITICAL=2,
         UNKNOWN=3,
     )
-    REV_CODES = {v: k for k, v in CODES.items()}
+    REV_CODES = dict(map(reversed, CODES.items()))
 
     def __init__(self, check_all, crit_threshold, ignored_timers, timer_units,
                  warn_threshold, **kwargs):
@@ -89,18 +89,14 @@ class CheckTimers(object):
         m = 1000000
         properties = self.timers[t_unit].properties
         if properties.LoadState != 'loaded':
-            setattr(
-                properties,
-                'MonitoringState',
-                (self.CODES['CRITICAL'], 'Timer is not loaded')
+            properties.MonitoringState = (
+                self.CODES['CRITICAL'], 'Timer is not loaded'
             )
             return
 
         if properties.ActiveState != 'active':
-            setattr(
-                properties,
-                'MonitoringState',
-                (self.CODES['CRITICAL'], 'Timer is not active')
+            properties.MonitoringState = (
+                self.CODES['CRITICAL'], 'Timer is not active'
             )
             return
 
@@ -117,24 +113,16 @@ class CheckTimers(object):
 
             if (self._warn_threshold <= since_last_execute/min_interval
                     < self._crit_threshold):
-                setattr(
-                    properties,
-                    'MonitoringState',
-                    (
-                        self.CODES['WARNING'],
-                        "Timer wasn't launch since {}".format(last_execute)
-                    )
+                properties.MonitoringState = (
+                    self.CODES['WARNING'],
+                    "Timer wasn't launch since {}".format(last_execute)
                 )
                 return
             elif self._crit_threshold <= since_last_execute/min_interval:
-                setattr(
-                    properties,
-                    'MonitoringState',
-                    (
-                        self.CODES['CRITICAL'],
-                        "Timer wasn't launch since {}, look at {}"
-                        .format(last_execute, properties.Unit)
-                    )
+                properties.MonitoringState = (
+                    self.CODES['CRITICAL'],
+                    "Timer wasn't launch since {}, look at {}"
+                    .format(last_execute, properties.Unit)
                 )
                 return
 
@@ -144,50 +132,43 @@ class CheckTimers(object):
         s_properties = self.services[t_unit].properties
         t_properties = self.timers[t_unit].properties
         if s_properties.LoadState != 'loaded':
-            setattr(
-                t_properties,
-                'MonitoringState',
-                (self.CODES['CRITICAL'], 'Related service is not loaded')
+            t_properties.MonitoringState = (
+                self.CODES['CRITICAL'], 'Related service is not loaded'
             )
             return
 
         if s_properties.ActiveState == 'failed':
-            setattr(
-                t_properties,
-                'MonitoringState',
-                (self.CODES['CRITICAL'], 'Related service is failed')
+            t_properties.MonitoringState = (
+                self.CODES['CRITICAL'], 'Related service is failed'
             )
             return
 
         if (s_properties.ActiveState == 'active'
                 and s_properties.SubState == 'exited'):
-            setattr(
-                t_properties,
-                'MonitoringState',
-                (
-                    self.CODES['CRITICAL'],
-                    "Related service is misconfigured, "
-                    "remove 'RemainAfterExit'"
-                )
+            t_properties.MonitoringState = (
+                self.CODES['CRITICAL'],
+                "Related service is misconfigured, "
+                "remove 'RemainAfterExit'"
             )
             return
 
         setattr(t_properties, 'MonitoringState', (self.CODES['OK'], ''))
 
     def get_nagios(self):
-        statuses = {name: self.timers[name].properties.MonitoringState
-                    for name in self.timers}
+        statuses = {name: obj.properties.MonitoringState
+                    for name, obj in self.timers.items()}
         logger.debug('Statuses in get_nagios: {}'.format(statuses))
-        exit_code = max([statuses[n][0] for n in statuses])
+        exit_code = max([n[0] for n in statuses.values()])
         logger.debug("Exit_code = {}".format(exit_code))
         if exit_code == 0:
             message = 'OK'
             return exit_code, message
         msg_format = '{}: {}'
         messages = [
-            msg_format.format(t, statuses[t][1])
-            for t in statuses if statuses[t][0] > 0
+            msg_format.format(name, status[1])
+            for name, status in statuses.items() if status[0] > 0
         ]
+        # Add "STATUS:" to the first message
         messages[0] = msg_format.format(self.REV_CODES[exit_code], messages[0])
         return exit_code, ";".join(messages)
 
