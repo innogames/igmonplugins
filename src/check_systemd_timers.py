@@ -21,7 +21,9 @@ from systemd_dbus.exceptions import SystemdError
 from sys import exit as sys_exit
 import logging
 
-logging.basicConfig(format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s')
+logging.basicConfig(
+    format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -46,13 +48,20 @@ class CheckTimers(object):
         try:
             s_manager = Manager()
             timers = s_manager.list_timers()
-            logger.debug('Timers in system are: {}'.format([t.properties.Id for t in timers]))
+            logger.debug('Timers in system are: {}'.format(
+                [t.properties.Id for t in timers]))
             if check_all:
-                self.timers = {str(t.properties.Id): t for t in timers if str(t.properties.Id) not in ignored_timers}
+                self.timers = {str(t.properties.Id): t
+                               for t in timers
+                               if str(t.properties.Id) not in ignored_timers}
             else:
-                self.timers = {str(t.properties.Id): t for t in timers if str(t.properties.Id) in timer_units}
+                self.timers = {str(t.properties.Id): t
+                               for t in timers
+                               if str(t.properties.Id) in timer_units}
             logger.debug('Timers after filtering are: {}'.format(self.timers))
-            self.services = {str(t.properties.Id): s_manager.get_unit(t.properties.Unit) for t in timers}
+            self.services = {
+                str(t.properties.Id): s_manager.get_unit(t.properties.Unit)
+                for t in timers}
         except SystemdError:
             print('UNKNOWN: Error while receive info for systemd from dbus')
             sys_exit(self.CODES['UNKNOWN'])
@@ -78,25 +87,40 @@ class CheckTimers(object):
         properties = self.timers[t_unit].properties
         if properties.LoadState != 'loaded':
             print(properties.LoadState)
-            setattr(properties, 'MonitoringState', (self.CODES['CRITICAL'], 'Timer is not loaded'))
+            setattr(
+                properties,
+                'MonitoringState',
+                (self.CODES['CRITICAL'], 'Timer is not loaded')
+            )
             return
 
         if properties.ActiveState != 'active':
-            setattr(properties, 'MonitoringState', (self.CODES['CRITICAL'], 'Timer is not active'))
+            setattr(
+                properties,
+                'MonitoringState',
+                (self.CODES['CRITICAL'], 'Timer is not active')
+            )
             return
 
         intervals = properties.TimersMonotonic
         if intervals:
-            min_interval = min([p[1]/M for p in intervals if p[0] in checked_intervals])
+            min_interval = min([p[1]/M
+                                for p in intervals
+                                if p[0] in checked_intervals])
             since_last_execute = self.now - properties.StateChangeTimestamp/M
-            last_execute = datetime.fromtimestamp(properties.StateChangeTimestamp/M)
+            last_execute = datetime.fromtimestamp(
+                properties.StateChangeTimestamp/M
+            )
 
             if (self._warn_threshold <= since_last_execute/min_interval
                     < self._crit_threshold):
                 setattr(
                     properties,
                     'MonitoringState',
-                    (self.CODES['WARNING'], "Timer wasn't launch since {}".format(last_execute))
+                    (
+                        self.CODES['WARNING'],
+                        "Timer wasn't launch since {}".format(last_execute)
+                    )
                 )
                 return
             elif self._crit_threshold <= since_last_execute/min_interval:
@@ -119,25 +143,39 @@ class CheckTimers(object):
         s_properties = self.services[t_unit].properties
         t_properties = self.timers[t_unit].properties
         if s_properties.LoadState != 'loaded':
-            setattr(t_properties, 'MonitoringState', (self.CODES['CRITICAL'], 'Related service is not loaded'))
-            return
-
-        if s_properties.ActiveState == 'failed':
-            setattr(t_properties, 'MonitoringState', (self.CODES['CRITICAL'], 'Related service is failed'))
-            return
-
-        if s_properties.ActiveState == 'active' and s_properties.SubState == 'exited':
             setattr(
                 t_properties,
                 'MonitoringState',
-                (self.CODES['CRITICAL'], "Related service is misconfigured, remove 'RemainAfterExit'")
+                (self.CODES['CRITICAL'], 'Related service is not loaded')
+            )
+            return
+
+        if s_properties.ActiveState == 'failed':
+            setattr(
+                t_properties,
+                'MonitoringState',
+                (self.CODES['CRITICAL'], 'Related service is failed')
+            )
+            return
+
+        if (s_properties.ActiveState == 'active'
+                and s_properties.SubState == 'exited'):
+            setattr(
+                t_properties,
+                'MonitoringState',
+                (
+                    self.CODES['CRITICAL'],
+                    ("Related service is misconfigured, "
+                     "remove 'RemainAfterExit'")
+                )
             )
             return
 
         setattr(t_properties, 'MonitoringState', (self.CODES['OK'], ''))
 
     def get_nagios(self):
-        statuses = {name: self.timers[name].properties.MonitoringState for name in self.timers}
+        statuses = {name: self.timers[name].properties.MonitoringState
+                    for name in self.timers}
         logger.debug('Statuses in get_nagios: {}'.format(statuses))
         exit_code = max([statuses[n][0] for n in statuses])
         logger.debug("Exit_code = {}".format(exit_code))
@@ -183,7 +221,7 @@ def parse_args():
         dest='warn_threshold',
         default=3,
         type=float,
-        help='warning threshold of timer (inactivity / max_monotonic_interval)',
+        help='warning threshold of timer (inactivity/max_monotonic_interval)',
     )
     parser.add_argument(
         '-c',
@@ -191,7 +229,7 @@ def parse_args():
         dest='crit_threshold',
         default=7,
         type=float,
-        help='critical threshold of timer (inactivity / max_monotonic_interval)',
+        help='critical threshold of timer (inactivity/max_monotonic_interval)',
     )
     parser.add_argument(
         '-l',
