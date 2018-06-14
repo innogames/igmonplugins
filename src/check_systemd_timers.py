@@ -14,10 +14,11 @@
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from datetime import datetime
-# python2/3 compatibility
-from time import time
+from enum import Enum
 from systemd_dbus.manager import Manager
 from systemd_dbus.exceptions import SystemdError
+# python2/3 compatibility
+from time import time
 import sys
 import logging
 
@@ -27,52 +28,49 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class Codes(Enum):
+    OK = 0
+    WARNING = 1
+    CRITICAL = 2
+    UNKNOWN = 3
+
+
 class CheckTimers(object):
     """
     Check timers for status, last executed service time, service status
     """
-    CODES = dict(
-        OK=0,
-        WARNING=1,
-        CRITICAL=2,
-        UNKNOWN=3,
-    )
-    REV_CODES = dict(map(reversed, CODES.items()))
 
     def __init__(self, check_all, crit_threshold, ignored_timers, timer_units,
-                 warn_threshold, **kwargs):
+                 warn_threshold, **_):
         self._crit_threshold = crit_threshold
         self._warn_threshold = warn_threshold
-        try:
-            s_manager = Manager()
-            timers = s_manager.list_timers()
-            logger.debug(
-                'Timers in system are: {}'
-                .format([t.properties.Id for t in timers])
-            )
-            if check_all:
-                self.timers = {
-                    str(t.properties.Id): t for t in timers
-                    if str(t.properties.Id) not in ignored_timers
-                }
-            else:
-                self.timers = {
-                    str(t.properties.Id): t for t in timers
-                    if str(t.properties.Id) in timer_units
-                }
-            logger.debug('Timers after filtering are: {}'.format(self.timers))
-            self.services = {
-                str(t.properties.Id): s_manager.get_unit(t.properties.Unit)
-                for t in timers
+        s_manager = Manager()
+        timers = s_manager.list_timers()
+        logger.debug(
+            'Timers in system are: {}'
+            .format([t.properties.Id for t in timers])
+        )
+
+        if check_all:
+            self.timers = {
+                str(t.properties.Id): t for t in timers
+                if str(t.properties.Id) not in ignored_timers
             }
-        except SystemdError:
-            print('UNKNOWN: Error while receive info for systemd from dbus')
-            sys.exit(self.CODES['UNKNOWN'])
-
-        if self.timers == {}:
-            print('UNKNOWN: Timer units not found')
-            sys.exit(self.CODES['UNKNOWN'])
-
+        else:
+            self.timers = {
+                str(t.properties.Id): t for t in timers
+                if str(t.properties.Id) in timer_units
+            }
+        logger.debug('Timers after filtering are: {}'.format(self.timers))
+        self.services = {
+            str(t.properties.Id): s_manager.get_unit(t.properties.Unit)
+            for t in timers
+        }
+        logger.debug(
+            'Linked to timers services are: {}'
+            .format([(s, obj.properties.Id)
+                     for s, obj in self.services.items()])
+        )
         self.now = time()
 
     def check_timers(self):
@@ -90,37 +88,38 @@ class CheckTimers(object):
         properties = self.timers[t_unit].properties
         if properties.LoadState != 'loaded':
             properties.MonitoringState = (
-                self.CODES['CRITICAL'], 'Timer is not loaded'
+                Codes.CRITICAL.value, 'Timer is not loaded'
             )
             return
 
         if properties.ActiveState != 'active':
             properties.MonitoringState = (
-                self.CODES['CRITICAL'], 'Timer is not active'
+                Codes.CRITICAL.value, 'Timer is not active'
             )
             return
 
         intervals = properties.TimersMonotonic
         if intervals:
-            min_interval = min([
-                p[1]/m for p in intervals
+            min_interval = min(
+                p[1] / m for p in intervals
                 if p[0] in checked_intervals
-            ])
+            )
             since_last_execute = self.now - properties.StateChangeTimestamp/m
             last_execute = datetime.fromtimestamp(
-                properties.StateChangeTimestamp/m
+                properties.StateChangeTimestamp / m
             )
 
             if (self._warn_threshold <= since_last_execute/min_interval
                     < self._crit_threshold):
                 properties.MonitoringState = (
-                    self.CODES['WARNING'],
+                    Codes.WARNING.value,
                     "Timer wasn't launch since {}".format(last_execute)
                 )
                 return
-            elif self._crit_threshold <= since_last_execute/min_interval:
+
+            if self._crit_threshold <= since_last_execute/min_interval:
                 properties.MonitoringState = (
-                    self.CODES['CRITICAL'],
+                    Codes.CRITICAL.value,
                     "Timer wasn't launch since {}, look at {}"
                     .format(last_execute, properties.Unit)
                 )
@@ -133,44 +132,44 @@ class CheckTimers(object):
         t_properties = self.timers[t_unit].properties
         if s_properties.LoadState != 'loaded':
             t_properties.MonitoringState = (
-                self.CODES['CRITICAL'], 'Related service is not loaded'
+                Codes.CRITICAL.value, 'Related service is not loaded'
             )
             return
 
         if s_properties.ActiveState == 'failed':
             t_properties.MonitoringState = (
-                self.CODES['CRITICAL'], 'Related service is failed'
+                Codes.CRITICAL.value, 'Related service is failed'
             )
             return
 
         if (s_properties.ActiveState == 'active'
                 and s_properties.SubState == 'exited'):
             t_properties.MonitoringState = (
-                self.CODES['CRITICAL'],
-                "Related service is misconfigured, "
-                "remove 'RemainAfterExit'"
+                Codes.CRITICAL.value,
+                'Related service is misconfigured, '
+                'try to remove "RemainAfterExit"'
             )
             return
 
-        setattr(t_properties, 'MonitoringState', (self.CODES['OK'], ''))
+        t_properties.MonitoringState = (Codes.OK.value, '')
 
-    def get_nagios(self):
-        statuses = {name: obj.properties.MonitoringState
-                    for name, obj in self.timers.items()}
-        logger.debug('Statuses in get_nagios: {}'.format(statuses))
-        exit_code = max([n[0] for n in statuses.values()])
-        logger.debug("Exit_code = {}".format(exit_code))
+    def get_results(self):
+        statuses = [(name, obj.properties.MonitoringState)
+                    for name, obj in self.timers.items()]
+        logger.debug('Statuses in get_results: {}'.format(statuses))
+        exit_code = max(int(n[1][0]) for n in statuses)
+        logger.debug('Exit_code = {}'.format(exit_code))
         if exit_code == 0:
             message = 'OK'
             return exit_code, message
         msg_format = '{}: {}'
         messages = [
             msg_format.format(name, status[1])
-            for name, status in statuses.items() if status[0] > 0
+            for name, status in statuses if status[0] > 0
         ]
         # Add "STATUS:" to the first message
-        messages[0] = msg_format.format(self.REV_CODES[exit_code], messages[0])
-        return exit_code, ";".join(messages)
+        messages[0] = msg_format.format(Codes(exit_code), messages[0])
+        return exit_code, ';'.join(messages)
 
 
 def parse_args():
@@ -204,20 +203,33 @@ def parse_args():
     return parser.parse_args()
 
 
+def exit_check(code, message):
+    print(message)
+    sys.exit(code)
+
+
 def main():
     """The main program"""
     args = parse_args()
     logger.setLevel(args.log_level)
     logger.debug('Initial arguments are: {}'.format(args))
     if not args.check_all and not args.timer_units:
-        print('UNKNOWN: Either CHECK_ALL or TIMER_UNITS should be defined')
-        sys.exit(CheckTimers.CODES['UNKNOWN'])
+        exit_check(Codes.UNKNOWN.value,
+                   'UNKNOWN: Either CHECK_ALL or TIMER_UNITS should be defined')
 
-    check = CheckTimers(**vars(args))
+    try:
+        check = CheckTimers(**vars(args))
+    except SystemdError:
+        exit_check(Codes.UNKNOWN.value,
+                   'UNKNOWN: Error while receive info for systemd from dbus')
+
+    if not check.timers:
+        exit_check(Codes.UNKNOWN.value,
+                   'UNKNOWN: Timer units not found')
+
     check.check_timers()
-    exit_code, message = check.get_nagios()
-    print(message)
-    sys.exit(exit_code)
+    exit_code, message = check.get_results()
+    exit_check(exit_code, message)
 
 
 if __name__ == '__main__':
