@@ -18,7 +18,7 @@ from datetime import datetime
 from time import time
 from systemd_dbus.manager import Manager
 from systemd_dbus.exceptions import SystemdError
-from sys import exit as sys_exit
+import sys
 import logging
 
 logging.basicConfig(
@@ -39,36 +39,39 @@ class CheckTimers(object):
     )
     REV_CODES = {v: k for k, v in CODES.items()}
 
-    def __init__(self, check_all,
-                 crit_threshold, ignored_timers,
-                 timer_units, warn_threshold,
-                 **kwargs):
+    def __init__(self, check_all, crit_threshold, ignored_timers, timer_units,
+                 warn_threshold, **kwargs):
         self._crit_threshold = crit_threshold
         self._warn_threshold = warn_threshold
         try:
             s_manager = Manager()
             timers = s_manager.list_timers()
-            logger.debug('Timers in system are: {}'.format(
-                [t.properties.Id for t in timers]))
+            logger.debug(
+                'Timers in system are: {}'
+                .format([t.properties.Id for t in timers])
+            )
             if check_all:
-                self.timers = {str(t.properties.Id): t
-                               for t in timers
-                               if str(t.properties.Id) not in ignored_timers}
+                self.timers = {
+                    str(t.properties.Id): t for t in timers
+                    if str(t.properties.Id) not in ignored_timers
+                }
             else:
-                self.timers = {str(t.properties.Id): t
-                               for t in timers
-                               if str(t.properties.Id) in timer_units}
+                self.timers = {
+                    str(t.properties.Id): t for t in timers
+                    if str(t.properties.Id) in timer_units
+                }
             logger.debug('Timers after filtering are: {}'.format(self.timers))
             self.services = {
                 str(t.properties.Id): s_manager.get_unit(t.properties.Unit)
-                for t in timers}
+                for t in timers
+            }
         except SystemdError:
             print('UNKNOWN: Error while receive info for systemd from dbus')
-            sys_exit(self.CODES['UNKNOWN'])
+            sys.exit(self.CODES['UNKNOWN'])
 
         if self.timers == {}:
             print('UNKNOWN: Timer units not found')
-            sys_exit(self.CODES['UNKNOWN'])
+            sys.exit(self.CODES['UNKNOWN'])
 
         self.now = time()
 
@@ -83,10 +86,9 @@ class CheckTimers(object):
             'OnUnitInactiveUSec',
         ]
         # Microseconds to seconds
-        M = 1000000
+        m = 1000000
         properties = self.timers[t_unit].properties
         if properties.LoadState != 'loaded':
-            print(properties.LoadState)
             setattr(
                 properties,
                 'MonitoringState',
@@ -104,12 +106,13 @@ class CheckTimers(object):
 
         intervals = properties.TimersMonotonic
         if intervals:
-            min_interval = min([p[1]/M
-                                for p in intervals
-                                if p[0] in checked_intervals])
-            since_last_execute = self.now - properties.StateChangeTimestamp/M
+            min_interval = min([
+                p[1]/m for p in intervals
+                if p[0] in checked_intervals
+            ])
+            since_last_execute = self.now - properties.StateChangeTimestamp/m
             last_execute = datetime.fromtimestamp(
-                properties.StateChangeTimestamp/M
+                properties.StateChangeTimestamp/m
             )
 
             if (self._warn_threshold <= since_last_execute/min_interval
@@ -129,10 +132,8 @@ class CheckTimers(object):
                     'MonitoringState',
                     (
                         self.CODES['CRITICAL'],
-                        "Timer wasn't launch since {}, look at {}".format(
-                            last_execute,
-                            properties.Unit
-                        )
+                        "Timer wasn't launch since {}, look at {}"
+                        .format(last_execute, properties.Unit)
                     )
                 )
                 return
@@ -165,8 +166,8 @@ class CheckTimers(object):
                 'MonitoringState',
                 (
                     self.CODES['CRITICAL'],
-                    ("Related service is misconfigured, "
-                     "remove 'RemainAfterExit'")
+                    "Related service is misconfigured, "
+                    "remove 'RemainAfterExit'"
                 )
             )
             return
@@ -195,47 +196,27 @@ def parse_args():
     """Parse the arguments"""
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument(
-        '-a',
-        action='store_true',
-        dest='check_all',
-        default=False,
+        '-a', action='store_true', dest='check_all', default=False,
         help='check all units (it is the default when no timers are passed)',
     )
     parser.add_argument(
-        '-i',
-        action='append',
-        dest='ignored_timers',
-        default=[],
+        '-i', action='append', dest='ignored_timers', default=[],
         help='unit to ignore',
     )
     parser.add_argument(
-        '-t',
-        action='append',
-        dest='timer_units',
-        default=[],
+        '-t', action='append', dest='timer_units', default=[],
         help='timer unit, service unit will be recognized automatically',
     )
     parser.add_argument(
-        '-w',
-        action='store',
-        dest='warn_threshold',
-        default=3,
-        type=float,
+        '-w', action='store', dest='warn_threshold', default=3, type=float,
         help='warning threshold of timer (inactivity/max_monotonic_interval)',
     )
     parser.add_argument(
-        '-c',
-        action='store',
-        dest='crit_threshold',
-        default=7,
-        type=float,
+        '-c', action='store', dest='crit_threshold', default=7, type=float,
         help='critical threshold of timer (inactivity/max_monotonic_interval)',
     )
     parser.add_argument(
-        '-l',
-        action='store',
-        dest='log_level',
-        default=logging.CRITICAL,
+        '-l', action='store', dest='log_level', default=logging.CRITICAL,
         help='enable debug logging',
     )
 
@@ -249,13 +230,13 @@ def main():
     logger.debug('Initial arguments are: {}'.format(args))
     if not args.check_all and not args.timer_units:
         print('UNKNOWN: Either CHECK_ALL or TIMER_UNITS should be defined')
-        sys_exit(CheckTimers.UNKNOWN)
+        sys.exit(CheckTimers.CODES['UNKNOWN'])
 
     check = CheckTimers(**vars(args))
     check.check_timers()
     exit_code, message = check.get_nagios()
     print(message)
-    sys_exit(exit_code)
+    sys.exit(exit_code)
 
 
 if __name__ == '__main__':
