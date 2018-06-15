@@ -29,7 +29,6 @@ class Problem:
     dead = 2
     not_loaded_but_not_inactive = 4
     not_loaded_but_not_dead = 5
-    unknown_status_auto_restart = 6
 
 
 def parse_args():
@@ -132,10 +131,7 @@ def check_unit(unit_name, serv_load, serv_active, serv_sub):
             return Problem.dead
 
         if serv_sub == 'auto-restart':
-            status = get_exit_code(unit_name)
-            if status == 3:
-                return Problem.unknown_status_auto_restart
-            elif status != 0:
+            if get_exit_code(unit_name) != 0:
                 return Problem.activating_auto_restart
     else:
         if serv_active != 'inactive':
@@ -150,8 +146,8 @@ def get_exit_code(unit_name):
     try:
         output = check_output(command.split())
     except CalledProcessError:
-        return 3
-    return int(output.lstrip('ExecMainStatus='))
+        return -1
+    return int(output[len('ExecMainStatus='):])
 
 
 def get_message(problems):
