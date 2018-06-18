@@ -29,6 +29,7 @@ class Problem:
     not_loaded_but_not_inactive = 2
     not_loaded_but_not_dead = 3
     dead = 4
+    not_loaded = 5
 
 
 def parse_args():
@@ -123,22 +124,25 @@ def match_unit(pattern, unit):
 
 def check_unit(unit_name, serv_load, serv_active, serv_sub):
     """Detect problems of a unit"""
-    if serv_load == 'loaded':
-        if serv_active == 'failed' or serv_sub == 'failed':
-            return Problem.failed
-
-        if serv_sub == 'dead':
-            return Problem.dead
-
-        if serv_sub == 'auto-restart':
-            if get_exit_code(unit_name) != 0:
-                return Problem.activating_auto_restart
-    else:
+    if serv_load != 'loaded':
         if serv_active != 'inactive':
             return Problem.not_loaded_but_not_inactive
 
         if serv_sub != 'dead':
             return Problem.not_loaded_but_not_dead
+
+        return Problem.not_loaded
+
+    if serv_active == 'failed':
+        return Problem.failed
+
+    if serv_sub == 'auto-restart':
+        if get_exit_code(unit_name) != 0:
+            return Problem.activating_auto_restart
+    elif serv_sub == 'dead':
+        return Problem.dead
+    elif serv_sub == 'failed':
+        return Problem.failed
 
 
 def get_exit_code(unit_name):
