@@ -26,9 +26,9 @@ class Problem:
     # From more important to less
     failed = 0
     activating_auto_restart = 1
-    dead = 2
-    not_loaded_but_not_inactive = 4
-    not_loaded_but_not_dead = 5
+    not_loaded_but_not_inactive = 2
+    not_loaded_but_not_dead = 3
+    dead = 4
 
 
 def parse_args():
@@ -104,7 +104,7 @@ def process(output, args):
         is_critical = any(
             match_unit(p, unit_name) for p in args.critical_units
         )
-        if not is_critical and problem == Problem.dead:
+        if not is_critical and problem >= Problem.dead:
             continue
 
         if is_critical and problem < Problem.dead:
