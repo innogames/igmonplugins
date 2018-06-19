@@ -16,8 +16,11 @@
 #
 
 from argparse import ArgumentParser
-from subprocess import CalledProcessError, check_output
 from sys import exit
+
+from systemd_dbus.exceptions import SystemdError
+from systemd_dbus.manager import Manager
+from systemd_dbus.service import Service
 
 
 class Problem:
@@ -30,6 +33,53 @@ class Problem:
     not_loaded_but_not_dead = 3
     dead = 4
     not_loaded = 5
+
+
+class SystemdUnit:
+    """Systemd unit"""
+
+    def __init__(self, unit):
+        self.properties = unit.properties
+        self.unit_type = unit.properties.Id.rsplit('.', 1)[-1]
+        # TODO: Don't access the private properties after the library
+        # provides a way
+        self.dbus_path = unit._Unit__proxy.__dbus_object_path__
+
+    def __str__(self):
+        return str(self.properties.Id)
+
+    @property
+    def specific_properties(self):
+        if self.unit_type == 'service':
+            return Service(self.dbus_path).properties
+
+    def match(self, pattern):
+        name = str(self)
+        if pattern.endswith('@*') and '@' in name:
+            return pattern[:-len('@*')] == name.split('@', 1)[0]
+        return pattern == name
+
+    def check(self):
+        """Detect problems of a unit"""
+        if self.properties.LoadState != 'loaded':
+            if self.properties.ActiveState != 'inactive':
+                return Problem.not_loaded_but_not_inactive
+
+            if self.properties.SubState != 'dead':
+                return Problem.not_loaded_but_not_dead
+
+            return Problem.not_loaded
+
+        if self.properties.ActiveState == 'failed':
+            return Problem.failed
+
+        if self.properties.SubState == 'auto-restart':
+            if self.specific_properties.ExecMainStatus != 0:
+                return Problem.activating_auto_restart
+        elif self.properties.SubState == 'dead':
+            return Problem.dead
+        elif self.properties.SubState == 'failed':
+            return Problem.failed
 
 
 def parse_args():
@@ -66,17 +116,14 @@ def parse_args():
 def main():
     """The main program"""
     args = parse_args()
-    command = 'systemctl --all --no-legend --no-pager list-units'
-    if not args.check_all:
-        for unit in args.critical_units:
-            command += ' ' + unit
+
     try:
-        output = check_output(command.split()).decode()
-    except CalledProcessError as error:
+        units = Manager().list_units()
+    except SystemdError as error:
         print('UNKNOWN: ' + str(error))
         exit_code = 3
     else:
-        criticals, warnings = process(output, args)
+        criticals, warnings = process([SystemdUnit(u) for u in units], args)
         if criticals:
             print('CRITICAL: ' + get_message(criticals + warnings))
             exit_code = 2
@@ -90,68 +137,28 @@ def main():
     exit(exit_code)
 
 
-def process(output, args):
+def process(units, args):
     criticals = []
     warnings = []
 
-    for line in output.splitlines():
-        unit_split = line.strip().split(None, 4)
-        unit_name = unit_split[0]
+    for unit in units:
+        is_critical = any(unit.match(p) for p in args.critical_units)
+        if not is_critical and not args.check_all:
+            continue
 
-        problem = check_unit(*unit_split[0:4])
+        problem = unit.check()
         if problem is None:
             continue
 
-        is_critical = any(
-            match_unit(p, unit_name) for p in args.critical_units
-        )
         if not is_critical and problem >= Problem.dead:
             continue
 
         if is_critical and problem < Problem.dead:
-            criticals.append((problem, unit_name))
+            criticals.append((problem, unit))
         else:
-            warnings.append((problem, unit_name))
+            warnings.append((problem, unit))
 
     return criticals, warnings
-
-
-def match_unit(pattern, unit):
-    if pattern.endswith('@*') and '@' in unit:
-        return pattern[:-len('@*')] == unit.split('@', 1)[0]
-    return pattern == unit
-
-
-def check_unit(unit_name, serv_load, serv_active, serv_sub):
-    """Detect problems of a unit"""
-    if serv_load != 'loaded':
-        if serv_active != 'inactive':
-            return Problem.not_loaded_but_not_inactive
-
-        if serv_sub != 'dead':
-            return Problem.not_loaded_but_not_dead
-
-        return Problem.not_loaded
-
-    if serv_active == 'failed':
-        return Problem.failed
-
-    if serv_sub == 'auto-restart':
-        if get_exit_code(unit_name) != 0:
-            return Problem.activating_auto_restart
-    elif serv_sub == 'dead':
-        return Problem.dead
-    elif serv_sub == 'failed':
-        return Problem.failed
-
-
-def get_exit_code(unit_name):
-    command = 'systemctl show -p ExecMainStatus {}'.format(unit_name)
-    try:
-        output = check_output(command.split())
-    except CalledProcessError:
-        return -1
-    return int(output[len('ExecMainStatus='):])
 
 
 def get_message(problems):
@@ -167,7 +174,7 @@ def get_message(problems):
         if problem != last_problem:
             message += problem_names[problem] + ': '
             last_problem = problem
-        message += unit + ' '
+        message += str(unit) + ' '
 
     return message
 
