@@ -71,7 +71,7 @@ def main(check_all, critical_units, ignored_units):
         for unit in critical_units:
             command += ' ' + unit
     try:
-        output = subprocess.check_output(command.split())
+        output = subprocess.check_output(command.split()).decode()
     except subprocess.CalledProcessError as error:
         print('UNKNOWN: ' + str(error))
         exit_code = 3
@@ -146,7 +146,7 @@ def get_exitcode(unit_name):
     command = 'systemctl show -pExecMainStatus {}'.format(unit_name)
     try:
         output = subprocess.check_output(command.split())
-    except subprocess.CalledProcessError as error:
+    except subprocess.CalledProcessError:
         return 3
     return (int(output.lstrip('ExecMainStatus=')))
 
