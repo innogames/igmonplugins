@@ -3,8 +3,8 @@
 
 This is a Nagios script to check all or some units of "systemd".
 It checks for anomalies of those units like the ones not anymore
-defined but still running, and them being dead.  Normally returns
-at most warning, if no critical units are specified.
+defined but still running, and them being inactive.  Normally returns
+at most warning, if no critical units are specified.  Returns
 
 It returns:
 
@@ -46,11 +46,9 @@ class Problem:
 
     # From more important to less
     failed = 0
-    activating_auto_restart = 1
-    not_loaded_but_not_inactive = 2
-    not_loaded_but_not_dead = 3
-    dead = 4
-    not_loaded = 5
+    not_loaded_but_not_inactive = 1
+    inactive = 2
+    not_loaded = 3
 
 
 class SystemdUnit:
@@ -82,22 +80,17 @@ class SystemdUnit:
         if self.properties.LoadState != 'loaded':
             if self.properties.ActiveState != 'inactive':
                 return Problem.not_loaded_but_not_inactive
-
-            if self.properties.SubState != 'dead':
-                return Problem.not_loaded_but_not_dead
-
             return Problem.not_loaded
 
         if self.properties.ActiveState == 'failed':
             return Problem.failed
 
-        if self.properties.SubState == 'auto-restart':
+        if self.unit_type == 'service':
             if self.specific_properties.ExecMainStatus != 0:
-                return Problem.activating_auto_restart
-        elif self.properties.SubState == 'dead':
-            return Problem.dead
-        elif self.properties.SubState == 'failed':
-            return Problem.failed
+                return Problem.failed
+
+        if self.properties.ActiveState != 'active':
+            return Problem.inactive
 
 
 def parse_args():
@@ -168,10 +161,10 @@ def process(units, args):
         if problem is None:
             continue
 
-        if not is_critical and problem >= Problem.dead:
+        if not is_critical and problem >= Problem.inactive:
             continue
 
-        if is_critical and problem < Problem.dead:
+        if is_critical and problem < Problem.inactive:
             criticals.append((problem, unit))
         else:
             warnings.append((problem, unit))
