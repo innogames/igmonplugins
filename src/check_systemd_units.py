@@ -12,13 +12,12 @@
 # * warning when a non-critical unit is failed
 # * warning for other anomalies.
 #
-# Copyright (c) 2016, InnoGames GmbH
+# Copyright (c) 2018, InnoGames GmbH
 #
 
-import subprocess
-import sys
-
 from argparse import ArgumentParser
+from subprocess import CalledProcessError, check_output
+from sys import exit
 
 
 class Problem:
@@ -61,22 +60,23 @@ def parse_args():
         help='unit to ignore',
     )
 
-    return vars(parser.parse_args())
+    return parser.parse_args()
 
 
-def main(check_all, critical_units, ignored_units):
+def main():
     """The main program"""
+    args = parse_args()
     command = 'systemctl --all --no-legend --no-pager list-units'
-    if not check_all:
-        for unit in critical_units:
+    if not args.check_all:
+        for unit in args.critical_units:
             command += ' ' + unit
     try:
-        output = subprocess.check_output(command.split()).decode()
-    except subprocess.CalledProcessError as error:
+        output = check_output(command.split()).decode()
+    except CalledProcessError as error:
         print('UNKNOWN: ' + str(error))
         exit_code = 3
     else:
-        criticals, warnings = process(output, critical_units, ignored_units)
+        criticals, warnings = process(output, args)
         if criticals:
             print('CRITICAL: ' + get_message(criticals + warnings))
             exit_code = 2
@@ -87,27 +87,31 @@ def main(check_all, critical_units, ignored_units):
             print('OK')
             exit_code = 0
 
-    sys.exit(exit_code)
+    exit(exit_code)
 
 
-def process(output, critical_units, ignored_units):
-    """Process the Systemd list-units command output"""
+def process(output, args):
     criticals = []
     warnings = []
+
     for line in output.splitlines():
         unit_split = line.strip().split(None, 4)
         unit_name = unit_split[0]
-        problem = check_unit(*unit_split[0:4])
 
-        if problem is not None:
-            if any(match_unit(p, unit_name) for p in critical_units):
-                if problem < Problem.dead:
-                    criticals.append((problem, unit_name))
-                else:
-                    warnings.append((problem, unit_name))
-            elif not any(match_unit(p, unit_name) for p in ignored_units):
-                if problem != Problem.dead:
-                    warnings.append((problem, unit_name))
+        problem = check_unit(*unit_split[0:4])
+        if problem is None:
+            continue
+
+        is_critical = any(
+            match_unit(p, unit_name) for p in args.critical_units
+        )
+        if not is_critical and problem == Problem.dead:
+            continue
+
+        if is_critical and problem < Problem.dead:
+            criticals.append((problem, unit_name))
+        else:
+            warnings.append((problem, unit_name))
 
     return criticals, warnings
 
@@ -128,7 +132,7 @@ def check_unit(unit_name, serv_load, serv_active, serv_sub):
             return Problem.dead
 
         if serv_sub == 'auto-restart':
-            status = get_exitcode(unit_name)
+            status = get_exit_code(unit_name)
             if status == 3:
                 return Problem.unknown_status_auto_restart
             elif status != 0:
@@ -141,14 +145,13 @@ def check_unit(unit_name, serv_load, serv_active, serv_sub):
             return Problem.not_loaded_but_not_dead
 
 
-def get_exitcode(unit_name):
-    """Return ExecMainStatus of a given unit"""
-    command = 'systemctl show -pExecMainStatus {}'.format(unit_name)
+def get_exit_code(unit_name):
+    command = 'systemctl show -p ExecMainStatus {}'.format(unit_name)
     try:
-        output = subprocess.check_output(command.split())
-    except subprocess.CalledProcessError as error:
+        output = check_output(command.split())
+    except CalledProcessError:
         return 3
-    return (int(output.lstrip('ExecMainStatus=')))
+    return int(output.lstrip('ExecMainStatus='))
 
 
 def get_message(problems):
@@ -170,4 +173,4 @@ def get_message(problems):
 
 
 if __name__ == '__main__':
-    main(**parse_args())
+    main()
