@@ -21,6 +21,7 @@ from sys import exit
 from systemd_dbus.exceptions import SystemdError
 from systemd_dbus.manager import Manager
 from systemd_dbus.service import Service
+from systemd_dbus.timer import Timer
 
 
 class Problem:
@@ -30,7 +31,8 @@ class Problem:
     failed = 0
     not_loaded_but_not_inactive = 1
     inactive = 2
-    not_loaded = 3
+    exited = 3
+    not_loaded = 4
 
 
 class SystemdUnit:
@@ -49,7 +51,11 @@ class SystemdUnit:
     @property
     def specific_properties(self):
         if self.unit_type == 'service':
-            return Service(self.dbus_path).properties
+            cls = Service
+        elif self.unit_type == 'timer':
+            cls = Timer
+
+        return cls(self.dbus_path).properties
 
     def match(self, pattern):
         name = str(self)
@@ -73,6 +79,9 @@ class SystemdUnit:
 
         if self.properties.ActiveState != 'active':
             return Problem.inactive
+
+        if self.properties.SubState == 'exited':
+            return Problem.exited
 
 
 def parse_args():
@@ -134,24 +143,47 @@ def process(units, args):
     criticals = []
     warnings = []
 
-    for unit in units:
-        is_critical = any(unit.match(p) for p in args.critical_units)
-        if not is_critical and not args.check_all:
-            continue
-
+    # First, all critical units
+    critical_timer_service_ids = []
+    for unit in filter_out(units, args.critical_units):
         problem = unit.check()
-        if problem is None:
-            continue
+        if problem:
+            if problem < Problem.inactive:
+                criticals.append((problem, unit))
+            else:
+                warnings.append((problem, unit))
 
-        if not is_critical and problem >= Problem.inactive:
-            continue
+        if unit.unit_type == 'timer':
+            critical_timer_service_ids.append(unit.specific_properties.Unit)
 
-        if is_critical and problem < Problem.inactive:
+    # Then, the services of the critical timer units
+    for unit in filter_out(units, critical_timer_service_ids):
+        problem = unit.check()
+        if problem and problem != Problem.inactive:
             criticals.append((problem, unit))
-        else:
-            warnings.append((problem, unit))
+
+    # Last, the others
+    if args.check_all:
+        for unit in units:
+            problem = unit.check()
+            if problem and problem < Problem.inactive:
+                warnings.append((problem, unit))
 
     return criticals, warnings
+
+
+def filter_out(units, ids):
+    if not ids:
+        return
+
+    remaining_units = []
+    for unit in units:
+        if any(unit.match(i) for i in ids):
+            yield unit
+        else:
+            remaining_units.append(unit)
+
+    units[:] = remaining_units
 
 
 def get_message(problems):
