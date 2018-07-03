@@ -50,7 +50,7 @@ def master_status():
     )
 
     ret = False
-    for ifname in carp_settings.ifaces.keys():
+    for ifname in carp_settings.ifaces_carp.keys():
         # Read interface configuration:
         p = subprocess.Popen(
             ['/sbin/ifconfig', ifname],
