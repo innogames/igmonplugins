@@ -26,7 +26,7 @@
 from subprocess import check_output, STDOUT
 from argparse import ArgumentParser
 from sys import exit
-
+import re
 
 # Nagios plugin exit codes
 class ExitCodes:
@@ -34,6 +34,12 @@ class ExitCodes:
     warning = 1
     critical = 2
     unknown = 3
+
+MULTIPLIERS = {
+    's': 1,
+    'ms': 0.001,
+    'us': 0.000001,
+}
 
 
 def main():
@@ -55,7 +61,7 @@ def main():
 
     try:
         proc = check_output(
-            ['/usr/bin/chronyc', '-c', 'sources'],
+            ['/usr/bin/chronyc', '-n', 'sources'],
             stderr=STDOUT,
         )
     except OSError as e:
@@ -64,21 +70,31 @@ def main():
 
     exit_code = ExitCodes.ok
     peers_found = False
+    stats_found = False
     for line in proc.split('\n'):
         if line:
-            line = line.split(',')
+            # Chrony on Debian Jessie does not support `-c` parameter.
+            # No CSV output for us, we must parse text.
+            if line.startswith('======='):
+                stats_found = True
+                continue
+            if not stats_found:
+                continue
+            line = line.split()
             local_exit_code = ExitCodes.ok
             local_exit_string = 'OK'
-            time_diff = float(line[8])
+            time_diff = re.match('[\+\-]([0-9]+)([a-z]s)', line[6]).groups()
+            time_nice = time_diff[0] + time_diff[1]
+            time_diff = float(time_diff[0]) * MULTIPLIERS[time_diff[1]]
             if time_diff > args.warning:
-                local_exit_code = ExitCodes.warning
-                local_exit_string = 'WARNING'
+               local_exit_code = ExitCodes.warning
+               local_exit_string = 'WARNING'
             if time_diff > args.critical:
-                local_exit_code = ExitCodes.critical
-                local_exit_string = 'CRITICAL'
+               local_exit_code = ExitCodes.critical
+               local_exit_string = 'CRITICAL'
             print('{}: peer {} time offset {}'.format(
-                local_exit_string,
-                line[2], line[8]
+               local_exit_string,
+                line[1], time_nice,
                 ))
             exit_code = max(exit_code, local_exit_code)
             peers_found = True
