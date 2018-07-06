@@ -28,6 +28,7 @@ from argparse import ArgumentParser
 from sys import exit
 import re
 
+
 # Nagios plugin exit codes
 class ExitCodes:
     ok = 0
@@ -35,10 +36,12 @@ class ExitCodes:
     critical = 2
     unknown = 3
 
+
 MULTIPLIERS = {
     's': 1,
     'ms': 0.001,
     'us': 0.000001,
+    'ns': 0.000000001,
 }
 
 
@@ -83,21 +86,22 @@ def main():
             line = line.split()
             local_exit_code = ExitCodes.ok
             local_exit_string = 'OK'
-            time_diff = re.match('[\+\-]([0-9]+)([a-z]s)', line[6]).groups()
-            time_nice = time_diff[0] + time_diff[1]
-            time_diff = float(time_diff[0]) * MULTIPLIERS[time_diff[1]]
-            if time_diff > args.warning:
-               local_exit_code = ExitCodes.warning
-               local_exit_string = 'WARNING'
-            if time_diff > args.critical:
-               local_exit_code = ExitCodes.critical
-               local_exit_string = 'CRITICAL'
-            print('{}: peer {} time offset {}'.format(
-               local_exit_string,
-                line[1], time_nice,
-                ))
-            exit_code = max(exit_code, local_exit_code)
-            peers_found = True
+            time_diff = re.match('[\+\-]([0-9]+)([a-z]s)', line[6])
+            if time_diff:
+                time_diff = time_diff.groups()
+                time_nice = time_diff[0] + time_diff[1]
+                time_diff = float(time_diff[0]) * MULTIPLIERS[time_diff[1]]
+                if time_diff > args.warning:
+                    local_exit_code = ExitCodes.warning
+                    local_exit_string = 'WARNING'
+                if time_diff > args.critical:
+                    local_exit_code = ExitCodes.critical
+                    local_exit_string = 'CRITICAL'
+                print('{}: peer {} time offset {}'.format(
+                    local_exit_string, line[1], time_nice,
+                    ))
+                exit_code = max(exit_code, local_exit_code)
+                peers_found = True
 
     if not peers_found:
         print('UNKNOWN: no peers found!')
