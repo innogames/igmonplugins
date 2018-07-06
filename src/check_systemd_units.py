@@ -4,7 +4,7 @@
 #
 # This is a Nagios script to check all or some units of "systemd".
 # It checks for anomalies of those units like the ones not anymore
-# defined but still running, and them being dead.  Normally returns
+# defined but still running, and them being inactive.  Normally returns
 # at most warning, if no critical units are specified.  Returns
 #
 # * critical when a critical unit is failed
@@ -12,13 +12,16 @@
 # * warning when a non-critical unit is failed
 # * warning for other anomalies.
 #
-# Copyright (c) 2016, InnoGames GmbH
+# Copyright (c) 2018 InnoGames GmbH
 #
 
-import subprocess
-import sys
-
 from argparse import ArgumentParser
+from sys import exit
+
+from systemd_dbus.exceptions import SystemdError
+from systemd_dbus.manager import Manager
+from systemd_dbus.service import Service
+from systemd_dbus.timer import Timer
 
 
 class Problem:
@@ -26,11 +29,59 @@ class Problem:
 
     # From more important to less
     failed = 0
-    activating_auto_restart = 1
-    dead = 2
-    not_loaded_but_not_inactive = 4
-    not_loaded_but_not_dead = 5
-    unknown_status_auto_restart = 6
+    not_loaded_but_not_inactive = 1
+    inactive = 2
+    exited = 3
+    not_loaded = 4
+
+
+class SystemdUnit:
+    """Systemd unit"""
+
+    def __init__(self, unit):
+        self.properties = unit.properties
+        self.unit_type = unit.properties.Id.rsplit('.', 1)[-1]
+        # TODO: Don't access the private properties after the library
+        # provides a way
+        self.dbus_path = unit._Unit__proxy.__dbus_object_path__
+
+    def __str__(self):
+        return str(self.properties.Id)
+
+    @property
+    def specific_properties(self):
+        if self.unit_type == 'service':
+            cls = Service
+        elif self.unit_type == 'timer':
+            cls = Timer
+
+        return cls(self.dbus_path).properties
+
+    def match(self, pattern):
+        name = str(self)
+        if pattern.endswith('@*') and '@' in name:
+            return pattern[:-len('@*')] == name.split('@', 1)[0]
+        return pattern == name
+
+    def check(self):
+        """Detect problems of a unit"""
+        if self.properties.LoadState != 'loaded':
+            if self.properties.ActiveState != 'inactive':
+                return Problem.not_loaded_but_not_inactive
+            return Problem.not_loaded
+
+        if self.properties.ActiveState == 'failed':
+            return Problem.failed
+
+        if self.unit_type == 'service':
+            if self.specific_properties.ExecMainStatus != 0:
+                return Problem.failed
+
+        if self.properties.ActiveState != 'active':
+            return Problem.inactive
+
+        if self.properties.SubState == 'exited':
+            return Problem.exited
 
 
 def parse_args():
@@ -61,22 +112,20 @@ def parse_args():
         help='unit to ignore',
     )
 
-    return vars(parser.parse_args())
+    return parser.parse_args()
 
 
-def main(check_all, critical_units, ignored_units):
+def main():
     """The main program"""
-    command = 'systemctl --all --no-legend --no-pager list-units'
-    if not check_all:
-        for unit in critical_units:
-            command += ' ' + unit
+    args = parse_args()
+
     try:
-        output = subprocess.check_output(command.split())
-    except subprocess.CalledProcessError as error:
+        units = Manager().list_units()
+    except SystemdError as error:
         print('UNKNOWN: ' + str(error))
         exit_code = 3
     else:
-        criticals, warnings = process(output, critical_units, ignored_units)
+        criticals, warnings = process([SystemdUnit(u) for u in units], args)
         if criticals:
             print('CRITICAL: ' + get_message(criticals + warnings))
             exit_code = 2
@@ -87,68 +136,54 @@ def main(check_all, critical_units, ignored_units):
             print('OK')
             exit_code = 0
 
-    sys.exit(exit_code)
+    exit(exit_code)
 
 
-def process(output, critical_units, ignored_units):
-    """Process the Systemd list-units command output"""
+def process(units, args):
     criticals = []
     warnings = []
-    for line in output.splitlines():
-        unit_split = line.strip().split(None, 4)
-        unit_name = unit_split[0]
-        problem = check_unit(*unit_split[0:4])
 
-        if problem is not None:
-            if any(match_unit(p, unit_name) for p in critical_units):
-                if problem < Problem.dead:
-                    criticals.append((problem, unit_name))
-                else:
-                    warnings.append((problem, unit_name))
-            elif not any(match_unit(p, unit_name) for p in ignored_units):
-                if problem != Problem.dead:
-                    warnings.append((problem, unit_name))
+    # First, all critical units
+    critical_timer_service_ids = []
+    for unit in filter_out(units, args.critical_units):
+        problem = unit.check()
+        if problem:
+            if problem < Problem.inactive:
+                criticals.append((problem, unit))
+            else:
+                warnings.append((problem, unit))
+
+        if unit.unit_type == 'timer':
+            critical_timer_service_ids.append(unit.specific_properties.Unit)
+
+    # Then, the services of the critical timer units
+    for unit in filter_out(units, critical_timer_service_ids):
+        problem = unit.check()
+        if problem and problem != Problem.inactive:
+            criticals.append((problem, unit))
+
+    # Last, the others
+    if args.check_all:
+        for unit in units:
+            problem = unit.check()
+            if problem and problem < Problem.inactive:
+                warnings.append((problem, unit))
 
     return criticals, warnings
 
 
-def match_unit(pattern, unit):
-    if pattern.endswith('@*') and '@' in unit:
-        return pattern[:-len('@*')] == unit.split('@', 1)[0]
-    return pattern == unit
+def filter_out(units, ids):
+    if not ids:
+        return
 
+    remaining_units = []
+    for unit in units:
+        if any(unit.match(i) for i in ids):
+            yield unit
+        else:
+            remaining_units.append(unit)
 
-def check_unit(unit_name, serv_load, serv_active, serv_sub):
-    """Detect problems of a unit"""
-    if serv_load == 'loaded':
-        if serv_active == 'failed' or serv_sub == 'failed':
-            return Problem.failed
-
-        if serv_sub == 'dead':
-            return Problem.dead
-
-        if serv_sub == 'auto-restart':
-            status = get_exitcode(unit_name)
-            if status == 3:
-                return Problem.unknown_status_auto_restart
-            elif status != 0:
-                return Problem.activating_auto_restart
-    else:
-        if serv_active != 'inactive':
-            return Problem.not_loaded_but_not_inactive
-
-        if serv_sub != 'dead':
-            return Problem.not_loaded_but_not_dead
-
-
-def get_exitcode(unit_name):
-    """Return ExecMainStatus of a given unit"""
-    command = 'systemctl show -pExecMainStatus {}'.format(unit_name)
-    try:
-        output = subprocess.check_output(command.split())
-    except subprocess.CalledProcessError as error:
-        return 3
-    return (int(output.lstrip('ExecMainStatus=')))
+    units[:] = remaining_units
 
 
 def get_message(problems):
@@ -164,10 +199,10 @@ def get_message(problems):
         if problem != last_problem:
             message += problem_names[problem] + ': '
             last_problem = problem
-        message += unit + ' '
+        message += str(unit) + ' '
 
     return message
 
 
 if __name__ == '__main__':
-    main(**parse_args())
+    main()
