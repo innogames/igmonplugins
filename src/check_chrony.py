@@ -28,6 +28,7 @@ from argparse import ArgumentParser
 from sys import exit
 import re
 
+
 # Nagios plugin exit codes
 class ExitCodes:
     ok = 0
@@ -35,10 +36,12 @@ class ExitCodes:
     critical = 2
     unknown = 3
 
+
 MULTIPLIERS = {
     's': 1,
     'ms': 0.001,
     'us': 0.000001,
+    'ns': 0.000000001,
 }
 
 
