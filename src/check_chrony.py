@@ -27,6 +27,7 @@ from subprocess import check_output, STDOUT
 from argparse import ArgumentParser
 from sys import exit
 import re
+import platform
 
 
 # Nagios plugin exit codes
@@ -62,15 +63,19 @@ def main():
     )
     args = parser.parse_args()
 
+    if platform.system() == 'FreeBSD':
+        chrony = '/usr/local/bin/chronyc'
+    else:
+        chrony = '/usr/bin/chronyc'
+
     try:
         proc = check_output(
-            ['/usr/bin/chronyc', '-n', 'sources'],
+            [chrony, '-n', 'sources'],
             stderr=STDOUT,
         )
     except OSError as e:
         print('UNKNOWN: can\'t read Chrony status: {}'.format(e))
         return ExitCodes.unknown
-
     exit_code = ExitCodes.ok
     peers_found = False
     stats_found = False
