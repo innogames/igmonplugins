@@ -1,14 +1,13 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - check_cpu_steal_time.py
-#
-# This script checks the steal time of all vCPUs on the regarding domain and
-# raises a warning or critical state if a reasonable threshold is reached.
-# Values for the warning and critical thresholds can be specified using
-# parameters.
-#
-# Copyright (c) 2017, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - CPU Steal Time Check
+
+This script checks the steal time of all vCPUs on the regarding domain and
+raises a warning or critical state if a reasonable threshold is reached.
+Values for the warning and critical thresholds can be specified using
+parameters.
+
+Copyright (c) 2017 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -26,7 +25,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 from argparse import ArgumentParser
 import subprocess

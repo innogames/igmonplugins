@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - bitbucket_private_repository.py
-#
-# This is a Nagios script which checks, if there are any private repositories
-# in a Bitbucket system which are not forks. The script uses the Bitbucket
-# Server Rest Api and it is possible to use Basic or two-legged OAuth
-# authentication.
-# The script will exit with:
-#  - 0 (OK) if there are no private (none fork) repositories
-#  - 1 (WARNING) if there are private (none fork) repositories
-#
-# Copyright (c) 2016, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - Bitbucket Private Repository Check
+
+This is a Nagios script which checks, if there are any private repositories
+in a Bitbucket system which are not forks.  The script uses the Bitbucket
+Server Rest Api and it is possible to use Basic or two-legged OAuth
+authentication.
+
+The script will exit with:
+ - 0 (OK) if there are no private (none fork) repositories
+ - 1 (WARNING) if there are private (none fork) repositories
+
+Copyright (c) 2016 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -29,7 +29,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 import json
 from argparse import ArgumentParser

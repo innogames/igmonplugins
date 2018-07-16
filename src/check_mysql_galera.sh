@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# InnoGames Monitoring Plugins - check_mysql_galera
+# InnoGames Monitoring Plugins - MySQL Galera Cluster Check
 #
-# Copyright (c) 2017, InnoGames GmbH
+# Copyright (c) 2017 InnoGames GmbH
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,7 +21,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 help_message="\n
 This tool connects to mysql with user -u and password -p\n

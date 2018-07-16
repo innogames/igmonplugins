@@ -1,18 +1,17 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - gitlab_protected_branch
-#
-# This is a Nagios script which checks, if there are any projects with
-# unprotected branches (mostly master branches). The branches must be
-# strictly protected, means that developers must not be allowed to push or
-# merge into the branch. The script uses the GitLab Enterprise Server Rest Api
-# and it is possible to use Basic or token based authentication.
-# The script will exit with:
-#  - 0 (OK) if there are no projects with unprotected default branches
-#  - 1 (WARNING) if there are projects with unprotected default branches
-#
-# Copyright (c) 2016, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - GitLab Protected Branch Check
+
+This is a Nagios script which checks, if there are any projects with
+unprotected branches (mostly master branches). The branches must be
+strictly protected, means that developers must not be allowed to push or
+merge into the branch. The script uses the GitLab Enterprise Server Rest Api
+and it is possible to use Basic or token based authentication.
+The script will exit with:
+ - 0 (OK) if there are no projects with unprotected default branches
+ - 1 (WARNING) if there are projects with unprotected default branches
+
+Copyright (c) 2016 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -30,7 +29,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 import json
 from argparse import ArgumentParser

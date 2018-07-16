@@ -1,19 +1,16 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - check_mysql_buffer_pool.py
-#
-# Check the size of the configured mysql innodb_buffer_pool_size
-#
-# This script gets the configured innodb_buffer_pool_size at runtime and
-# compares this value with the data_size of the database.  It's also possible
-# to multiply the buffer_pool_size with a factor, to keep track on growing
-# databases, which are too big to fit into the available memory.
-# It raises a warning if the data_size of the database (this includes indexes)
-# is greater than the configured buffer_pool.
-# It raises a unknown if the connect/query could not be executed.
-#
-# Copyright (c) 2018, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - MySQL InnoDB Buffer Pool Check
+
+This script gets the configured innodb_buffer_pool_size at runtime and
+compares this value with the data_size of the database.  It's also possible
+to multiply the buffer_pool_size with a factor, to keep track on growing
+databases, which are too big to fit into the available memory.
+It raises a warning if the data_size of the database (this includes indexes)
+is greater than the configured buffer_pool.
+It raises a unknown if the connect/query could not be executed.
+
+Copyright (c) 2018 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -31,7 +28,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 from argparse import ArgumentParser
 from mysql.connector import (

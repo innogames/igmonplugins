@@ -1,23 +1,22 @@
 #!/usr/bin/env python
+"""InnoGames Monitoring Plugins - SSL Directory Check
 
-# InnoGames Monitoring Plugins - check_ssl_dir.py
-#
-# This is a script that checks for ssl certificate expiration in a given time
-# for all ssl certificate files in a given directory. By default the time for
-# warning is 30 days, and the time for critical is 7 days. This can be
-# influenced via the --warning-days and --crit-days parameters.
-# The script will exit with:
-#  - 0 (OK) if no certificate in the checked directory will expire in the next
-#           30 days
-#
-#  - 1 (WARNING) if a certificate in the checked directory will expire in the
-#                specified --warning-days time (default 30 days)
-#
-#  - 2 (CRITICAL) if a certificate in the checked directory will expire in the
-#                 specified --cert-days time (default 7 days)
-#
-# Copyright (c) 2016, InnoGames GmbH
-#
+This is a script that checks for ssl certificate expiration in a given time
+for all ssl certificate files in a given directory. By default the time for
+warning is 30 days, and the time for critical is 7 days. This can be
+influenced via the --warning-days and --crit-days parameters.
+The script will exit with:
+ - 0 (OK) if no certificate in the checked directory will expire in the next
+          30 days
+
+ - 1 (WARNING) if a certificate in the checked directory will expire in the
+               specified --warning-days time (default 30 days)
+
+ - 2 (CRITICAL) if a certificate in the checked directory will expire in the
+                specified --cert-days time (default 7 days)
+
+Copyright (c) 2016 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
 # in the Software without restriction, including without limitation the rights

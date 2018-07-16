@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-
-"""InnoGames Monitoring Plugins - check_rabbitmq.py
+"""InnoGames Monitoring Plugins - RabbitMQ Check
 
 This is a fully customizable Python Nagios check for RabbitMQ.
 
@@ -71,12 +70,9 @@ Examples:
         --critical='message_stats.ack_details.rate == 0'\
         --critical='message_stats.deliver_details.rate == 0'\
         --filter='messages > 0' --filter='backing_queue_status.mode == lazy'
-"""
 
-# The MIT License (MIT)
-#
-# Copyright (c) 2017 InnoGames GmbH
-#
+Copyright (c) 2017 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights

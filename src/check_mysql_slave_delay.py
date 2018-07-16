@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - check_mysql_slave_delay
-#
-# Copyright (c) 2016, InnoGames GmbH
-#
+"""
+InnoGames Monitoring Plugins - MySQL Replication Delay Check
+
+Copyright (c) 2016 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -21,7 +21,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 from mysql.connector import connect
 import optparse

@@ -1,23 +1,22 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - atlassian_expiring_licenses.py
-#
-# This is a Nagios script which checks, if the authentication to a specific
-# url is possible or not. Supported authentication checks are: anonymous,
-# basic, oauth, header (e.g. token) and form authentication. Two Factor
-# Authentication is supported too by passing your TOTP Secret Key with the
-# parameter `totp`. Every single occurrence of `{totp}` in the header and input
-# values will be replaced with the actual generated TOTP value. However right
-# now it will just works with one single request.
-#
-# The script will exit with:
-#  - 0 (OK)         if authentication request returns a http status code
-#                   without error (means not 400 or above)
-#  - 2 (CRITICAL)   if authentication request fails either because of the
-#                   request or the authentication
-#
-# Copyright (c) 2016, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - Authentication Check
+
+This is a Nagios script which checks, if the authentication to a specific
+url is possible or not. Supported authentication checks are: anonymous,
+basic, oauth, header (e.g. token) and form authentication. Two Factor
+Authentication is supported too by passing your TOTP Secret Key with the
+parameter `totp`. Every single occurrence of `{totp}` in the header and input
+values will be replaced with the actual generated TOTP value. However right
+now it will just works with one single request.
+
+The script will exit with:
+ - 0 (OK)         if authentication request returns a http status code
+                  without error (means not 400 or above)
+ - 2 (CRITICAL)   if authentication request fails either because of the
+                  request or the authentication
+
+Copyright (c) 2016 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -35,7 +34,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 

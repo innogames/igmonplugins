@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - atlassian_plugin_updates.py
-#
-# This is a Nagios script which checks, if there are any updates for plugins
-# for a Jira system.  The script uses the Jira Server and Atlassian
-# Marketplace Rest Api and it is possible to use Basic or two-legged OAuth
-# authentication for the Jira Server.
-# The script will exit with:
-#  - 0 (OK) if there are no updates for plugins
-#  - 1 (WARNING) if there are updates for plugins
-#
-# Copyright (c) 2016, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - Atlassian Plugin Updates Check
+
+This is a Nagios script which checks, if there are any updates for plugins
+for a Jira system.  The script uses the Jira Server and Atlassian
+Marketplace Rest API and it is possible to use Basic or two-legged OAuth
+authentication for the Jira Server.
+
+The script will exit with:
+ - 0 (OK) if there are no updates for plugins
+ - 1 (WARNING) if there are updates for plugins
+
+Copyright (c) 2016 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -29,7 +29,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 from argparse import ArgumentParser
 

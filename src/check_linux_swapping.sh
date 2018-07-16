@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# InnoGames Monitoring Plugins - check_swapping.sh
+# InnoGames Monitoring Plugins - Swap Space Usage Check
 #
-# Copyright (c) 2016, InnoGames GmbH
+# Copyright (c) 2016 InnoGames GmbH
 #
 # This script checks for the swap-activity.  It is not useful to check
 # the used swap space, because it is never get cleaned.
@@ -24,7 +24,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 statefile="/tmp/check_linux_swapping.db"
 limit=2500 # Blocks written to swap

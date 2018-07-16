@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""InnoGames Monitoring Plugins - check_ssl_cert_expire.py
+"""InnoGames Monitoring Plugins - Expiring SSL Certificates Check
 
 Copyright (c) 2018 InnoGames GmbH
 """

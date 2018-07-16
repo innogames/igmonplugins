@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""InnoGames Monitoring Plugins - check_libvirt_hosts.py
+"""InnoGames Monitoring Plugins - Libvirt Hosts Check
 
-Copyright (c) 2017, InnoGames GmbH
+Copyright (c) 2017 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal

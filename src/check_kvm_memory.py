@@ -1,14 +1,13 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - check_kvm_memory.py
-#
-# This script checks the KVM memory allocation of all domains and raises a
-# warning or critical state if overallocation of memory is reached. Values for
-# overhead of domain and memory to reserver for OS can be specified using
-# parameters.
-#
-# Copyright (c) 2017, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - KVM Memory Check
+
+This script checks the KVM memory allocation of all domains and raises a
+warning or critical state if overallocation of memory is reached.  Values for
+overhead of domain and memory to reserver for OS can be specified using
+parameters.
+
+Copyright (c) 2017 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -26,7 +25,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 from libvirt import openReadOnly
 

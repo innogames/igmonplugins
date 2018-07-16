@@ -1,20 +1,19 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - check_logrotate_missing.py
-#
-# Search for logs which are not logrotated
-#
-# This script checks that only the configured logfiles for logrotation
-# are lying in the regarding log directories.
-# Following logrotate configuration filetypes are supported:
-# * logrotate
-# * logback
-# * log4j (xml only)
-# It raises a warning if there are unconfigured logfiles found.
-# It raises a unknown if the passed configuration file does not exist.
-#
-# Copyright (c) 2018, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - Missing Logrotate Configuration Check
+
+This script checks that only the configured logfiles for logrotation
+are lying in the regarding log directories.
+
+Following logrotate configuration filetypes are supported:
+* logrotate
+* logback
+* log4j (xml only)
+
+It raises a warning if there are unconfigured logfiles found.
+It raises a unknown if the passed configuration file does not exist.
+
+Copyright (c) 2018 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -32,7 +31,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 import glob
 import os

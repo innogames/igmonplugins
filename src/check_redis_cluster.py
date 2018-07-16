@@ -1,20 +1,17 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - check_redis_cluster.py
-#
-# Check the status of redis cluster
-#
-# This script checks the status of redis cluster which consists of at least
-# 6 instances (3 master + 3 slaves).  The status can be fully functional
-# but degraded.
-#
-# => administrative intervention required
-#
-# It raises a warning state if the cluster is degraded but still working.
-# A critical state represents a broken cluster.
-#
-# Copyright (c) 2017, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - Redis Cluster Check
+
+This script checks the status of redis cluster which consists of at least
+6 instances (3 master + 3 slaves).  The status can be fully functional
+but degraded.
+
+=> administrative intervention required
+
+It raises a warning state if the cluster is degraded but still working.
+A critical state represents a broken cluster.
+
+Copyright (c) 2017 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -32,7 +29,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 import subprocess
 

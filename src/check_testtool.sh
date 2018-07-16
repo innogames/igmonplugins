@@ -1,8 +1,12 @@
 #!/bin/sh
 #
-# InnoGames Monitoring Plugins - check_testtool.sh
+# InnoGames Monitoring Plugins - Testtool Check
 #
-# Copyright (c) 2017, InnoGames GmbH
+# Reference:
+#
+#   https://github.com/innogames/testtool
+#
+# Copyright (c) 2017 InnoGames GmbH
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,13 +25,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
-
-# Nagios return codes
-#0   OK
-#1   WARNING
-#2   CRITICAL
-#3   UNKNOWN
 
 status_file="/var/log/testtool.status"
 

@@ -1,19 +1,19 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - atlassian_expiring_licenses.py
-#
-# This is a Nagios script which checks, if there are any plugin licenses
-# which will expire soon. The script uses the Jira Server Rest Api and it is
-# possible to use Basic or two-legged OAuth authentication.
-# The script will exit with:
-#  - 0 (OK)         if there are no soon expiring licenses
-#  - 1 (WARNING)    if there are soon expiring licenses but _before_ a optional
-#                   given time
-#  - 2 (CRITICAL)   if there are soon expiring licenses _after_ that optional
-#                   given time
-#
-# Copyright (c) 2016, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - Atlassian Expiring Licenses Check
+
+This is a Nagios script which checks, if there are any plugin licenses
+which will expire soon.  The script uses the Jira Server Rest API and it is
+possible to use Basic or two-legged OAuth authentication.
+
+The script will exit with:
+ - 0 (OK)         if there are no soon expiring licenses
+ - 1 (WARNING)    if there are soon expiring licenses but _before_ a optional
+                  given time
+ - 2 (CRITICAL)   if there are soon expiring licenses _after_ that optional
+                  given time
+
+Copyright (c) 2016 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -31,7 +31,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 from argparse import ArgumentParser
 from datetime import datetime, timedelta

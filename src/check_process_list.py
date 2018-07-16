@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""InnoGames Monitoring Plugins - check_process_list.py
+"""InnoGames Monitoring Plugins - "Processlist" Check
 
 This is a monitoring check that calls the "ps" binary, and parses
 the results.  It is compatible with BSD and GNU "ps", though they
@@ -16,7 +16,7 @@ Some examples are:
     --critical 'user != root'
     --warning 'cputime/min > 00:00:40'
 
-Copyright (c) 2017, InnoGames GmbH
+Copyright (c) 2017 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal

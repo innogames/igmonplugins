@@ -1,15 +1,14 @@
 #!/usr/bin/env python
-#
-# InnoGames Monitoring Plugins - check_postgres_pgbouncer_requests.py
-#
-# This script checks the requests per second on the connection pooler of
-# postgresql called pgbouncer. It raises a warning state if
-# a reasonable threshold is reached.
-# Values for the database to be monitored, the used port of pgbouncer and
-# the warning and critical thresholds can be specified using parameters.
-#
-# Copyright (c) 2018, InnoGames GmbH
-#
+"""InnoGames Monitoring Plugins - PgBouncer Requests Check
+
+This script checks the requests per second on the connection pooler of
+postgresql called pgbouncer.  It raises a warning state if
+a reasonable threshold is reached.  Values for the database to be monitored,
+the used port of pgbouncer and the warning and critical thresholds can be
+specified using parameters.
+
+Copyright (c) 2018 InnoGames GmbH
+"""
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -27,7 +26,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-#
 
 import subprocess
 

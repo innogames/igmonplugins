@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-"""InnoGames Monitoring Plugins - check_mysql_table_status.py
+"""InnoGames Monitoring Plugins - MySQL Table Status Check
 
 Modes are used to check different values of the tables.  Multiple
 vales can be given comma separated to modes and limits.  K for 10**3,
 M for 10**6, G for 10**9, T for 10**12 units can be used for limits.
 % is also accepted as a unit for limits of auto_increment.
 
-Copyright (c) 2013, Tart Internet Teknolojileri Ticaret AS
-Copyright (c) 2017, InnoGames GmbH
+Copyright (c) 2013 Tart Internet Teknolojileri Ticaret AS
+Copyright (c) 2017 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
