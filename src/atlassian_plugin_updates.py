@@ -31,23 +31,13 @@
 # THE SOFTWARE.
 #
 
-
-# Needed modules which are imported below
-#
-# For OAuth authentication, lines 202-203
-# pycrypto, pip install pycrypto
-# requests_oauthlib, pip install requests requests_oauthlib
-#
-
-from __future__ import print_function
-
-import json
 from argparse import ArgumentParser
 
 import grequests
 import requests
 from requests.auth import HTTPBasicAuth
 from requests.utils import quote
+# XXX: Some optional modules are imported in get_oauth1session().
 
 ATLASSIAN_MARKETPLACE_BASE_URL = 'https://marketplace.atlassian.com'
 

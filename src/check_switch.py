@@ -25,20 +25,21 @@
 # THE SOFTWARE.
 
 from argparse import ArgumentParser
-from pysnmp import proto, error
-from pysnmp.entity.rfc3413.oneliner import cmdgen
 from pysnmp.entity.rfc3413.oneliner.cmdgen import (
+    CommandGenerator,
     CommunityData,
+    UdpTransportTarget,
     UsmUserData,
-    usmHMACSHAAuthProtocol,
     usmAesCfb128Protocol,
     usmDESPrivProtocol,
+    usmHMACSHAAuthProtocol,
 )
+from pysnmp.proto.rfc1902 import Integer, Counter32, Counter64
 import re
 import sys
 
 # Predefine some variables, it makes this program run a bit faster.
-cmd_gen = cmdgen.CommandGenerator()
+cmd_gen = CommandGenerator()
 
 OIDS = {
     'if_index': '1.3.6.1.2.1.2.2.1.1',  # Index of all ports.
@@ -71,17 +72,8 @@ class SwitchException(Exception):
 
 def main():
     args = parse_args()
-    try:
-        snmp = get_snmp_connection(args)
-    except error.PySnmpError as e:
-        print(e, file=sys.stderr)
-        return -1
-
-    try:
-        model = get_switch_model(snmp)
-    except SwitchException as e:
-        print(e, file=sys.stderr)
-        return 3
+    snmp = get_snmp_connection(args)
+    model = get_switch_model(snmp)
 
     if not model:
         return -1
@@ -156,7 +148,7 @@ def get_snmp_connection(args):
             privProtocol=priv_proto,
         )
 
-    transport_target = cmdgen.UdpTransportTarget((args.switch, 161))
+    transport_target = UdpTransportTarget((args.switch, 161))
 
     return {
         'auth_data': auth_data,
@@ -211,11 +203,7 @@ def get_snmp_table(snmp, OID):
 def convert_snmp_type(varBinds):
     """ Convert SNMP data types to something more convenient: int or str """
     val = varBinds[0][1]
-    if type(val) in [
-        proto.rfc1902.Integer,
-        proto.rfc1902.Counter32,
-        proto.rfc1902.Counter64,
-    ]:
+    if type(val) in (Integer, Counter32, Counter64):
         return int(val)
     return str(val)
 

@@ -37,20 +37,11 @@
 # THE SOFTWARE.
 #
 
-# Needed modules which are imported below
-#
-# For OAuth authentication, lines 175-176
-# pycrypto, pip install pycrypto
-# requests_oauthlib, pip install requests requests_oauthlib
-#
-# For Two Factor Authentication, line 185
-# pyotp, pip install pyotp
-#
-
 from argparse import ArgumentParser, RawTextHelpFormatter
 
 from requests import request, RequestException
 from requests.auth import HTTPBasicAuth, AuthBase
+# XXX: Some optional modules are imported in get_oauth1session().
 
 
 def parse_args():

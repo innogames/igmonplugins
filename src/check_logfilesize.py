@@ -9,8 +9,8 @@ Copyright (c) 2018, InnoGames GmbH
 
 import os
 import sys
-import subprocess
 import argparse
+
 
 def parse_cmd_args():
 

@@ -23,7 +23,10 @@
 # THE SOFTWARE.
 #
 
-import socket, sys, argparse
+import socket
+import sys
+import argparse
+
 
 parser = argparse.ArgumentParser(description='Check free memory on all numa nodes')
 parser.add_argument('-w', dest='warning',  type=int, required=True, help="Warning if less than given amount of MiB is free on any node.")

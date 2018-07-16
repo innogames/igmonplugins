@@ -23,9 +23,9 @@
 # THE SOFTWARE.
 #
 
-import os
 from mysql.connector import connect
 import optparse
+
 
 parser = optparse.OptionParser()
 parser.add_option('-w', '--warning', help='Warning limit of seconds behind master', dest='WARN_SEC_BEHIND_MASTER', action='store', type='int', default=60)

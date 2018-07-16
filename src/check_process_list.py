@@ -36,8 +36,6 @@ Copyright (c) 2017, InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from __future__ import print_function
-
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import defaultdict
 from datetime import datetime, timedelta

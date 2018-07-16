@@ -31,21 +31,12 @@
 # THE SOFTWARE.
 #
 
-
-# Needed modules which are imported below
-#
-# For OAuth authentication, lines 150-151
-# pycrypto, pip install pycrypto
-# requests_oauthlib, pip install requests requests_oauthlib
-#
-
-from __future__ import print_function
-
 import json
 from argparse import ArgumentParser
 
 import requests
 from requests.auth import HTTPBasicAuth
+# XXX: Some optional modules are imported in get_oauth1session().
 
 
 def parse_args():

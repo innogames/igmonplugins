@@ -23,7 +23,10 @@
 # THE SOFTWARE.
 #
 
-import socket, sys, argparse
+import socket
+import sys
+import argparse
+
 
 parser = argparse.ArgumentParser(description='Check haproxy lbpool up and running')
 parser.add_argument('-i', '--ignore_warnings', dest='ignore_warnings', action='store_true', default=False, help="Ignore if some hosts under LBpool are down")

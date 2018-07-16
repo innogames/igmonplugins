@@ -25,11 +25,9 @@
 # THE SOFTWARE.
 #
 
-from __future__ import print_function
 from argparse import ArgumentParser
 from subprocess import check_output, CalledProcessError, STDOUT
-import sys
-
+from sys import exit
 
 # Translate human-readable names to sysctl
 MEMORY_TYPES = {
@@ -197,4 +195,4 @@ class DataValue(object):
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    exit(main())

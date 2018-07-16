@@ -26,7 +26,6 @@
 # THE SOFTWARE.
 #
 
-import os
 import memcache
 import time
 

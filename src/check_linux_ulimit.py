@@ -26,11 +26,9 @@
 # THE SOFTWARE.
 #
 
-from __future__ import print_function
-
+import argparse
 import os
 import sys
-import argparse
 
 
 class ExitCodes:

@@ -23,7 +23,6 @@
 # THE SOFTWARE.
 #
 
-
 import sys
 import subprocess
 import shlex
