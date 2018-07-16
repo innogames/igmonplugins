@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+#!/usr/bin/env python
 """InnoGames Monitoring Plugins - check_json.py
 
 This Python Nagios check can validate and compare arbitrary JSON.
