@@ -17,16 +17,16 @@ from subprocess import Popen, PIPE
 
 
 racadm_commands = {
-    'dell_sel':           'getsel -o',
-    'dell_active_errors': 'getactiveerrors',
-    'dell_redundancy':    'getredundancymode',
-    'dell_fans':          'getfanreqinfo',
-    'dell_sensors':       'getsensorinfo',
+    'sel':           'getsel -o',
+    'active_errors': 'getactiveerrors',
+    'redundancy':    'getredundancymode',
+    'fans':          'getfanreqinfo',
+    'sensors':       'getsensorinfo',
 }
 
 ipmi_commands = {
-    'ipmi_sel':     'sel elist',
-    'ipmi_sensors': 'sdr list',
+    'sel':     'sel elist',
+    'sensors': 'sdr list',
 }
 
 
@@ -38,40 +38,39 @@ class NagiosCodes:
 
 
 def parse_args():
-    """Parse arguments
-
-    Returns the values in a dict.
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '-H',
-        dest='host',
-        required=True,
+        '--host',
+        default='localhost',
         help='Hostname or IP of DRAC/CMC to scan.',
     )
     parser.add_argument(
-        '-c',
-        dest='command',
+        '--command',
         required=True,
+        choices=list(racadm_commands) + ['ipmi_' + c for c in ipmi_commands],
         help='Command to run via idracadm.',
     )
     parser.add_argument(
-        '-U',
-        dest='user',
+        '--user',
         default='nagios',
         help='IPMI/DRAC username',
     )
     parser.add_argument(
-        '-P',
-        dest='password',
+        '--password',
         help='IPMI/DRAC password',
     )
 
-    return vars(parser.parse_args())
+    return parser.parse_args()
 
 
-def main(command, host, user, password):
-    ret, out, timeout = check_hardware(host, user, password, command)
+def main():
+    args = parse_args()
+    func = check_hardware
+    command = args.command
+    if command.startswith('ipmi_'):
+        func = check_ipmi
+        command = command[len('ipmi_'):]
+    ret, out, timeout = func(args.host, args.user, args.password, command)
     print(out)
     sys.exit(ret)
 
@@ -81,85 +80,42 @@ def check_hardware(host, user, password, command):
 
     Returns a tuple (nagios status code, nagios message, if it was timeout).
     """
-    out = None
-    if command in racadm_commands:
+    try:
+        res = idrac_command(host, user, password, racadm_commands[command])
+    except OSError:
+        out = (NagiosCodes.unknown, 'UNKNOWN: unable to run racadm.')
+    else:
         try:
-            res = idrac_command(host, user, password, racadm_commands[command])
-        except OSError:
-            out = (NagiosCodes.unknown, 'UNKNOWN: unable to run racadm.')
-        else:
-            try:
-                if len(res):
-                    if res[0].find('Invalid subcommand specified.') != -1:
-                        return (
-                            NagiosCodes.unknown,
-                            'UNKNOWN: Invalid subcommand specified to DRAC/CMC.',
-                            False,
-                        )
-                    if (
-                        res[0].find('Unable to connect to RAC at specified IP address') != -1 or
-                        res[0].find('Unable to login to RAC using the specified address') != -1
-                    ):
-                        return (
-                            NagiosCodes.warning,
-                            'WARNING: Unable to connect to RAC!',
-                            False,
-                        )
-                if command == 'dell_active_errors':
-                    out = check_getactiveerrors(res)
-                elif command == 'dell_fans':
-                    out = check_fans(res)
-                elif command == 'dell_redundancy':
-                    out = check_redundancy(res)
-                elif command == 'dell_sensors':
-                    out = check_sensors(res)
-                elif command == 'dell_sel':
-                    out = check_racadm_sel(host, user, password, res)
-                else:
-                    out = (
-                        NagiosCodes.unknown,
-                        'UNKNOWN: Invalid subcommand specified to check.',
-                    )
-            except Exception:
-                out = (
-                    NagiosCodes.unknown,
-                    'UNKNOWN: Caught exception while parsing results.\n' +
-                    traceback.format_exc(),
-                )
-        return (out[0], out[1], False)
-
-    if command in ipmi_commands:
-        try:
-            res = ipmi_command(host, user, password, ipmi_commands[command])
-        except OSError:
-            return (
-                NagiosCodes.unknown, 'UNKNOWN: unable to run ipmitool.', False
-            )
-        for r1 in res:
-            for r2 in r1:
-                if r2.find('Insufficient privilege level') != -1:
+            if len(res):
+                if res[0].find('Invalid subcommand specified.') != -1:
                     return (
-                        NagiosCodes.ok,
-                        'Ignoring check on this device because of wrong '
-                        'privileges: {}'.format(r2),
+                        NagiosCodes.unknown,
+                        'UNKNOWN: Invalid subcommand specified to DRAC/CMC.',
                         False,
                     )
                 if (
-                    r2.find('Invalid user name') != -1 or
-                    r2.find('command failed') != -1
+                    res[0].find('Unable to connect to RAC at specified IP address') != -1 or
+                    res[0].find('Unable to login to RAC using the specified address') != -1
                 ):
-                    return NagiosCodes.unknown, '{}'.format(r2), False
-                if r2.find('Unable to establish IPMI') != -1:
-                    return NagiosCodes.unknown, '{}'.format(r2), True
-        try:
-            if command == 'ipmi_sel':
-                out = check_ipmi_sel(res)
-            elif command == 'ipmi_sensors':
-                out = check_ipmi_sensors(res)
+                    return (
+                        NagiosCodes.warning,
+                        'WARNING: Unable to connect to RAC!',
+                        False,
+                    )
+            if command == 'active_errors':
+                out = check_getactiveerrors(res)
+            elif command == 'fans':
+                out = check_fans(res)
+            elif command == 'redundancy':
+                out = check_redundancy(res)
+            elif command == 'sensors':
+                out = check_sensors(res)
+            elif command == 'sel':
+                out = check_racadm_sel(host, user, password, res)
             else:
                 out = (
                     NagiosCodes.unknown,
-                    'UNKNOWN: Invalid subcommand specified to check.'
+                    'UNKNOWN: Invalid subcommand specified to check.',
                 )
         except Exception:
             out = (
@@ -167,13 +123,57 @@ def check_hardware(host, user, password, command):
                 'UNKNOWN: Caught exception while parsing results.\n' +
                 traceback.format_exc(),
             )
-        return out[0], out[1], False
 
-    return (
-        NagiosCodes.unknown,
-        'UNKNOWN: Invalid subcommand specified to check.',
-        False,
-    )
+    return out[0], out[1], False
+
+
+def check_ipmi(host, user, password, command):
+    """Run the IPMI checks
+
+    Returns a tuple (nagios status code, nagios message, if it was timeout).
+    """
+    try:
+        res = ipmi_command(host, user, password, ipmi_commands[command])
+    except OSError:
+        return (
+            NagiosCodes.unknown, 'UNKNOWN: unable to run ipmitool.', False
+        )
+
+    for r1 in res:
+        for r2 in r1:
+            if r2.find('Insufficient privilege level') != -1:
+                return (
+                    NagiosCodes.ok,
+                    'Ignoring check on this device because of wrong '
+                    'privileges: {}'.format(r2),
+                    False,
+                )
+            if (
+                r2.find('Invalid user name') != -1 or
+                r2.find('command failed') != -1
+            ):
+                return NagiosCodes.unknown, '{}'.format(r2), False
+            if r2.find('Unable to establish IPMI') != -1:
+                return NagiosCodes.unknown, '{}'.format(r2), True
+
+    try:
+        if command == 'sel':
+            out = check_ipmi_sel(res)
+        elif command == 'sensors':
+            out = check_ipmi_sensors(res)
+        else:
+            out = (
+                NagiosCodes.unknown,
+                'UNKNOWN: Invalid subcommand specified to check.'
+            )
+    except Exception:
+        out = (
+            NagiosCodes.unknown,
+            'UNKNOWN: Caught exception while parsing results.\n' +
+            traceback.format_exc(),
+        )
+
+    return out[0], out[1], False
 
 
 def check_getactiveerrors(res):
@@ -380,4 +380,4 @@ def ipmi_command(host, user, password, command):
 
 
 if __name__ == '__main__':
-    main(**parse_args())
+    main()
