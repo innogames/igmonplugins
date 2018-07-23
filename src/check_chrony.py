@@ -72,7 +72,7 @@ def main():
         proc = check_output(
             [chrony, '-n', 'sources'],
             stderr=STDOUT,
-        )
+        ).decode()
     except OSError as e:
         print('UNKNOWN: can\'t read Chrony status: {}'.format(e))
         return ExitCodes.unknown
