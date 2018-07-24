@@ -196,11 +196,11 @@ def compare_pools(pools, testtool, send):
                         separator
                         )
     if send:
-        for monitor in ('af', 'aw'):
+        for monitor in ('af-monitor.admin', 'aw-monitor'):
             nsca = subprocess.Popen(
                 [
                     '/usr/local/sbin/send_nsca',
-                    '-H', '{}-monitor.ig.local.'.format(monitor),
+                    '-H', '{}.ig.local.'.format(monitor),
                     '-to', '20',
                     '-c', '/usr/local/etc/nagios/send_nsca.cfg',
                 ],
