@@ -93,14 +93,16 @@ def main(args):
     application = 'jira'
     build_number = fetch_server_info(base_url, auth)['buildNumber']
 
-    responses = zip(
-        plugins,
-        grequests.map(get_fetch_plugin_versions_request(
+    marketplace_requests = [
+        get_fetch_plugin_versions_request(
             ATLASSIAN_MARKETPLACE_BASE_URL, plugin['key'],
-            {'afterVersion': plugin['version'],
-             'application': application, 'applicationBuild': build_number})
-                      for plugin in plugins)
-    )
+            {'afterVersion': plugin['version'], 'application': application,
+             'applicationBuild': build_number}
+        )
+        for plugin in plugins
+    ]
+    responses = zip(plugins, grequests.map(marketplace_requests))
+
     updates = [
         (plugin, response.json())
         for plugin, response in responses
