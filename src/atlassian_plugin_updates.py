@@ -49,7 +49,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 from requests.utils import quote
 
-ATLASSIAN_MARKETPLACE_BASE_URL = 'https://marketplace.atlassian.com/'
+ATLASSIAN_MARKETPLACE_BASE_URL = 'https://marketplace.atlassian.com'
 
 
 def parse_args():
