@@ -88,7 +88,7 @@ def parse_args():
 
 def login(host, user, password):
     conn = pexpect.spawn(
-        'ssh {}@{}'.format(user, host),
+        'ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 {}@{}'.format(user, host),
         timeout=5
     )
 
