@@ -348,7 +348,7 @@ def check_ipmi_sensors(res):
 
 def idrac_command(host, user, password, command):
     """Execute IDRAC command"""
-    command = '/bin/idracadm -r {0} -u {1} -p {2} {3} '.format(
+    command = '/opt/dell/srvadmin/bin/idracadm7 -r {0} -u {1} -p {2} {3} '.format(
         host, user, password, command
     )
     command = shlex.split(command)
