@@ -163,6 +163,9 @@ class Database:
             self.processes = self.execute('SHOW PROCESSLIST')
             # We need to sort the entries to let the check() function stop
             # searching early.
+            for process in self.processes:
+                if process['time'] is None:
+                    process['time'] == -float('inf')
             self.processes.sort(key=itemgetter('time'), reverse=True)
         return self.processes
 
