@@ -165,7 +165,7 @@ class Database:
             # searching early.
             for process in self.processes:
                 if process['time'] is None:
-                    process['time'] == -float('inf')
+                    process['time'] = -float('inf')
             self.processes.sort(key=itemgetter('time'), reverse=True)
         return self.processes
 
