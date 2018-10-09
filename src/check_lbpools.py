@@ -127,7 +127,10 @@ def compare_pools(pools, testtool, send):
                 num_nodes = testtool[testtool_name]['nodes_alive']
                 in_testtool = True
 
-            optimal_nodes = len(pool_v['nodes'])
+            optimal_nodes = 0
+            for value in pool_v['nodes'].values():
+                if not value['downtime']:
+                    optimal_nodes += 1
 
             # We want to keep "None" text as it is nicer
             # than 0 for human perception.
