@@ -77,6 +77,7 @@ def main(command, hostname, service, target, prefix):
             send_process = subprocess.Popen(
                 ('send_nsca', '-H', host),
                 stdin=subprocess.PIPE,
+                env={"PATH": "$PATH:/usr/sbin"},
             )
             send_process.communicate(result)
     else:
