@@ -315,7 +315,10 @@ def check_ports(snmp, model, args):
                 if port_oper_states[port_index] == 2:
                     if port_aliases[port_index].startswith('DOWN_'):
                         local_exit = 0
-                        msg = 'OK: Named port is down and marked as DOWN_'
+                        msg = (
+                                'OK: Named port is enabled but down '
+                                'and marked as DOWN_'
+                        )
                     else:
                         local_exit = 2
                         msg = 'CRITICAL: Named port is down!'
@@ -330,8 +333,12 @@ def check_ports(snmp, model, args):
                     local_exit = 0
                     msg = 'OK: Port unnamed, disabled and down.'
             else:
-                local_exit = 2
-                msg = 'WARNING: Named port is disabled.'
+                if port_aliases[port_index].startswith('DOWN_'):
+                    local_exit = 0
+                    msg = 'OK: Named port is disabled and marked as DOWN_'
+                else:
+                    local_exit = 2
+                    msg = 'WARNING: Named port is disabled.'
 
         if local_exit > 0 or args.verbose:
             outmsg += (
