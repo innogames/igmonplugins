@@ -24,21 +24,24 @@ Copyright (c) 2017 InnoGames GmbH
 import json
 import subprocess
 
+WARNING = 0.70
+CRITICAL = 0.85
+
 def main():
-    global default_state_limit
     debug = False
     lbpools = get_lbpools()
-    pfctl_output, err = subprocess.Popen(['sudo', 'pfctl', '-vsr'], stdout=subprocess.PIPE,
+    pfctl_output, err = subprocess.Popen(['sudo', 'pfctl', '-vsr'],
+                                         stdout=subprocess.PIPE,
                                          stderr=subprocess.PIPE).communicate()
 
     # The default limit set in pf.conf, fetch it from what is loaded in pf
-    default_limits, err1 = subprocess.Popen(['sudo', 'pfctl', '-sm'], stdout=subprocess.PIPE,
-                                                stderr=subprocess.PIPE).communicate()
-    default_limits_lines = default_limits.splitlines()
-    for default_limit_line in default_limits_lines:
-        if "states        hard limit" in default_limit_line:
-            default_state_limit = int(default_limit_line.split(' ')[-1])
-            print("state_limit is {}".format(default_state_limit))
+    default_limits, err1 = subprocess.Popen(['sudo', 'pfctl', '-sm'],
+                                            stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE).communicate()
+    # Hard state limit is always printed in first line
+    default_state_limit_line = default_limits.splitlines()[0]
+    if "states" in default_state_limit_line:
+        default_state_limit = int(default_state_limit_line.split(' ')[-1])
 
     send_msg = ''
     if debug:
@@ -46,11 +49,16 @@ def main():
     else:
         separator = "\27"
 
-    #for nagios_service in ['states_lbpool_4', 'states_lbpool_6']:
-    for nagios_service in ['check_lbpool', 'check_lbpool_6']:
-        send_msg += check_states(lbpools, pfctl_output, nagios_service, separator)
+    for nagios_service in ['states_lbpool_4', 'states_lbpool_6']:
+        send_msg += check_states(lbpools,
+                                 pfctl_output,
+                                 default_state_limit,
+                                 nagios_service,
+                                 separator,
+                                 )
 
     if debug:
+        print("default_state_limit is {}\n".format(default_state_limit))
         print(send_msg)
     else:
         for monitor in ('af-monitor.admin.ig.local', 'aw-monitor.ig.local'):
@@ -71,7 +79,8 @@ def get_lbpools():
     return lbpools_obj
 
 def get_allow_from_acls(lb_params):
-    # The allow_from field of every lbpool has a number of acl objects with each having its own dedicated state_limit
+    # The allow_from field of every lbpool has a number of acl objects with each
+    #  having its own dedicated state_limit
     ret = {}
     for acl_name, acl_params in lb_params['allow_from'].items():
         ret.update({
@@ -80,10 +89,15 @@ def get_allow_from_acls(lb_params):
     return ret
 
 
-def compare_states(line, output_pfctl_list, index, lb_params, allow_from, nagios_service, exit_code):
+def compare_states(line, output_pfctl_list, index, lb_params,
+                   default_state_limit, allow_from, exit_code
+                   ):
+    local_exit_code = 0
     cur_protocol = line.split(":")[-2]
     cur_port = line.split(':')[-1].strip('"')
-    cur_states = int(output_pfctl_list[(index + 1)].strip('[] ', ).split('States:')[1].strip())
+    cur_states = int(output_pfctl_list[(index + 1)].strip('[] ', ).split(
+        'States:')[1].strip()
+                     )
     status = ''
     ret = ' '
     if cur_protocol in line:
@@ -93,54 +107,80 @@ def compare_states(line, output_pfctl_list, index, lb_params, allow_from, nagios
             else:
                 state_limit = default_state_limit
 
-            if cur_states >= (state_limit * 0.85):
-                exit_code = 2
-            elif cur_states >= (state_limit * 0.70):
-                if exit_code != 2: # If already critical, then don't make it warning by other ports/acls
-                    exit_code = 1
-            elif cur_states < int(state_limit * 0.70):
-                if exit_code not in [1, 2]: # If already critical/warning, then don't make it ok by other ports/acls
-                    exit_code = 0
+            if cur_states >= (state_limit * CRITICAL):
+                local_exit_code = 2
+            elif cur_states >= (state_limit * WARNING):
+                local_exit_code = 1
 
-            # To bind the ports to their acl objects, every port has state_limit set separately for each
-            # acl object in allow_from attribute
+            # To bind the ports to their acl objects, every port has state_limit
+            #  set separately for each acl object in allow_from attribute
             for acl_name, acl_object_id in allow_from.items():
                 if acl_object_id in line:
-                    status += '{} Port {} = {}, '.format(acl_name, cur_port, cur_states)
+                    status += '{} Port {} = {}, '.format(acl_name, cur_port,
+                                                         cur_states
+                                                         )
+
             ret += status
-    return ret, exit_code
+            if exit_code < local_exit_code:
+                exit_code = local_exit_code
+
+    return ret, exit_code, state_limit
 
 
-def check_states(lbpools, pfctl_output, nagios_service, separator):
+def check_states(lbpools, pfctl_output, default_state_limit, nagios_service,
+                 separator
+                 ):
     msg = ''
     for lbpool, lb_params in lbpools.items():
         status_changed = False
         statuses = 'States: '
-        exit_code = None
+        exit_code = 0
         output_pfctl_list = pfctl_output.splitlines()
         allow_from = get_allow_from_acls(lb_params)
 
         for line in output_pfctl_list:
             indx = output_pfctl_list.index(line)
             if lb_params['pf_name'] in line and not ('dns' in line):
-                if 'inet6' not in line and nagios_service == 'check_lbpool':
-                    cmp_out, exit_code = compare_states(line, output_pfctl_list, indx, lb_params, allow_from, nagios_service, exit_code)
+                if 'inet6' not in line and nagios_service == 'states_lbpool_4':
+                    cmp_out, exit_code, state_limit = compare_states(
+                        line,
+                        output_pfctl_list,
+                        indx,
+                        lb_params,
+                        default_state_limit,
+                        allow_from,
+                        exit_code
+                    )
                     statuses += cmp_out
                     status_changed = True
-                elif 'inet6' in line and nagios_service == 'check_lbpool_6':
-                    cmp_out, exit_code = compare_states(line, output_pfctl_list, indx, lb_params, allow_from, nagios_service, exit_code)
+                elif 'inet6' in line and nagios_service == 'states_lbpool_6':
+                    cmp_out, exit_code, state_limit = compare_states(
+                        line,
+                        output_pfctl_list,
+                        indx,
+                        lb_params,
+                        default_state_limit,
+                        allow_from,
+                        exit_code
+                    )
                     statuses += cmp_out
                     status_changed = True
 
         if status_changed:
             if exit_code == 0:
-                statuses = 'Everything is ok | {}'.format(statuses)
+                statuses = 'Everything is OK | {}'.format(statuses)
             elif exit_code == 1:
-                statuses = 'State limit is reaching 85% | {}'.format(statuses)
+                statuses = 'Number of states are above {}% of {} states_limit |' \
+                           ' {}'.format((WARNING * 100), state_limit, statuses
+                                        )
             elif exit_code == 2:
-                statuses = 'State limit has reached 85% | {}'.format(statuses)
+                statuses = 'Number of states are above {}% of {} states_limit |' \
+                           ' {}'.format((CRITICAL * 100), state_limit, statuses
+                                        )
 
-            msg += ('{}\t{}\t{}\t{}{}').format(lbpool, nagios_service, exit_code, statuses, separator)
+            msg += ('{}\t{}\t{}\t{}{}').format(lbpool, nagios_service, exit_code,
+                                               statuses, separator
+                                               )
     return msg
 
 if __name__ == "__main__":
