@@ -27,14 +27,28 @@ from datetime import datetime, timedelta
 from dateutil.tz import tzutc
 from dateutil.parser import parse
 from sys import exit
-
+import ssl
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         'pemfile',
         type=FileType('rb'),
         help='The file to be checked pem encoded cert certificate',
+        nargs='?'
+    )
+    group.add_argument(
+        '--pemfile',
+        dest='pemfile_n',
+        type=FileType('rb'),
+        help='The file to be checked pem encoded cert certificate',
+    )
+    group.add_argument(
+        '--remote',
+        dest='remote',
+        action='store',
+        help='Query a remote host rather than a local file',
     )
     parser.add_argument(
         '--warning',
@@ -52,7 +66,15 @@ def parse_args():
         '--name',
         dest='names',
         action='append',
-        help='Check if the certificate is valid for a given names'
+        help='Check if the certificate is valid for a given names' +
+                'if --remote is used only up to 1 name is supported'
+    )
+    parser.add_argument(
+        '--port',
+        dest='port',
+        action='store',
+        default=443,
+        help='Provide a port to connect to to --remote'
     )
 
     return parser.parse_args()
@@ -61,7 +83,23 @@ def parse_args():
 def main():
     args = parse_args()
 
-    cert = crypto.load_certificate(crypto.FILETYPE_PEM, args.pemfile.read())
+    # Workaround needed to keep compatibility with positional and
+    # named arguments
+    if args.pemfile_n: args.pemfile = args.pemfile_n
+    
+    if args.pemfile:
+        cert = crypto.load_certificate(
+                crypto.FILETYPE_PEM, args.pemfile.read())
+    elif args.remote:
+        hostname = args.remote
+        if args.names: hostname = args.names[0]
+        conn = ssl.create_connection((args.remote, args.port))
+        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        sock = context.wrap_socket(conn, server_hostname=hostname)
+        cert = crypto.load_certificate(
+                crypto.FILETYPE_PEM, 
+                ssl.DER_cert_to_PEM_cert(sock.getpeercert(True)))
+    
     not_after = parse(cert.get_notAfter().decode('utf-8'))
     remaining = not_after - datetime.now(tzutc())
     exit_code = 0
