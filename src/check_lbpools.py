@@ -199,7 +199,6 @@ def compare_pools(pools, testtool, send):
                 [
                     '/usr/local/sbin/send_nsca',
                     '-H', '{}.ig.local.'.format(monitor),
-                    '-to', '20',
                     '-c', '/usr/local/etc/nagios/send_nsca.cfg',
                 ],
                 stdin=subprocess.PIPE,
