@@ -131,7 +131,8 @@ class SystemdUnit:
                 self.unit_properties.ActiveState,
             )
         )
-        if critical:
+        self.__critical = critical
+        if self.__critical:
             self._crit_level = Codes.CRITICAL
             self._warn_level = Codes.WARNING
         else:
@@ -149,13 +150,13 @@ class SystemdUnit:
         if self.unit_properties.ActiveState == 'failed':
             return (self._crit_level, 'the unit is failed')
         if self.unit_type == 'timer':
-            return self._check_timer(timer_warn, timer_crit, critical)
+            return self._check_timer(timer_warn, timer_crit)
         elif self.unit_type == 'service':
-            return self._check_service(critical, timer)
+            return self._check_service(timer)
         else:
             return (Codes.OK, '')
 
-    def _check_service(self, critical, timer=False):
+    def _check_service(self, timer=False):
         '''
         Detects problems for a service unit
         '''
@@ -188,7 +189,7 @@ class SystemdUnit:
                 )
         return (Codes.OK, '')
 
-    def _check_timer(self, timer_warn, timer_crit, critical):
+    def _check_timer(self, timer_warn, timer_crit):
         '''
         Detects problems for a timer unit
         '''
@@ -241,7 +242,9 @@ class SystemdUnit:
         service_unit = SystemdUnit(
             systemd_manager.get_unit(self.type_properties.Unit)
         )
-        return service_unit.check(timer_warn, timer_crit, critical, timer=True)
+        return service_unit.check(
+            timer_warn, timer_crit, self.__critical, timer=True
+        )
 
 
 def parse_args():
