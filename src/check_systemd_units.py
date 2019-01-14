@@ -16,7 +16,7 @@
 #
 
 from argparse import ArgumentParser
-from enum import Enum
+from enum import IntEnum
 from sys import exit
 
 from datetime import datetime
@@ -38,7 +38,7 @@ now = time()
 systemd_manager = Manager()
 
 
-class Codes(int, Enum):
+class Codes(IntEnum):
     OK = 0
     WARNING = 1
     CRITICAL = 2
@@ -228,14 +228,16 @@ class SystemdUnit:
             if (timer_warn <= since_last_execute / min_interval < timer_crit):
                 return (
                     self._warn_level,
-                    'the timer wasn\'t launch since {}, look at {}'.format(
+                    'the timer hasn\'t been launched since {}, look at {}'
+                    .format(
                         last_execute, self.type_properties.Unit
                     )
                 )
             if (timer_crit <= since_last_execute / min_interval):
                 return (
                     self._crit_level,
-                    'the timer wasn\'t launch since {}, look at {}'.format(
+                    'the timer hasn\'t been launched since {}, look at {}'
+                    .format(
                         last_execute, self.type_properties.Unit
                     )
                 )
