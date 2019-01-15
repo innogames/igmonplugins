@@ -35,6 +35,7 @@ Copyright (c) 2018 InnoGames GmbH
 
 from argparse import ArgumentParser
 from sys import exit
+from time import time
 
 from systemd_dbus.exceptions import SystemdError
 from systemd_dbus.manager import Manager
@@ -47,10 +48,12 @@ class Problem:
 
     # From more important to less
     failed = 0
-    not_loaded_but_not_inactive = 1
-    inactive = 2
-    exited = 3
-    not_loaded = 4
+    timer_missed_critical = 1
+    not_loaded_but_not_inactive = 2
+    inactive = 3
+    timer_missed_warning = 4
+    exited = 5
+    not_loaded = 6
 
 
 class SystemdUnit:
@@ -81,7 +84,7 @@ class SystemdUnit:
             return pattern[:-len('@*')] == name.split('@', 1)[0]
         return pattern == name
 
-    def check(self):
+    def check(self, args):
         """Detect problems of a unit"""
         if self.properties.LoadState != 'loaded':
             if self.properties.ActiveState != 'inactive':
@@ -91,15 +94,51 @@ class SystemdUnit:
         if self.properties.ActiveState == 'failed':
             return Problem.failed
 
-        if self.unit_type == 'service':
-            if self.specific_properties.ExecMainStatus != 0:
-                return Problem.failed
+        if self.unit_type == 'timer':
+            return self._check_timer(args)
+        elif self.unit_type == 'service':
+            return self._check_service()
 
+    def _check_service(self):
+        if self.specific_properties.ExecMainStatus != 0:
+            return Problem.failed
+
+        if self.specific_properties.Type != 'oneshot':
+            if self.properties.ActiveState != 'active':
+                return Problem.inactive
+
+            if self.properties.SubState == 'exited':
+                return Problem.exited
+
+    def _check_timer(self, args):
         if self.properties.ActiveState != 'active':
             return Problem.inactive
 
-        if self.properties.SubState == 'exited':
-            return Problem.exited
+        intervals = self.specific_properties.TimersMonotonic
+        if not intervals:
+            return
+
+        now = time()
+        second_devider = 1000000
+        checked_intervals = [
+            'OnUnitActiveUSec',
+            'OnUnitInactiveUSec',
+        ]
+
+        min_interval_sec = min(
+            interval[1] for interval in intervals
+            if interval[0] in checked_intervals
+        ) / second_devider
+
+        sec_since_executed = (
+            now - (self.specific_properties.LastTriggerUSec / second_devider)
+        )
+
+        runs_missed = sec_since_executed / min_interval_sec
+        if runs_missed > args.timer_missed_critical:
+            return Problem.timer_missed_critical
+        if runs_missed > args.timer_missed_warning:
+            return Problem.timer_missed_warning
 
 
 def parse_args():
@@ -129,7 +168,22 @@ def parse_args():
         default=[],
         help='unit to ignore',
     )
-
+    parser.add_argument(
+        '-w',
+        action='store',
+        dest='timer_missed_warning',
+        default=3,
+        type=float,
+        help='warning threshold of timer runs missed',
+    )
+    parser.add_argument(
+        '-c',
+        action='store',
+        dest='timer_missed_critical',
+        default=7,
+        type=float,
+        help='critical threshold of timer runs missed',
+    )
     return parser.parse_args()
 
 
@@ -164,7 +218,7 @@ def process(units, args):
     # First, all critical units
     critical_timer_service_ids = []
     for unit in filter_out(units, args.critical_units):
-        problem = unit.check()
+        problem = unit.check(args)
         if problem:
             if problem < Problem.inactive:
                 criticals.append((problem, unit))
@@ -176,14 +230,14 @@ def process(units, args):
 
     # Then, the services of the critical timer units
     for unit in filter_out(units, critical_timer_service_ids):
-        problem = unit.check()
+        problem = unit.check(args)
         if problem and problem != Problem.inactive:
             criticals.append((problem, unit))
 
     # Last, the others
     if args.check_all:
         for unit in units:
-            problem = unit.check()
+            problem = unit.check(args)
             if problem and problem < Problem.inactive:
                 warnings.append((problem, unit))
 
