@@ -172,8 +172,9 @@ def decode_san(san_string):
 
     for item in san_string.split(','):
         key, value = item.split(':', 1)
-        if key.strip() == 'DNS':
-            yield value
+        key = key.strip().lower()
+        if key == 'dns' or key == 'ip address':
+            yield value.strip()
 
 
 if __name__ == '__main__':
