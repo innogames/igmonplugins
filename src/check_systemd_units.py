@@ -16,7 +16,6 @@
 #
 
 from argparse import ArgumentParser
-from enum import IntEnum
 from sys import exit
 
 from datetime import datetime
@@ -38,7 +37,7 @@ now = time()
 systemd_manager = Manager()
 
 
-class Codes(IntEnum):
+class Codes(object):
     OK = 0
     WARNING = 1
     CRITICAL = 2
@@ -176,7 +175,7 @@ class SystemdUnit:
             ):
                 return (
                     self._crit_level,
-                    'the service is misconfigured,'
+                    'the timer-related service is misconfigured,'
                     ' set RemainAfterExit=false')
         else:
             if self.unit_properties.ActiveState != 'active':
@@ -195,7 +194,6 @@ class SystemdUnit:
         '''
         checked_intervals = [
             'OnUnitActiveUSec',
-            'OnActiveUSec',
             'OnUnitInactiveUSec',
         ]
         # Microseconds to seconds
@@ -207,10 +205,9 @@ class SystemdUnit:
         intervals = self.type_properties.TimersMonotonic
         logger.debug('Monotonic timers are: {}'.format(intervals))
         if intervals:
-            min_interval = min(
-                p[1] / m for p in intervals
-                if p[0] in checked_intervals
-            )
+            # We could check only monotonic triggers for regular execution
+            min_interval = min(p[1] for p in intervals
+                               if p[0] in checked_intervals) / m
             since_last_execute = (
                 now - self.type_properties.LastTriggerUSec / m
             )
