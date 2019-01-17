@@ -208,21 +208,21 @@ class SystemdUnit:
             # We could check only monotonic triggers for regular execution
             min_interval = min(p[1] for p in intervals
                                if p[0] in checked_intervals) / m
-            since_last_execute = (
+            inactivity = (
                 now - self.type_properties.LastTriggerUSec / m
             )
             last_execute = datetime.fromtimestamp(
                 self.type_properties.LastTriggerUSec / m
             )
             logger.info(
-                '{}: min_interval={}, since_last_execute={}, last_execute={}, '
+                '{}: min_interval={}, inactivity={}, last_execute={}, '
                 'since_last_execute / min_interval={}'
                 .format(
-                    str(self), min_interval, since_last_execute, last_execute,
-                    since_last_execute / min_interval
+                    str(self), min_interval, inactivity, last_execute,
+                    inactivity / min_interval
                 )
             )
-            if (timer_warn <= since_last_execute / min_interval < timer_crit):
+            if (timer_warn <= inactivity / min_interval < timer_crit):
                 return (
                     self._warn_level,
                     'the timer hasn\'t been launched since {}, look at {}'
@@ -230,7 +230,7 @@ class SystemdUnit:
                         last_execute, self.type_properties.Unit
                     )
                 )
-            if (timer_crit <= since_last_execute / min_interval):
+            if (timer_crit <= inactivity / min_interval):
                 return (
                     self._crit_level,
                     'the timer hasn\'t been launched since {}, look at {}'
@@ -287,7 +287,7 @@ def parse_args():
         dest='timer_warn',
         default=3,
         type=float,
-        help='warning threshold of timer (inactivity/max_monotonic_interval)',
+        help='warning threshold of timer (inactivity/min_monotonic_interval)',
     )
     parser.add_argument(
         '-c',
@@ -295,7 +295,7 @@ def parse_args():
         dest='timer_crit',
         default=7,
         type=float,
-        help='critical threshold of timer (inactivity/max_monotonic_interval)',
+        help='critical threshold of timer (inactivity/min_monotonic_interval)',
     )
     parser.add_argument(
         '-l',
