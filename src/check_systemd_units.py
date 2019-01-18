@@ -135,7 +135,11 @@ class SystemdUnit:
         '''
         # Most probably, oneshot is related to some timer
         if self.type_properties.Type == 'oneshot':
-            if self.type_properties.ExecMainStatus != 0:
+            # See the man 5 systemd.service for ExecMainStatus and
+            # SuccessExitStatus
+            # All currently running services have ExecMainStatus=0
+            if (self.type_properties.ExecMainStatus not in
+                    self.type_properties.SuccessExitStatus[0] + [0]):
                 return (
                     self._warn_level,
                     'the service exited with {} code'.format(
