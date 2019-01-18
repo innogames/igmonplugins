@@ -19,12 +19,11 @@ from argparse import ArgumentParser
 from sys import exit
 
 from datetime import datetime
-from dbus import INTROSPECTABLE_IFACE, Interface
 from systemd_dbus.exceptions import SystemdError
 from systemd_dbus.manager import Manager
-from systemd_dbus.property import Property
+from systemd_dbus.service import Service
+from systemd_dbus.timer import Timer
 from time import time
-from xml.etree import ElementTree
 
 import logging
 
@@ -54,29 +53,9 @@ class SystemdUnit:
     """
 
     def __init__(self, unit):
-        self.__properties_interface = unit._Unit__properties_interface
-        dbus_proxy = unit._Unit__proxy
-        # Interface for getting info about other interfaces
-        # We use it to avoid unnecessary subscribtions to interfaces
-        # in systemd_dbus
-        introspect_interface = Interface(dbus_proxy,
-                                         INTROSPECTABLE_IFACE)
-        # Get the type specific interface for the unit
-        iface_tree = ElementTree.fromstring(introspect_interface.Introspect())
-        self.__type_interface = [
-            i.attrib['name']
-            for i in iface_tree
-            if i.attrib['name'].startswith('org.freedesktop.systemd1.') and
-            i.attrib['name'] != 'org.freedesktop.systemd1.Unit'
-        ][0]
-        logger.debug(
-            'Type interface for unit {} is: {}'.format(
-                str(self),
-                self.__type_interface
-            )
-        )
-        # It's the most straight way to get a unit type
-        self.unit_type = self.__type_interface.split('.')[-1].lower()
+        self.__unit_properties = unit.properties
+        self.unit_type = unit.properties.Id.rsplit('.', 1)[-1]
+        self.__dbus_path = unit._Unit__proxy.__dbus_object_path__
         logger.debug('Unit type is: {}'.format(self.unit_type))
 
     def __str__(self):
@@ -90,14 +69,6 @@ class SystemdUnit:
         '''
         Returns properties from unit interface
         '''
-        if hasattr(self, '__unit_properties'):
-            return self.__unit_properties
-        properties = self.__properties_interface.GetAll(
-             'org.freedesktop.systemd1.Unit'
-        )
-        self.__unit_properties = Property()
-        for k, v in properties.items():
-            setattr(self.__unit_properties, k, v)
         return self.__unit_properties
 
     @property
@@ -107,12 +78,12 @@ class SystemdUnit:
         '''
         if hasattr(self, '__type_properties'):
             return self.__type_properties
-        properties = self.__properties_interface.GetAll(
-            self.__type_interface
-        )
-        self.__type_properties = Property()
-        for k, v in properties.items():
-            setattr(self.__type_properties, k, v)
+        if self.unit_type == 'service':
+            cls = Service
+        elif self.unit_type == 'timer':
+            cls = Timer
+
+        self.__type_properties = cls(self.__dbus_path).properties
         return self.__type_properties
 
     def match(self, pattern):
@@ -171,6 +142,15 @@ class SystemdUnit:
                         self.type_properties.ExecMainStatus
                     )
                 )
+            if (
+                self.unit_properties.ActiveState == 'active'
+                and self.unit_properties.SubState == 'exited'
+                and timer
+            ):
+                return (
+                    self._crit_level,
+                    'the timer-related service is misconfigured,'
+                    ' set RemainAfterExit=false')
         else:
             if self.unit_properties.ActiveState != 'active':
                 return (
@@ -232,6 +212,9 @@ class SystemdUnit:
                         last_execute, self.type_properties.Unit
                     )
                 )
+        # This might check the service unit twice. We need to do that as we
+        # would not check timer service unit at all if the user didn't
+        # explicilty ask for them via arguments.
         service_unit = SystemdUnit(
             systemd_manager.get_unit(self.type_properties.Unit)
         )
@@ -266,7 +249,8 @@ def parse_args():
         action='append',
         dest='critical_units',
         default=[],
-        help='unit to return critical when failed',
+        help='unit to return critical when failed. Checking timers implicitly'
+             ' checks the timer\'s service too',
     )
     parser.add_argument(
         '-i',
@@ -294,6 +278,7 @@ def parse_args():
     parser.add_argument(
         '-l',
         action='store',
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'FATAL'],
         dest='log_level',
         default=logging.CRITICAL,
         help='set the script verbosity',
