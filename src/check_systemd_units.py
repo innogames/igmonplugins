@@ -22,6 +22,7 @@ from datetime import datetime
 from dbus import INTROSPECTABLE_IFACE, Interface
 from systemd_dbus.exceptions import SystemdError
 from systemd_dbus.manager import Manager
+from systemd_dbus.property import Property
 from time import time
 from xml.etree import ElementTree
 
@@ -44,21 +45,22 @@ class Codes(object):
     UNKNOWN = 3
 
 
-class Property(object):
-    pass
-
-
 class SystemdUnit:
-    """Systemd unit"""
+    """
+    Systemd unit
+
+    This class implements wraper around systemd_dbus.unit.Unit with supporting
+    of every unit type
+    """
 
     def __init__(self, unit):
         self.__properties_interface = unit._Unit__properties_interface
         dbus_proxy = unit._Unit__proxy
         # Interface for getting info about other interfaces
-        introspect_interface = Interface(
-            dbus_proxy,
-            INTROSPECTABLE_IFACE
-        )
+        # We use it to avoid unnecessary subscribtions to interfaces
+        # in systemd_dbus
+        introspect_interface = Interface(dbus_proxy,
+                                         INTROSPECTABLE_IFACE)
         # Get the type specific interface for the unit
         iface_tree = ElementTree.fromstring(introspect_interface.Introspect())
         self.__type_interface = [
@@ -73,6 +75,7 @@ class SystemdUnit:
                 self.__type_interface
             )
         )
+        # It's the most straight way to get a unit type
         self.unit_type = self.__type_interface.split('.')[-1].lower()
         logger.debug('Unit type is: {}'.format(self.unit_type))
 
@@ -138,22 +141,22 @@ class SystemdUnit:
             self._crit_level = Codes.WARNING
             self._warn_level = Codes.OK
 
+        if (self.unit_properties.LoadState != 'loaded' and
+                self.unit_properties.ActiveState != 'inactive'):
+            return (
+                Codes.CRITICAL,
+                'the unit is not loaded but not inactive'
+            )
         if self.unit_properties.LoadState != 'loaded':
-            if self.unit_properties.ActiveState != 'inactive':
-                return (
-                    Codes.CRITICAL,
-                    'the unit is not loaded but not inactive'
-                )
             return (self._warn_level, 'the unit is not loaded')
-
         if self.unit_properties.ActiveState == 'failed':
             return (self._crit_level, 'the unit is failed')
         if self.unit_type == 'timer':
             return self._check_timer(timer_warn, timer_crit)
-        elif self.unit_type == 'service':
+        if self.unit_type == 'service':
             return self._check_service(timer)
-        else:
-            return (Codes.OK, '')
+
+        return (Codes.OK, '')
 
     def _check_service(self, timer=False):
         '''
@@ -168,15 +171,6 @@ class SystemdUnit:
                         self.type_properties.ExecMainStatus
                     )
                 )
-            if (
-                self.unit_properties.ActiveState == 'active'
-                and self.unit_properties.SubState == 'exited'
-                and timer
-            ):
-                return (
-                    self._crit_level,
-                    'the timer-related service is misconfigured,'
-                    ' set RemainAfterExit=false')
         else:
             if self.unit_properties.ActiveState != 'active':
                 return (
@@ -222,17 +216,17 @@ class SystemdUnit:
                     inactivity / min_interval
                 )
             )
-            if (timer_warn <= inactivity / min_interval < timer_crit):
+            if timer_crit <= inactivity / min_interval:
                 return (
-                    self._warn_level,
+                    self._crit_level,
                     'the timer hasn\'t been launched since {}, look at {}'
                     .format(
                         last_execute, self.type_properties.Unit
                     )
                 )
-            if (timer_crit <= inactivity / min_interval):
+            if timer_warn <= inactivity / min_interval:
                 return (
-                    self._crit_level,
+                    self._warn_level,
                     'the timer hasn\'t been launched since {}, look at {}'
                     .format(
                         last_execute, self.type_properties.Unit
