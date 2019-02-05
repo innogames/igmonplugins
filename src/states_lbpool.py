@@ -44,7 +44,7 @@ def main():
     states_dict = pfctl_parser(pfctl_output)
 
     # Hard state limit is always printed in first line
-    default_state_limit_line = default_limits.splitlines()[0]
+    default_state_limit_line = default_limits.decode().splitlines()[0]
 
     if "states" in default_state_limit_line:
         default_state_limit = int(default_state_limit_line.split(' ')[-1])
@@ -75,12 +75,16 @@ def main():
                 ],
                 stdin=subprocess.PIPE,
             )
-            nsca.communicate(send_msg)
+            nsca.communicate(send_msg.encode())
 
 
 def get_lbpools():
-    with open("/etc/iglb/lbpools.json") as jsonfile:
-        lbpools_obj = json.load(jsonfile)
+    try:
+        with open("/etc/iglb/lbpools.json") as jsonfile:
+            lbpools_obj = json.load(jsonfile)
+    except IOError:
+        with open('/etc/iglb/iglb.json') as jsonfile:
+            lbpools_obj = json.load(jsonfile)['lbpools']
     return lbpools_obj
 
 
@@ -97,7 +101,8 @@ def check_states(lbpools, states_dict, default_state_limit, nagios_service,
         else:
             state_limit = default_state_limit
         lbpool = lb_params['pf_name']
-        if lb_params['default_snat'] != True:
+        if lb_params['default_snat'] != True and lb_params['protocol_port'] and \
+                lb_params['nodes']:
             if int(states_dict[lbpool]['cur_states']) >= (
                         state_limit * CRITICAL):
                 local_exit_code = 2
@@ -122,14 +127,14 @@ def check_states(lbpools, states_dict, default_state_limit, nagios_service,
     return msg
 
 
-def pfctl_parser(output_pfctl):
+def pfctl_parser(pfctl_output):
     """
     For parsing pf output and create a dict containing the current max-states
     for every lbpool object
     """
 
     states_dict = {}
-    output_pfctl_list = output_pfctl.splitlines()
+    output_pfctl_list = pfctl_output.decode().splitlines()
     for line in output_pfctl_list:
         indx = output_pfctl_list.index(line)
         if "round-robin" in line:
