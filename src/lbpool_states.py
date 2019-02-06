@@ -21,15 +21,32 @@ Copyright (c) 2019 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from argparse import ArgumentParser
 import json, subprocess, re
+from os.path import exists
+from sys import exit
 
-WARNING = 0.70
-CRITICAL = 0.85
-nagios_service = 'states_lbpool'
+nagios_service = 'lbpool_states'
 
 
 def main():
-    debug = False
+    parser = ArgumentParser()
+    parser.add_argument(
+        '-H', dest='nsca_srv', nargs='+',
+        help='Nagios servers to report the results to'
+    )
+
+    parser.add_argument(
+        '-W', dest='warning', type=int, default=70,
+        help='Warning threshold in percentage, default 70'
+    )
+
+    parser.add_argument(
+        '-C', dest='critical', type=int, default=85,
+        help='Critical threshold in percentage, default 85'
+    )
+
+    args = parser.parse_args()
     lbpools = get_lbpools()
 
     pfctl_output, err = subprocess.Popen(['sudo', 'pfctl', '-vsr'],
@@ -44,12 +61,13 @@ def main():
     states_dict = pfctl_parser(pfctl_output)
 
     # Hard state limit is always printed in first line
-    default_state_limit_line = default_limits.decode().splitlines()[0]
+    default_limit_lines = default_limits.decode().splitlines()
+    for line in default_limit_lines:
+        if "states" in line:
+            default_state_limit = int(
+                ''.join(default_limit_lines).split(' ')[-1])
 
-    if "states" in default_state_limit_line:
-        default_state_limit = int(default_state_limit_line.split(' ')[-1])
-
-    if debug:
+    if not args.nsca_srv:
         separator = "\n"
     else:
         separator = "\27"
@@ -59,13 +77,15 @@ def main():
                             default_state_limit,
                             nagios_service,
                             separator,
+                            args.warning,
+                            args.critical
                             )
 
-    if debug:
-        print("default_state_limit is {}\n".format(default_state_limit))
+    if not args.nsca_srv:
+        print("\ndefault_state_limit is {}\n".format(default_state_limit))
         print(send_msg)
     else:
-        for monitor in ('af-monitor.admin.ig.local', 'aw-monitor.ig.local'):
+        for monitor in args.nsca_srv:
             nsca = subprocess.Popen(
                 [
                     '/usr/local/sbin/send_nsca',
@@ -79,46 +99,63 @@ def main():
 
 
 def get_lbpools():
-    try:
-        with open("/etc/iglb/lbpools.json") as jsonfile:
-            lbpools_obj = json.load(jsonfile)
-    except IOError:
-        with open('/etc/iglb/iglb.json') as jsonfile:
-            lbpools_obj = json.load(jsonfile)['lbpools']
+    # For allowing both old hwlb style configs and new ones
+    configs = ['/etc/iglb/lbpools.json', '/etc/iglb/iglb.json']
+    for config in configs:
+        if exists(config):
+            try:
+                with open(config) as jsonfile:
+                    dict = json.load(jsonfile)
+                    if 'lbpools' in dict.keys():
+                        lbpools_obj = dict['lbpools']
+                    else:
+                        lbpools_obj = dict
+            except IOError:
+                print("Config file not found")
+                exit(1)
+
     return lbpools_obj
 
 
 def check_states(lbpools, states_dict, default_state_limit, nagios_service,
-                 separator):
+                 separator, warn, crit):
     """ Compare the current states of each lbpool and compute results """
 
     msg = ''
     for lbname, lb_params in lbpools.items():
-        statuses = 'States: '
+        statuses = ''
         exit_code = local_exit_code = 0
         if lb_params['state_limit']:
             state_limit = int(lb_params['state_limit'])
         else:
             state_limit = default_state_limit
         lbpool = lb_params['pf_name']
-        if lb_params['default_snat'] != True and lb_params['protocol_port'] and \
-                lb_params['nodes']:
-            if int(states_dict[lbpool]['cur_states']) >= (
-                        state_limit * CRITICAL):
+        critical = state_limit * (crit * 0.01)
+        warning = state_limit * (warn * 0.01)
+
+        if not lb_params['default_snat'] and \
+                lb_params['protocol_port'] and \
+                lb_params['nodes'] and \
+                lbpool in states_dict:  # To exclude those lbpools which have just
+                                        # been made but not deployed
+
+            cur_states = int(states_dict[lbpool]['cur_states'])
+
+            if cur_states >= critical:
                 local_exit_code = 2
-                statuses += 'Consumed states are above {}% of {} states limit'.format(
-                    (CRITICAL * 100), state_limit)
-            elif int(states_dict[lbpool]['cur_states']) >= (
-                        state_limit * WARNING):
+                statuses += 'Used states are above {}% of states limit | Total states limit: {}, Current states: {}'.format(
+                    crit, state_limit, cur_states)
+            elif cur_states >= warning:
                 local_exit_code = 1
-                statuses += 'Consumed states are above {}% of {} states limit'.format(
-                    (WARNING * 100), state_limit)
+                statuses += 'Number of states are above {}% of states limit | Total states limit: {}, Current states: {}'.format(
+                    warn, state_limit, cur_states)
 
             if exit_code < local_exit_code:
                 exit_code = local_exit_code
 
             if exit_code == 0:
-                statuses = 'Everything is OK'
+                statuses = 'Used states are below the thresholds | Total states limit: {}, Current states: {}'.format(
+                    state_limit, cur_states)
 
             msg += ('{}\t{}\t{}\t{}{}').format(lbname, nagios_service,
                                                exit_code,
