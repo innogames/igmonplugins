@@ -25,6 +25,7 @@ from argparse import ArgumentParser
 import imp, json, subprocess, re
 from os.path import exists
 from sys import exit
+from send_grafsy import send_grafsy
 
 nagios_service = 'lbpool_states'
 
@@ -52,13 +53,22 @@ def main():
                                             stdout=subprocess.PIPE,
                                             stderr=subprocess.PIPE).communicate()
 
+    # Hard state limit is always printed in first line
+    default_limit_lines = default_limits.decode().splitlines()
+
+    for line in default_limit_lines:
+        if "states" in line:
+            default_state_limit = int(
+                ''.join(default_limit_lines).split(' ')[-1])
+
+
     states_dict = pfctl_parser(pfctl_output)
 
     lbpools = get_lbpools()
 
     lbpools = {
         lbname: {
-            'state_limit': lb_params['state_limit'],
+            'state_limit': int(lb_params['state_limit']) if lb_params['state_limit'] else default_state_limit,
             'cur_states': int(states_dict[lb_params['pf_name']]['cur_states']),
             'carp_master': carp_status['carp_master'],
         }
@@ -70,14 +80,6 @@ def main():
             lb_params['vlan'] == int(vlan)
             )
         }
-
-    # Hard state limit is always printed in first line
-    default_limit_lines = default_limits.decode().splitlines()
-
-    for line in default_limit_lines:
-        if "states" in line:
-            default_state_limit = int(
-                ''.join(default_limit_lines).split(' ')[-1])
 
     if not args.nsca_srv:
         separator = "\n"
@@ -111,6 +113,19 @@ def main():
             )
             nsca.communicate(send_msg.encode())
 
+    lbpools_igcollect = {
+        'network' :
+            {
+                'lbpools' : {
+                    lbname : lb_params
+                    for lbname, lb_params in lbpools.items()
+                    if lb_params.pop('carp_master')
+                }
+            }
+    }
+
+    # Send metrics to grafana via helper
+    send_grafsy(lbpools_igcollect)
 
 def args_parse():
     parser = ArgumentParser()
@@ -218,11 +233,7 @@ def check_states(lbpools, states_dict, default_state_limit, nagios_service,
         if lb_params['carp_master']:
             statuses = ''
             exit_code = local_exit_code = 0
-
-            if lb_params['state_limit']:
-                state_limit = int(lb_params['state_limit'])
-            else:
-                state_limit = default_state_limit
+            state_limit = lb_params['state_limit']
             critical = state_limit * (crit * 0.01)
             warning = state_limit * (warn * 0.01)
             cur_states = int(lb_params['cur_states'])
@@ -280,7 +291,6 @@ def pfctl_parser(pfctl_output):
                 })
 
     return states_dict
-
 
 if __name__ == "__main__":
     main()
