@@ -24,7 +24,6 @@ Copyright (c) 2019 InnoGames GmbH
 from argparse import ArgumentParser
 import imp, json, subprocess, re
 from os.path import exists
-from sys import exit
 from send_grafsy import send_grafsy
 
 nagios_service = 'lbpool_states'
@@ -58,9 +57,7 @@ def main():
 
     for line in default_limit_lines:
         if "states" in line:
-            default_state_limit = int(
-                ''.join(default_limit_lines).split(' ')[-1])
-
+            default_state_limit = int((line).split(' ')[-1])
 
     states_dict = pfctl_parser(pfctl_output)
 
@@ -68,7 +65,11 @@ def main():
 
     lbpools = {
         lbname: {
-            'state_limit': int(lb_params['state_limit']) if lb_params['state_limit'] else default_state_limit,
+            'state_limit': (
+                int(lb_params['state_limit'])
+                if lb_params['state_limit']
+                else default_state_limit
+            ),
             'cur_states': int(states_dict[lb_params['pf_name']]['cur_states']),
             'carp_master': carp_status['carp_master'],
         }
@@ -114,18 +115,18 @@ def main():
             nsca.communicate(send_msg.encode())
 
     lbpools_igcollect = {
-        'network' :
-            {
-                'lbpools' : {
-                    lbname : lb_params
-                    for lbname, lb_params in lbpools.items()
-                    if lb_params.pop('carp_master')
-                }
+        'network': {
+            'lbpools': {
+                lbname: lb_params
+                for lbname, lb_params in lbpools.items()
+                if lb_params['carp_master'] and lb_params.pop('carp_master')
             }
+        }
     }
 
     # Send metrics to grafana via helper
     send_grafsy(lbpools_igcollect)
+
 
 def args_parse():
     parser = ArgumentParser()
@@ -291,6 +292,7 @@ def pfctl_parser(pfctl_output):
                 })
 
     return states_dict
+
 
 if __name__ == "__main__":
     main()

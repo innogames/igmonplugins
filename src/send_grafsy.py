@@ -1,5 +1,5 @@
-"""InnoGames Monitoring Plugins - Helper for sending metrics to grafana and
-passive checks to nagios
+"""InnoGames Monitoring Plugins - Helper for sending metrics to graphite via
+ grafsy and passive checks to nagios
 
 Copyright (c) 2019 InnoGames GmbH
 """
@@ -25,6 +25,7 @@ from time import time
 from os import rename, chmod
 import tempfile
 
+
 def send_grafsy(data):
     "For sending the results to grafana"
 
@@ -34,19 +35,22 @@ def send_grafsy(data):
         template = k1.replace('.', '_') + '.'
         msg += fetch(template, v1)
 
-
     with tempfile.NamedTemporaryFile('w', delete=False) as tmpfile:
         grafsy_file = "/tmp/grafsy/" + tmpfile.name.split('tmp/')[1]
         tmpfile.write(msg)
         tmpfile.flush()
         tmpname = tmpfile.name
         chmod(tmpname, 0o644)
-        rename(tmpname, grafsy_file)
+
+    # We want Atomicity for writing files to grafsy
+    rename(tmpname, grafsy_file)
 
     return None
 
 
 def fetch(template, v1):
+    """ Transform the data in a format that carbon expects and return """
+
     msg2 = ''
     if isinstance(v1, dict):
         for k2, v2 in v1.items():
@@ -55,6 +59,7 @@ def fetch(template, v1):
             ret = fetch(prefix, v2)
             msg2 += ret
     else:
-        msg2 = template.rstrip('.') + ' ' + str(v1) + ' ' + (str(int(time()))) + '\n'
+        msg2 = template.rstrip('.') + ' ' + str(v1) + ' ' + (
+            str(int(time()))) + '\n'
 
     return msg2
