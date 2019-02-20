@@ -22,9 +22,10 @@ Copyright (c) 2019 InnoGames GmbH
 # THE SOFTWARE.
 
 from argparse import ArgumentParser
-import imp, json, subprocess, re
+import imp, json, subprocess, re, tempfile
 from os.path import exists
-from sys import exit
+from datetime import datetime
+from os import rename, chmod
 
 nagios_service = 'lbpool_states'
 
@@ -52,13 +53,24 @@ def main():
                                             stdout=subprocess.PIPE,
                                             stderr=subprocess.PIPE).communicate()
 
+    # Hard state limit is always printed in first line
+    default_limit_lines = default_limits.decode().splitlines()
+
+    for line in default_limit_lines:
+        if "states" in line:
+            default_state_limit = int(line.split(' ')[-1])
+
     states_dict = pfctl_parser(pfctl_output)
 
     lbpools = get_lbpools()
 
     lbpools = {
         lbname: {
-            'state_limit': lb_params['state_limit'],
+            'state_limit': (
+                int(lb_params['state_limit'])
+                if lb_params['state_limit']
+                else default_state_limit
+            ),
             'cur_states': int(states_dict[lb_params['pf_name']]['cur_states']),
             'carp_master': carp_status['carp_master'],
         }
@@ -70,14 +82,6 @@ def main():
             lb_params['vlan'] == int(vlan)
             )
         }
-
-    # Hard state limit is always printed in first line
-    default_limit_lines = default_limits.decode().splitlines()
-
-    for line in default_limit_lines:
-        if "states" in line:
-            default_state_limit = int(
-                ''.join(default_limit_lines).split(' ')[-1])
 
     if not args.nsca_srv:
         separator = "\n"
@@ -93,10 +97,23 @@ def main():
                             args.critical
                             )
 
+    lbpools_igcollect = {
+        'network': {
+            'lbpools': {
+                lbname: lb_params
+                for lbname, lb_params in lbpools.items()
+                if lb_params['carp_master'] and lb_params.pop('carp_master')
+                }
+        }
+    }
+
+    # Send metrics to grafana via helper
+    grafana_msg = send_grafsy(lbpools_igcollect)
+
     if not args.nsca_srv:
         print(send_msg)
-        print("\ndefault_state_limit is {}\n".format(default_state_limit))
-
+        print("default_state_limit is {}\n".format(default_state_limit))
+        print(grafana_msg)
     else:
 
         for monitor in args.nsca_srv:
@@ -218,11 +235,7 @@ def check_states(lbpools, states_dict, default_state_limit, nagios_service,
         if lb_params['carp_master']:
             statuses = ''
             exit_code = local_exit_code = 0
-
-            if lb_params['state_limit']:
-                state_limit = int(lb_params['state_limit'])
-            else:
-                state_limit = default_state_limit
+            state_limit = lb_params['state_limit']
             critical = state_limit * (crit * 0.01)
             warning = state_limit * (warn * 0.01)
             cur_states = int(lb_params['cur_states'])
@@ -280,6 +293,44 @@ def pfctl_parser(pfctl_output):
                 })
 
     return states_dict
+
+
+def send_grafsy(data):
+    "For sending the results to grafana"
+
+    output = ''
+
+    for k1, v1 in data.items():
+        template = k1.replace('.', '_') + '.'
+        output += carbonize(template, v1)
+
+    with tempfile.NamedTemporaryFile('w', delete=False) as tmpfile:
+        tmpfile.write(output)
+        tmpname = tmpfile.name
+        chmod(tmpname, 0o644)
+
+    grafsy_file = "/tmp/grafsy/" + tmpname.split('tmp/')[1]
+    # We want Atomicity for writing files to grafsy
+    rename(tmpname, grafsy_file)
+
+    return output
+
+
+def carbonize(template, v1):
+    """ Transform the data in a format that carbon expects and return """
+
+    data = ''
+    if isinstance(v1, dict):
+        for k2, v2 in v1.items():
+            prefix = template
+            prefix += k2.replace('.', '_') + '.'
+            ret = carbonize(prefix, v2)
+            data += ret
+    else:
+        data = template.rstrip('.') + ' ' + str(
+            v1) + ' ' + datetime.utcnow().strftime("%s") + '\n'
+
+    return data
 
 
 if __name__ == "__main__":
