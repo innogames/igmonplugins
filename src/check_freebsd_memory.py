@@ -105,18 +105,27 @@ def parse_args():
     return parser.parse_args()
 
 
+def sysctl(oid):
+    return check_output(
+        ['/sbin/sysctl', oid],
+        universal_newlines=True,
+        close_fds=False,
+    ).splitlines()
+
+
+def sysctl_line(oid):
+    for line in sysctl(oid):
+        return line.split(':')[1]
+
+
 def parse_memory_info():
     memory_info = {}
 
-    sysctl = check_output(['/sbin/sysctl', 'hw.physmem'], stderr=STDOUT)
-    memory_info['physmem'] = int(sysctl.split(':')[1])
-
+    memory_info['physmem'] = int(sysctl_line('hw.physmem'))
     # All other data is reported in pages
-    sysctl = check_output(['/sbin/sysctl', 'hw.pagesize'], stderr=STDOUT)
-    pagesize = int(sysctl.split(':')[1])
+    pagesize = int(sysctl_line('hw.pagesize'))
 
-    sysctl = check_output(['/sbin/sysctl', 'vm.stats.vm'], stderr=STDOUT)
-    memory_data = sysctl.splitlines()
+    memory_data = sysctl('vm.stats.vm')
 
     for line in memory_data:
         line = line.split(':')
