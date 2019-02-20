@@ -29,37 +29,36 @@ import tempfile
 def send_grafsy(data):
     "For sending the results to grafana"
 
-    msg = ''
+    output = ''
 
     for k1, v1 in data.items():
         template = k1.replace('.', '_') + '.'
-        msg += fetch(template, v1)
+        output += carbonize(template, v1)
 
     with tempfile.NamedTemporaryFile('w', delete=False) as tmpfile:
-        grafsy_file = "/tmp/grafsy/" + tmpfile.name.split('tmp/')[1]
-        tmpfile.write(msg)
-        tmpfile.flush()
+        tmpfile.write(output)
         tmpname = tmpfile.name
         chmod(tmpname, 0o644)
 
+    grafsy_file = "/tmp/grafsy/" + tmpfile.name.split('tmp/')[1]
     # We want Atomicity for writing files to grafsy
     rename(tmpname, grafsy_file)
 
-    return None
+    return output
 
 
-def fetch(template, v1):
+def carbonize(template, v1):
     """ Transform the data in a format that carbon expects and return """
 
-    msg2 = ''
+    data = ''
     if isinstance(v1, dict):
         for k2, v2 in v1.items():
             prefix = template
             prefix += k2.replace('.', '_') + '.'
-            ret = fetch(prefix, v2)
-            msg2 += ret
+            ret = carbonize(prefix, v2)
+            data += ret
     else:
-        msg2 = template.rstrip('.') + ' ' + str(v1) + ' ' + (
+        data = template.rstrip('.') + ' ' + str(v1) + ' ' + (
             str(int(time()))) + '\n'
 
-    return msg2
+    return data

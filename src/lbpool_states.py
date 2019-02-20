@@ -57,7 +57,7 @@ def main():
 
     for line in default_limit_lines:
         if "states" in line:
-            default_state_limit = int((line).split(' ')[-1])
+            default_state_limit = int(line.split(' ')[-1])
 
     states_dict = pfctl_parser(pfctl_output)
 
@@ -96,10 +96,23 @@ def main():
                             args.critical
                             )
 
+    lbpools_igcollect = {
+        'network': {
+            'lbpools': {
+                lbname: lb_params
+                for lbname, lb_params in lbpools.items()
+                if lb_params['carp_master'] and lb_params.pop('carp_master')
+                }
+        }
+    }
+
+    # Send metrics to grafana via helper
+    grafana_msg = send_grafsy(lbpools_igcollect)
+
     if not args.nsca_srv:
         print(send_msg)
-        print("\ndefault_state_limit is {}\n".format(default_state_limit))
-
+        print("default_state_limit is {}\n".format(default_state_limit))
+        print(grafana_msg)
     else:
 
         for monitor in args.nsca_srv:
@@ -113,20 +126,6 @@ def main():
                 stdin=subprocess.PIPE,
             )
             nsca.communicate(send_msg.encode())
-
-    lbpools_igcollect = {
-        'network': {
-            'lbpools': {
-                lbname: lb_params
-                for lbname, lb_params in lbpools.items()
-                if lb_params['carp_master'] and lb_params.pop('carp_master')
-            }
-        }
-    }
-
-    # Send metrics to grafana via helper
-    send_grafsy(lbpools_igcollect)
-
 
 def args_parse():
     parser = ArgumentParser()
