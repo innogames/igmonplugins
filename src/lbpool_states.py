@@ -22,9 +22,10 @@ Copyright (c) 2019 InnoGames GmbH
 # THE SOFTWARE.
 
 from argparse import ArgumentParser
-import imp, json, subprocess, re
+import imp, json, subprocess, re, tempfile
 from os.path import exists
-from send_grafsy import send_grafsy
+from time import time
+from os import rename, chmod
 
 nagios_service = 'lbpool_states'
 
@@ -291,6 +292,42 @@ def pfctl_parser(pfctl_output):
                 })
 
     return states_dict
+
+def send_grafsy(data):
+    "For sending the results to grafana"
+
+    output = ''
+
+    for k1, v1 in data.items():
+        template = k1.replace('.', '_') + '.'
+        output += carbonize(template, v1)
+
+    with tempfile.NamedTemporaryFile('w', delete=False) as tmpfile:
+        tmpfile.write(output)
+        tmpname = tmpfile.name
+        chmod(tmpname, 0o644)
+
+    grafsy_file = "/tmp/grafsy/" + tmpfile.name.split('tmp/')[1]
+    # We want Atomicity for writing files to grafsy
+    rename(tmpname, grafsy_file)
+
+    return output
+
+def carbonize(template, v1):
+    """ Transform the data in a format that carbon expects and return """
+
+    data = ''
+    if isinstance(v1, dict):
+        for k2, v2 in v1.items():
+            prefix = template
+            prefix += k2.replace('.', '_') + '.'
+            ret = carbonize(prefix, v2)
+            data += ret
+    else:
+        data = template.rstrip('.') + ' ' + str(v1) + ' ' + (
+            str(int(time()))) + '\n'
+
+    return data
 
 
 if __name__ == "__main__":
