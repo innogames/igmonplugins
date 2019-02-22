@@ -22,7 +22,7 @@ Copyright (c) 2019 InnoGames GmbH
 # THE SOFTWARE.
 
 
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE, STDOUT, DEVNULL
 from argparse import ArgumentParser
 
 import platform
@@ -204,6 +204,8 @@ def send_nsca(hosts, output):
                     '-c', '/etc/send_nsca.cfg',
                 ],
                 stdin=PIPE,
+                stdout=DEVNULL,
+                stderr=DEVNULL
             )
         nsca.communicate(output.encode())
         returncode = nsca.wait()
