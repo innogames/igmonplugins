@@ -101,7 +101,7 @@ def execute(cmd):
 def get_domain_list():
     domains = []
     hvname = platform.node()
-    r = re.compile(r'guest=\d+_([\w\-\.]+)')
+    r = re.compile(r'guest=(\d+_)?([\w\.\d-]+)')
     for proc in psutil.process_iter():
         if proc.username() != 'libvirt-qemu':
             continue
@@ -109,7 +109,7 @@ def get_domain_list():
         if vmname:
             domain = {
                 'pid': proc.pid,
-                'vmname': r.search(vmname).group(1),
+                'vmname': r.search(vmname).group(2),
                 'hvname': hvname
                 }
             domains.append(domain)
@@ -155,7 +155,7 @@ def build_nsca_output(domains):
                                     domain['hvname']
                                     ))
         elif domain['status'] == CheckResult.mismatch:
-            mismatch_doms.append(domain)
+            mismatch_doms.append(domain['vmname'])
             nsca_output += ('{}\tqemu_version\t{}\tWARNING - '
                             'QEMU domain version DOES NOT match HV {} version'
                             '. Domain: {} Hypervisor:{}\x17'
@@ -165,7 +165,7 @@ def build_nsca_output(domains):
                                     hypervisor_qemu_version
                                     ))
         elif domain['status'] == CheckResult.unknown:
-            unknown_doms.append(domain)
+            unknown_doms.append(domain['vmname'])
             nsca_output += ('{}\tqemu_version\t{}\tUNKNOWN - '
                             'QEMU domain version could not be determined on HV'
                             ' {}.'
@@ -181,14 +181,14 @@ def build_plugin_output(mismatch_doms, unknown_doms):
     # If version mismatches happened
     if mismatch_doms:
         return (ExitCodes.warning,
-                'QEMU version mismatch. Virtual machines {}'
-                ' do not match HV QEMU version.'
+                ('QEMU version mismatch. Virtual machines {}'
+                 ' do not match HV QEMU version.')
                 .format(', '.join(mismatch_doms))
                 )
     # If any machine couldn't have version retrieved
     elif unknown_doms:
-        return (ExitCodes.unknown, 'Error obtaining QEMU version. Could not '
-                'obtain QEMU version for virtual machines {}.'
+        return (ExitCodes.unknown, ('Error obtaining QEMU version. Could not '
+                'obtain QEMU version for virtual machines {}.')
                 .format(', '.join(unknown_doms))
                 )
     else:
