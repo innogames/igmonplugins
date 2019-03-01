@@ -29,8 +29,6 @@ import platform
 import re
 import psutil
 
-hypervisor_qemu_version = False
-
 
 def get_args():
     parser = ArgumentParser(
@@ -66,8 +64,8 @@ class CheckResult:
     unknown = 2
 
 
-class CheckException(Exception):
-    """Raised to exit with a valid nagios state"""
+class HVQEMUVersionException(Exception):
+    """Raised when Hypervisor QEMU version can't be retrieved"""
     pass
 
 
@@ -98,6 +96,16 @@ def execute(cmd):
     return content
 
 
+def parse_qemu_version(version):
+    r = re.compile(r'.*version\s([\d\.]+\([\w\d\.\s:\+-]+\)).*')
+    match = r.match(version)
+    # Return None if couldn't match string. Deal with None as couldn't 
+    # retrieve version.
+    if match is None:
+        return None
+    return match.group(1)
+
+
 def get_domain_list():
     domains = []
     hvname = platform.node()
@@ -117,32 +125,33 @@ def get_domain_list():
 
 
 def check_versions(domains):
+
     # Get QEMU on the hypervisor
-    hypervisor_qemu_version = execute(
+    result = execute(
         ['/usr/bin/qemu-system-x86_64', '-version']
         )
-    if not hypervisor_qemu_version:
-        return CheckResult.unknown, 'Could not retrieve QEMU version for '
-        'hypervisor {}.'.format(platform.node())
-
+    hypervisor_qemu_version = parse_qemu_version(result)
+    if hypervisor_qemu_version is None:
+        raise HVQEMUVersionException()
     for domain in domains:
-        domain['version'] = execute(
+        result = execute(
             ['/proc/{}/exe'.format(domain['pid']), '-version']
             )
-
+        version = parse_qemu_version(result)
         # QEMU version couldn't be obtained for domain
-        if not domain['version']:
+        if version is None:
             domain['status'] = CheckResult.unknown
-
+            continue
+        domain['version'] = version
         if domain['version'] == hypervisor_qemu_version:
             domain['status'] = CheckResult.match
         else:
             domain['status'] = CheckResult.mismatch
 
-    return domains
+    return hypervisor_qemu_version, domains
 
 
-def build_nsca_output(domains):
+def build_nsca_output(hypervisor_qemu_version, domains):
     nsca_output = ''
     mismatch_doms = []
     unknown_doms = []
@@ -158,7 +167,7 @@ def build_nsca_output(domains):
             mismatch_doms.append(domain['vmname'])
             nsca_output += ('{}\tqemu_version\t{}\tWARNING - '
                             'QEMU domain version DOES NOT match HV {} version'
-                            '. Domain: {} Hypervisor:{}\x17'
+                            '. Domain: {} Hypervisor: {}\x17'
                             .format(
                                     domain['vmname'], ExitCodes.warning,
                                     domain['hvname'], domain['version'],
@@ -222,17 +231,23 @@ def main():
     domains = get_domain_list()
 
     # Get back domains with version result
-    domains = check_versions(domains)
+    try:
+        hypervisor_qemu_version, domains = check_versions(domains)
+    except HVQEMUVersionException:
+        print_nagios_message(
+            ExitCodes.unknown, 'Could not retrieve hypervisor QEMU version'
+        )
+        exit(ExitCodes.unknown)
 
     # Build output
     nsca_output, mismatch_doms, unknown_doms \
-        = build_nsca_output(domains)
-
+        = build_nsca_output(hypervisor_qemu_version, domains)
     # Push NSCA results
     nsca = send_nsca(args.hosts, nsca_output)
     if not nsca:
         print_nagios_message(ExitCodes.critical,
                              'Error when pushing VM results with NSCA')
+        exit(ExitCodes.critical)
 
     # Generate plugin results for HV
     code, reason = build_plugin_output(
