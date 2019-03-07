@@ -28,12 +28,13 @@ from argparse import ArgumentParser
 import platform
 import re
 import psutil
+import apt_pkg
 
 
 def get_args():
     parser = ArgumentParser(
         description=(
-            'Check if QEMU version of domains matches the '
+            'Check if QEMU version of domains aren\'t newer than the '
             'version on the Hypervisor running them'
         )
     )
@@ -59,9 +60,10 @@ class ExitCodes:
 
 
 class CheckResult:
-    match = 0
-    mismatch = 1
-    unknown = 2
+    same = 0  # Same version
+    newer = 1  # Domain newer than HV
+    older = 2  # Domain older than HV
+    unknown = 3
 
 
 class HVQEMUVersionException(Exception):
@@ -99,7 +101,7 @@ def execute(cmd):
 def parse_qemu_version(version):
     r = re.compile(r'.*version\s([\d\.]+\([\w\d\.\s:\+-]+\)).*')
     match = r.match(version)
-    # Return None if couldn't match string. Deal with None as couldn't 
+    # Return None if couldn't match string. Deal with None as couldn't
     # retrieve version.
     if match is None:
         return None
@@ -119,103 +121,116 @@ def get_domain_list():
                 'pid': proc.pid,
                 'vmname': r.search(vmname).group(2),
                 'hvname': hvname
-                }
+            }
             domains.append(domain)
     return domains
 
 
 def check_versions(domains):
-
     # Get QEMU on the hypervisor
     result = execute(
         ['/usr/bin/qemu-system-x86_64', '-version']
-        )
+    )
     hypervisor_qemu_version = parse_qemu_version(result)
     if hypervisor_qemu_version is None:
         raise HVQEMUVersionException()
     for domain in domains:
         result = execute(
             ['/proc/{}/exe'.format(domain['pid']), '-version']
-            )
+        )
         version = parse_qemu_version(result)
         # QEMU version couldn't be obtained for domain
         if version is None:
             domain['status'] = CheckResult.unknown
             continue
         domain['version'] = version
-        if domain['version'] == hypervisor_qemu_version:
-            domain['status'] = CheckResult.match
+        vc = apt_pkg.version_compare(
+            domain['version'],
+            hypervisor_qemu_version
+        )
+        if vc > 0:
+            domain['status'] = CheckResult.newer
+        elif vc == 0:
+            domain['status'] = CheckResult.same
         else:
-            domain['status'] = CheckResult.mismatch
+            domain['status'] = CheckResult.older
 
     return hypervisor_qemu_version, domains
 
 
 def build_nsca_output(hypervisor_qemu_version, domains):
     nsca_output = ''
-    mismatch_doms = []
+    newer_doms = []
     unknown_doms = []
     for domain in domains:
-        if domain['status'] == CheckResult.match:
-            nsca_output += ('{}\tqemu_version\t{}\tOK - '
-                            'QEMU domain version matches HV {} version.\x17'
-                            .format(
-                                    domain['vmname'], ExitCodes.ok,
-                                    domain['hvname']
-                                    ))
-        elif domain['status'] == CheckResult.mismatch:
-            mismatch_doms.append(domain['vmname'])
-            nsca_output += ('{}\tqemu_version\t{}\tWARNING - '
-                            'QEMU domain version DOES NOT match HV {} version'
-                            '. Domain: {} Hypervisor: {}\x17'
-                            .format(
-                                    domain['vmname'], ExitCodes.warning,
-                                    domain['hvname'], domain['version'],
-                                    hypervisor_qemu_version
-                                    ))
-        elif domain['status'] == CheckResult.unknown:
+        if domain['status'] == CheckResult.unknown:
             unknown_doms.append(domain['vmname'])
-            nsca_output += ('{}\tqemu_version\t{}\tUNKNOWN - '
-                            'QEMU domain version could not be determined on HV'
-                            ' {}.'
-                            .format(
-                                    domain['vmname'], ExitCodes.unknown,
-                                    domain['hvname']
-                                    ))
-
-    return nsca_output, mismatch_doms, unknown_doms
-
-
-def build_plugin_output(mismatch_doms, unknown_doms):
-    # If version mismatches happened
-    if mismatch_doms:
-        return (ExitCodes.warning,
-                ('QEMU version mismatch. Virtual machines {}'
-                 ' do not match HV QEMU version.')
-                .format(', '.join(mismatch_doms))
+            nsca_output += (
+                '{}\tqemu_version\t{}\tUNKNOWN - '
+                'QEMU domain version could not be determined on HV'
+                ' {}.'
+                .format(
+                    domain['vmname'], ExitCodes.unknown,
+                    domain['hvname']
                 )
+            )
+        elif domain['status'] == CheckResult.newer:
+            newer_doms.append(domain['vmname'])
+            nsca_output += (
+                '{}\tqemu_version\t{}\tWARNING - '
+                'QEMU domain version is newer than HV {} version'
+                '. Domain: {} Hypervisor: {}\x17'
+                .format(
+                    domain['vmname'], ExitCodes.warning,
+                    domain['hvname'], domain['version'],
+                    hypervisor_qemu_version
+                )
+            )
+        else:
+            nsca_output += (
+                '{}\tqemu_version\t{}\tOK - '
+                'QEMU domain version is acceptable.\x17'
+                .format(
+                    domain['vmname'], ExitCodes.ok,
+                    domain['hvname']
+                )
+            )
+
+    return nsca_output, newer_doms, unknown_doms
+
+
+def build_plugin_output(newer_doms, unknown_doms):
+    # If version mismatches happened
+    if newer_doms:
+        return (ExitCodes.warning, (
+            'QEMU version mismatch. Virtual machines {}'
+            ' have a version newer than HV.')
+            .format(', '.join(newer_doms))
+        )
     # If any machine couldn't have version retrieved
     elif unknown_doms:
-        return (ExitCodes.unknown, ('Error obtaining QEMU version. Could not '
-                'obtain QEMU version for virtual machines {}.')
-                .format(', '.join(unknown_doms))
-                )
+        return (ExitCodes.unknown, (
+            'Error obtaining QEMU version. Could not '
+            'obtain QEMU version for virtual '
+            'machines {}.')
+            .format(', '.join(unknown_doms))
+        )
     else:
-        return ExitCodes.ok, 'All versions match.'
+        return ExitCodes.ok, 'All versions are acceptable.'
 
 
 def send_nsca(hosts, output):
     for monitor in hosts:
         nsca = Popen(
-                [
-                    '/usr/sbin/send_nsca',
-                    '-H', monitor,
-                    '-c', '/etc/send_nsca.cfg',
-                ],
-                stdin=PIPE,
-                stdout=DEVNULL,
-                stderr=DEVNULL
-            )
+            [
+                '/usr/sbin/send_nsca',
+                '-H', monitor,
+                '-c', '/etc/send_nsca.cfg',
+            ],
+            stdin=PIPE,
+            stdout=DEVNULL,
+            stderr=DEVNULL
+        )
         nsca.communicate(output.encode())
         returncode = nsca.wait()
         if returncode > 0:
@@ -226,6 +241,9 @@ def send_nsca(hosts, output):
 
 def main():
     args = get_args()
+
+    # Initialize apt system
+    apt_pkg.init_system()
 
     # Get domain list
     domains = get_domain_list()
@@ -246,13 +264,14 @@ def main():
     nsca = send_nsca(args.hosts, nsca_output)
     if not nsca:
         print_nagios_message(ExitCodes.critical,
-                             'Error when pushing VM results with NSCA')
+                             'Error when pushing VM results with NSCA'
+                             )
         exit(ExitCodes.critical)
 
     # Generate plugin results for HV
     code, reason = build_plugin_output(
         mismatch_doms, unknown_doms
-        )
+    )
 
     print_nagios_message(code, reason)
     exit(code)
