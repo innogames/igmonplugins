@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """InnoGames Monitoring Plugins - Expiring SSL Certificates Check
 
-Copyright (c) 2018 InnoGames GmbH
+Copyright (c) 2019 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -21,6 +21,7 @@ Copyright (c) 2018 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from builtins import str
 from OpenSSL import crypto
 from argparse import ArgumentParser, FileType
 from datetime import datetime, timedelta
@@ -28,6 +29,8 @@ from dateutil.tz import tzutc
 from dateutil.parser import parse
 from sys import exit
 import ssl
+import ipaddress
+
 
 def parse_args():
     parser = ArgumentParser()
@@ -66,6 +69,7 @@ def parse_args():
         '--name',
         dest='names',
         action='append',
+        type=str,
         help='Check if the certificate is valid for a given names' +
                 'if --remote is used only up to 1 name is supported'
     )
@@ -85,21 +89,23 @@ def main():
 
     # Workaround needed to keep compatibility with positional and
     # named arguments
-    if args.pemfile_n: args.pemfile = args.pemfile_n
-    
+    if args.pemfile_n:
+        args.pemfile = args.pemfile_n
+
     if args.pemfile:
         cert = crypto.load_certificate(
                 crypto.FILETYPE_PEM, args.pemfile.read())
     elif args.remote:
         hostname = args.remote
-        if args.names: hostname = args.names[0]
+        if args.names:
+            hostname = args.names[0]
         conn = ssl.create_connection((args.remote, args.port))
         context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         sock = context.wrap_socket(conn, server_hostname=hostname)
         cert = crypto.load_certificate(
-                crypto.FILETYPE_PEM, 
+                crypto.FILETYPE_PEM,
                 ssl.DER_cert_to_PEM_cert(sock.getpeercert(True)))
-    
+
     not_after = parse(cert.get_notAfter().decode('utf-8'))
     remaining = not_after - datetime.now(tzutc())
     exit_code = 0
@@ -143,6 +149,10 @@ def verify_domains(cert, names):
     for alt_domain in decode_san(get_extension_value(cert, b'subjectAltName')):
         cert_domains.add(alt_domain)
 
+    cert_domains = set(map(expand_ip, cert_domains))
+
+    names = set(map(expand_ip, names))
+
     for domain in names:
         if domain in cert_domains:
             continue
@@ -175,6 +185,14 @@ def decode_san(san_string):
         key = key.strip().lower()
         if key == 'dns' or key == 'ip address':
             yield value.strip()
+
+
+def expand_ip(name):
+    try:
+        eip = ipaddress.ip_address(name).compressed
+        return eip
+    except ValueError as e:
+        return name
 
 
 if __name__ == '__main__':
