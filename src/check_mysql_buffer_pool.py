@@ -72,7 +72,8 @@ def main():
             buffer_pool_size, data_size))
         exit(1)
 
-    print('OK')
+    print('OK: buffer_pool_size ({}MB) >= data_size ({}MB)'.format(
+        buffer_pool_size, data_size))
     exit(0)
 
 
