@@ -263,10 +263,10 @@ def main():
         exit(ExitCodes.unknown)
     except Exception:
         print_nagios_message(
-            ExitCodes.critical,
-            'An unknown error ocurried retrieving HV QEMU version'
+            ExitCodes.warning,
+            'An exception occurred when retrieving HV QEMU version'
         )
-        exit(ExitCodes.critical)
+        exit(ExitCodes.warning)
 
     # Build output
     nsca_output, mismatch_doms, unknown_doms \
