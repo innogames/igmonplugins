@@ -162,7 +162,7 @@ def compare_pools(pools, testtool, send):
                         max_nodes,
                         optimal_nodes,
                         separator,
-                        )
+                    )
                     separator
                 else:
                     output += '{}\t{}\t{}\tNot monitored by testtool{}'.format(
@@ -170,7 +170,7 @@ def compare_pools(pools, testtool, send):
                         nagios_service,
                         exit_unknown,
                         separator
-                        )
+                    )
             else:
                 if optimal_nodes == 1:
                     output += (
@@ -181,7 +181,7 @@ def compare_pools(pools, testtool, send):
                         nagios_service,
                         exit_ok,
                         separator
-                        )
+                    )
                 else:
                     output += (
                         '{}\t{}\t{}\t'
@@ -192,9 +192,11 @@ def compare_pools(pools, testtool, send):
                         exit_warn,
                         optimal_nodes,
                         separator
-                        )
+                    )
     if send:
-        for monitor in ('af-monitor.admin', 'aw-monitor'):
+        for monitor in (
+        'af-monitor.admin', 'aw-monitor', 'aw-monitoring-master.admin',
+        'af-monitoring-master.admin'):
             nsca = subprocess.Popen(
                 [
                     '/usr/local/sbin/send_nsca',
