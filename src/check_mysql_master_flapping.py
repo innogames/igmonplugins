@@ -40,6 +40,9 @@ from mysql.connector import (
     DatabaseError,
 )
 
+class TooFewTimestampsError(Exception):
+   """Raised when there are too few timestamps to compare"""
+   pass
 
 def parse_args():
     """Get argument parser -> ArgumentParser"""
@@ -74,13 +77,16 @@ def main():
     except DatabaseError as error:
         print('UNKNOWN: ' + str(error))
         exit(3)
+    except TooFewTimestampsError:
+        print('OK: No flapping detected')
+        exit(0)
 
     if heartbeat_delta_min < args.flapping_time_limit:
         print('WARNING: Two hosts claim to be master within {} seconds.'.format(
             heartbeat_delta_min))
         exit(1)
 
-    print('OK: Only one master detected')
+    print('OK: No flapping detected')
     exit(0)
 
 
@@ -107,22 +113,19 @@ def get_heartbeat_delta_min(user, password, host, unix_socket, database, table):
         password,
         host,
         unix_socket,
-        'SELECT heartbeat from {}.{}'.format(database, table),
+        'SELECT heartbeat from {}.{} ORDER BY heartbeat DESC LIMIT 2'.format(
+            database, table
+        ),
     )
 
     # When we have less than 2 values, there is a maximum of one master,
     # therefore we return a number which is higher than any sane value for
     # flapping_time_limit
     if len(timestamps) < 2:
-        return 5000000
+        raise TooFewTimestampsError
 
-    # We need to compare all timestamps we got and find the minimum between
-    # all of them. Again we use a high number to begin with (see above)
-    heartbeat_delta_min = 5000000
-    for i in range(0, len(timestamps)-1):
-        delta = abs(timestamps[i] - timestamps[i+1])
-        if delta < heartbeat_delta_min:
-            heartbeat_delta_min = delta
+    # We got the 2 biggest timestamps from the query above
+    heartbeat_delta_min = timestamps[1] - timestamps[0]
 
     return heartbeat_delta_min
 
