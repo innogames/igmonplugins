@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - MySQL Master Flapping
 
 This script is used to check if both loadbalancers have the same opinion about
@@ -125,7 +125,7 @@ def get_heartbeat_delta_min(user, password, host, unix_socket, database, table):
         raise TooFewTimestampsError
 
     # We got the 2 biggest timestamps from the query above
-    heartbeat_delta_min = timestamps[1] - timestamps[0]
+    heartbeat_delta_min = timestamps[0] - timestamps[1]
 
     return heartbeat_delta_min
 
