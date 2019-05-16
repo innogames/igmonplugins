@@ -44,7 +44,7 @@ def get_server_status():
         db = connect(unix_socket=opts.unix_socket)
     cur = db.cursor()
     if opts.name:
-        cur.execute("SHOW SLAVE '" + opts.name + "' STATUS")
+        cur.execute("SHOW SLAVE STATUS FOR CHANNEL '{}'".format(opts.name))
     else:
         cur.execute("SHOW SLAVE STATUS")
     res = [dict(zip(cur.column_names, r)) for r in cur.fetchall()]
