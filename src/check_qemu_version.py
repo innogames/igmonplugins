@@ -225,6 +225,7 @@ def build_plugin_output(newer_doms, unknown_doms, nsca_result):
 
 
 def send_nsca(hosts, output):
+    result = True
     for monitor in hosts:
         nsca = Popen(
             [
@@ -239,9 +240,9 @@ def send_nsca(hosts, output):
         nsca.communicate(output.encode())
         returncode = nsca.wait()
         if returncode > 0:
-            return False
+            result = False
 
-    return True
+    return result
 
 
 def main():
