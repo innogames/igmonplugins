@@ -25,11 +25,10 @@ Copyright (c) 2016 InnoGames GmbH
 
 import argparse
 import re
-import shlex
 import sys
 import traceback
 
-from subprocess import Popen, PIPE
+from subprocess import check_output
 
 
 racadm_commands = {
@@ -192,29 +191,41 @@ def check_ipmi(host, user, password, command):
     return out[0], out[1], False
 
 
-def check_getactiveerrors(res):
+def check_getactiveerrors(msgs):
     """Check the response for active errors"""
 
-    if res[0].strip() == 'There are no messages.':
-        return NagiosCodes.ok, 'OK: No CMC Active Errors.'
-
-    msgs = len(res) / 4
     errors = []
-    for i in range(msgs):
-        if res[i*4+1].split('=')[1].strip() == 'Information':
+
+    error = {}
+    for msg in msgs:
+        msg = map(str.strip, msg.split('='))
+        if len(msg) !=2:
             continue
 
-        errors.append('{0} - {1}'.format(
-            (res[i*4].split('=')[1].strip(), res[i*4+2].split('=')[1].strip())
-        ))
+        # Each active error takes multiple lines. Accumulate them in a hash
+        # and if given keyword was already seen, it must be a new error.
+        if msg[0] in error:
+            errors.append(error)
+            error = {}
+        error[msg[0]] = msg[1]
+    errors.append(error)
 
-    if len(errors):
-        return NagiosCodes.warning, 'WARNING: %s' % '; '.join(errors)
+    output = ''
+    for error in errors:
+        if error == {}:
+            continue
+        output += 'module: {}, severity: {}, message: {}\n'.format(
+            error['Module ID'], error['Severity'], error['Message'],
+        )
 
-    return (
-        NagiosCodes.ok,
-        'OK: Only informational messages in CMC Active Errors',
-    )
+    if output == '':
+        exit_code = NagiosCodes.ok
+        output = 'OK: CMC reports no errors'
+    else:
+        exit_code = NagiosCodes.critical
+        output = 'CRITICAL: CMC reports the following errors:\n' + output
+
+    return(exit_code, output)
 
 
 def check_fans(res):
@@ -347,52 +358,65 @@ def check_ipmi_sensors(res):
 
 
 def idrac_command(host, user, password, command):
-    """Execute IDRAC command"""
-    command = '/opt/dell/srvadmin/bin/idracadm7 -r {0} -u {1} -p {2} {3} '.format(
-        host, user, password, command
-    )
-    command = shlex.split(command)
-    (stdout, stderr) = Popen(command, stdout=PIPE, stderr=PIPE).communicate()
+    """Execute IDRAC command and return output line by line"""
 
-    res = stderr if stderr else stdout
-    new_res = []
-    for line in res.split("\n"):
+    ret = []
+
+    res = check_output(
+        [
+            '/opt/dell/srvadmin/bin/idracadm7',
+            '-r', host,
+            '-u', user,
+            '-p', password,
+        ] + command.split(' '),
+        close_fds=False, universal_newlines=True,
+    )
+
+    for line in res.splitlines():
         line = line.strip()
-        if (
-            line.find('Certificate is invalid') == -1 and
-            line.find('Use -S option for racadm') == -1 and
-            line != ''
+        if ( 
+            'Certificate is invalid' in line or
+            'Use -S option for racadm' in line or
+            line == ''
         ):
-            new_res.append(line)
-    return new_res
+            continue
+        ret.append(line)
+
+    return ret
 
 
 def ipmi_command(host, user, password, command):
     """Execute IPMI command"""
-    shcommand = (
-        '/usr/bin/ipmitool -I lanplus -H {0} -L USER -U {1} -P {2} {3}'
-        .format(host, user, password, command)
+
+    # It must be an array afterwards!
+    command = command.split(' ')
+
+    ipmi_cmd = [
+        '/usr/bin/ipmitool',
+        '-I', 'lanplus',
+        '-H', host,
+        '-L', 'USER',
+        '-U', user,
+        '-P', password,
+    ]
+
+    res = check_output(
+        ipmi_cmd + ['-I', 'lanplus'] + command,
+        close_fds=False, universal_newlines=True,
     )
-    command = shlex.split(shcommand)
-    (stdout, stderr) = Popen(command, stdout=PIPE, stderr=PIPE).communicate()
-    res = stderr if stderr else stdout
+
     if res.find('0xd4 Insufficient privilege level') != -1:
-        shcommand = (
-            '/usr/bin/ipmitool -H {0} -L USER -U {1} -P {2} {3}'
-            .format(host, user, password, command)
+        res = check_output(
+            ipmi_cmd + command,
+            close_fds=False, universal_newlines=True,
         )
-        command = shlex.split(shcommand)
-        stdout, stderr = Popen(command, stdout=PIPE, stderr=PIPE).communicate()
-        res = stderr if stderr else stdout
 
-    new_res = []
-    for line in res.split("\n"):
-            line_list = line.split('|')
-            line_list = map(str.strip, line_list)
-            if line_list != ['']:
-                new_res.append(line_list)
+    ret = []
+    for line in res.splitlines():
+        line = map(str.strip, line.split('|'))
+        ret.append(line)
 
-    return new_res
+    return ret
 
 
 if __name__ == '__main__':
