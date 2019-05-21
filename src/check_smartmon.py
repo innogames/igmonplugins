@@ -93,6 +93,10 @@ for manufacturer in HDD_NAMES:
             element = elements.split(";")
             smart_id = int(element[0])
 
+            # Skip attributes that do not exists in our config
+            if smart_id not in ALERTS[manufacturer]:
+                continue
+
             if ALERTS[manufacturer][smart_id].get('raw'):
                 if ALERTS[manufacturer][smart_id].get('mask'):
                     smart_value = (
