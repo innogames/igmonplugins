@@ -87,7 +87,7 @@ def main(args):
             ATLASSIAN_MARKETPLACE_BASE_URL, plugin['key'],
             {
                 'afterVersion': plugin['version'], 'application': application,
-                'applicationBuild': build_number
+                'applicationBuild': build_number, 'hosting': 'server'
             }
         )
         for plugin in plugins
