@@ -85,8 +85,10 @@ def main(args):
     marketplace_requests = [
         get_fetch_plugin_versions_request(
             ATLASSIAN_MARKETPLACE_BASE_URL, plugin['key'],
-            {'afterVersion': plugin['version'], 'application': application,
-             'applicationBuild': build_number}
+            {
+                'afterVersion': plugin['version'], 'application': application,
+                'applicationBuild': build_number, 'hosting': 'server'
+            }
         )
         for plugin in plugins
     ]
@@ -103,10 +105,12 @@ def main(args):
         print('OK: No updates for plugins found')
         exit(0)
 
-    format_string = (args.format if args.format else
-                     '\n[{plugin[name]}]: '
-                     '{plugin[version]} --> '
-                     '{update[_embedded][versions][0][name]}')
+    format_string = (
+        args.format if args.format else
+        '\n[{plugin[name]}]: '
+        '{plugin[version]} --> '
+        '{update[_embedded][versions][0][name]}'
+    )
 
     string = ''.join(format_string.format(plugin=plugin, update=update)
                      for plugin, update in updates)
@@ -119,14 +123,18 @@ def parse_auth_argument(args):
     auth = args.auth
     if auth == 'basic':
         if not (args.username and args.password):
-            print("For basic authentication, 'username' and 'password' "
-                  "parameter are needed")
+            print(
+                "For basic authentication, 'username' and 'password' "
+                "parameter are needed"
+            )
             exit(3)
         auth = HTTPBasicAuth(args.username, args.password)
     elif auth == 'oauth':
         if not (args.consumer_key and args.private_key):
-            print("For oauth authentication, 'consumer-key' "
-                  "and 'private-key' parameter are needed")
+            print(
+                "For oauth authentication, 'consumer-key' "
+                "and 'private-key' parameter are needed"
+            )
             exit(3)
         auth = get_oauth1session(args.consumer_key, args.consumer_secret,
                                  args.private_key, args.passphrase)
