@@ -175,7 +175,7 @@ def compare_pools(lbpools, carps_states, lbpools_states, nsca_servers):
 
 def nagios_output(pool, exit_code, separator, message):
     output = ''
-    for nagios_service in ['check_lbpool', 'check_lbpool_6']:
+    for nagios_service in ['check_lbpool', ]:
         output += (
             '{}\t{}\t{}\t{}{}'
         ).format(
