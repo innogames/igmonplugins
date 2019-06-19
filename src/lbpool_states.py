@@ -151,75 +151,31 @@ def args_parse():
 
 
 def check_carps():
-    carps = {}
-    configs = ['/etc/iglb/carp_settings.py', '/var/run/iglb/carp_state.json']
 
-    if exists(configs[0]):
+    configs = ['/var/run/iglb/carp_state.json', '/etc/iglb/networks.json']
 
-        carp_settings = imp.load_source(
-            'carp_settings',
-            '/etc/iglb/carp_settings.py'
-        )
-
-        for ifname in carp_settings.ifaces_carp.keys():
-            vlan_tag = ifname.split('internal')[1]
-            p = subprocess.Popen(
-                ['/sbin/ifconfig', ifname],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-
-            ifconfig, err = p.communicate()
-
-            for line in ifconfig.decode().splitlines():
-                # Find carp lines, the look like this:
-                # carp: MASTER vhid 133 advbase 1 advskew 50
-                ifconfig_match = re.match(
-                    ".*carp: ([A-Z]+) vhid ([0-9]+) advbase.*",
-                    line
-                )
-
-                if ifconfig_match:
-                    status = ifconfig_match.group(1)
-                    carps.update({
-                        vlan_tag: {
-                            'carp_master': True if status == 'MASTER' else False
-                        }
-                    })
-
-    elif exists(configs[1]):
-
-        with open(configs[1], 'r') as carp_statejson, \
-                open('/etc/iglb/networks.json', 'r') as networkjson:
-            carp_state = json.load(carp_statejson)
-            network = json.load(networkjson)
-            carps = {
-                vn['vlan_tag']:
-                    {
-                        'carp_master': v['carp_master']
-                    }
-                for k, v in carp_state.items()
-                for kn, vn in network['internal_networks'].items()
-                if k == kn
-                }
+    with open(configs[0]) as carp_statejson, \
+            open(configs[1]) as networkjson:
+        carp_state = json.load(carp_statejson)
+        network = json.load(networkjson)
+        carps = {
+            vn['vlan_tag']: {
+                    'carp_master': v['carp_master']
+            }
+            for k, v in carp_state.items()
+            for kn, vn in network['internal_networks'].items()
+            if k == kn
+        }
 
     return carps
 
 
 def get_lbpools():
-    # For allowing both old hwlb style configs and new ones
-    configs = ['/etc/iglb/lbpools.json', '/etc/iglb/iglb.json']
 
-    for config in configs:
+    config = '/etc/iglb/lbpools.json'
 
-        if exists(config):
-
-            with open(config) as jsonfile:
-                dict = json.load(jsonfile)
-
-                if 'lbpools' in dict.keys():
-                    lbpools_obj = dict['lbpools']
-                else:
-                    lbpools_obj = dict
+    with open(config) as jsonfile:
+        lbpools_obj = json.load(jsonfile)
 
     return lbpools_obj
 
