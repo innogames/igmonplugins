@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Load Balancing Pools Check
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2021 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -44,7 +44,10 @@ def main():
         lbpools = json.load(lbpools_f)
         carps_states = json.load(carps_states_f)
         lbpools_states = json.load(lbpools_states_f)
-        compare_pools(lbpools, carps_states, lbpools_states, args.nsca_servers)
+        compare_pools(
+            lbpools, carps_states, lbpools_states,
+            args.nsca_servers, args.hwlb_group,
+        )
 
 
 def pairwise(it):
@@ -61,10 +64,17 @@ def parse_args():
         help='Nagios servers to report the results to'
     )
 
+    parser.add_argument(
+        '-g', dest='hwlb_group',
+        help='HWLB Group to send results to',
+    )
+
     return parser.parse_args()
 
 
-def compare_pools(lbpools, carps_states, lbpools_states, nsca_servers):
+def compare_pools(
+    lbpools, carps_states, lbpools_states, nsca_servers, hwlb_group
+):
     output = ''
 
     if nsca_servers:
@@ -85,7 +95,7 @@ def compare_pools(lbpools, carps_states, lbpools_states, nsca_servers):
 
         if not pool_v['nodes']:
             output += nagios_output(
-                pool_k, exit_crit, separator, 'has no LB nodes',
+                pool_k, exit_crit, separator, 'has no LB nodes', hwlb_group
             )
             continue
 
@@ -140,23 +150,27 @@ def compare_pools(lbpools, carps_states, lbpools_states, nsca_servers):
                         min_nodes,
                         max_nodes,
                         optimal_nodes,
-                    )
+                    ),
+                    hwlb_group,
                 )
             else:
                 output += nagios_output(
                     pool_k, exit_unknown, separator,
-                    'Not monitored by testtool'
+                    'Not monitored by testtool',
+                    hwlb_group,
                 )
         else:
             if optimal_nodes == 1:
                 output += nagios_output(
                     pool_k, exit_ok, separator,
-                    'Has no healthchecks and only 1 node'
+                    'Has no healthchecks and only 1 node',
+                    hwlb_group,
                 )
             else:
                 output += nagios_output(
                     pool_k, exit_ok, separator,
-                    'Has no healthchecks but {} nodes'.format(optimal_nodes)
+                    'Has no healthchecks but {} nodes'.format(optimal_nodes),
+                    hwlb_group,
                 )
     if nsca_servers:
         for nsca_server in nsca_servers:
@@ -173,9 +187,15 @@ def compare_pools(lbpools, carps_states, lbpools_states, nsca_servers):
         print(output)
 
 
-def nagios_output(pool, exit_code, separator, message):
+def nagios_output(pool, exit_code, separator, message, hwlb_group):
     output = ''
-    for nagios_service in ['check_lbpool', ]:
+
+    nagios_services = ['check_lbpool']
+
+    if hwlb_group:
+        nagios_services.append('lbpool_nodes_' + hwlb_group)
+
+    for nagios_service in nagios_services:
         output += (
             '{}\t{}\t{}\t{}{}'
         ).format(
