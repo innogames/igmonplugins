@@ -31,6 +31,7 @@ parser.add_argument('iterate_over', nargs='+', help='Queue list separated by spa
 args=parser.parse_args()
 
 exit_code = 0
+unknown = False
 message = ''
 subs = {}
 
@@ -39,9 +40,15 @@ for iterate_param in args.iterate_over:
 
 for iterate_param, process in subs.iteritems():
     out, err = process.communicate()
+    # Return the worst error code, because nagios interprets '3' as unknown we have to do some magic
     if process.returncode != 0:
-        exit_code = 2
+        if process.returncode == 3:
+            unknown = True
+        elif process.returncode < exit_code:
+            exit_code = process.returncode
         message += '(' + iterate_param + '): ' + out + '\n'
+if exit_code == 0 and unknown:
+    exit_code = 3
 
 if not message:
     print 'Everything is fine'
