@@ -44,7 +44,7 @@ for iterate_param, process in subs.iteritems():
     if process.returncode != 0:
         if process.returncode == 3:
             unknown = True
-        elif process.returncode < exit_code:
+        elif process.returncode > exit_code:
             exit_code = process.returncode
         message += '(' + iterate_param + '): ' + out + '\n'
 if exit_code == 0 and unknown:
