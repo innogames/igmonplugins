@@ -142,9 +142,12 @@ def main():
     args = parse_args()
     domains = get_domains(args.domains)
 
-    if not (domains and domains != ['$_HOSTDOMAINS$']):
-        return_result(3, 'UNKNOWN - No domain found for host: {}, ip: {}'
-                      .format(args.hostname, args.ip))
+    if not domains or domains == ['$_HOSTDOMAINS$']:
+        return_result(
+            3, 'UNKNOWN - No domain found for host: {}, ip: {}'.format(
+                args.hostname, args.ip
+            )
+        )
     state, output = get_check_result(domains, args.ip)
     return_result(state, output)
 
