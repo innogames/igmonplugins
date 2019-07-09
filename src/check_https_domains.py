@@ -97,27 +97,38 @@ def get_check_result(domains, ip):
         if expirations[0]['remaining'] < timedelta(0):
             output.append(
                 'CRITICAL - There are certificates expired for {} days'.format(
-                    -expirations[0]['remaining'].days))
+                    -expirations[0]['remaining'].days
+                )
+            )
         else:
             output.append(
                 'CRITICAL - There are certificates expiring in {} days'.format(
-                    expirations[0]['remaining'].days))
+                    expirations[0]['remaining'].days
+                )
+            )
     elif expirations[0]['remaining'] <= timedelta(days=warn):
         state = 1
         output.append(
             'WARNING - There are certificates expiring in {} days'.format(
-                expirations[0]['remaining'].days))
+                expirations[0]['remaining'].days
+            )
+        )
     else:
         state = 0
-        output.append('OK - Next certificate expiration is in {} days'.format(
-            expirations[0]['remaining'].days))
+        output.append(
+            'OK - Next certificate expiration is in {} days'.format(
+                expirations[0]['remaining'].days
+            )
+        )
 
     for expiration in expirations:
         output.append(
             'Certificate {} for domain {} will expire in {} days ({})'.format(
                 expiration['common_name'], expiration['domain'],
                 expiration['remaining'].days,
-                expiration['not_after'].strftime("%Y-%m-%d")))
+                expiration['not_after'].strftime("%Y-%m-%d")
+            )
+        )
 
     return (state, '\n'.join(output))
 
