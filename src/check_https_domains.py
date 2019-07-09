@@ -86,6 +86,9 @@ def get_check_result(domains, ip):
     for domain in domains:
         expirations.append(fetch_cert_info(domain, ip))
 
+    if not expirations:
+        return_result(3, 'Could not obtain expiration dates')
+
     # Certificates that are closer to the expiration date are shown first
     expirations.sort(key=lambda x: x['remaining'])
 
