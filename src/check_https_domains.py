@@ -61,24 +61,32 @@ def get_domains(domains):
     return domains
 
 
+def fetch_cert_info(domain, ip):
+    domain = domain.replace('*', 'www', 1)
+    conn = ssl.create_connection((ip, 443))
+    context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+    with context.wrap_socket(conn, server_hostname=domain) as sock:
+        cert = crypto.load_certificate(
+            crypto.FILETYPE_PEM,
+            ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+        )
+    common_name = cert.get_subject().commonName
+    not_after = parse(cert.get_notAfter().decode('utf-8'))
+    remaining = not_after - datetime.now(tzutc())
+
+    data = {'remaining': remaining, 'common_name': common_name,
+            'domain': domain, 'not_after': not_after}
+    return data
+
+
 def get_check_result(domains, ip):
     output = []
     expirations = []
-    for domain_tmp in domains:
-        domain = domain_tmp.replace('*', 'www', 1)
-        conn = ssl.create_connection((ip, 443))
-        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        sock = context.wrap_socket(conn, server_hostname=domain)
-        cert = crypto.load_certificate(
-            crypto.FILETYPE_PEM,
-            ssl.DER_cert_to_PEM_cert(sock.getpeercert(True)))
-        common_name = cert.get_subject().commonName
-        sock.close()
-        not_after = parse(cert.get_notAfter().decode('utf-8'))
-        remaining = not_after - datetime.now(tzutc())
-        expirations.append({'remaining': remaining, 'common_name': common_name,
-                            'domain': domain_tmp, 'not_after': not_after})
 
+    for domain in domains:
+        expirations.append(fetch_cert_info(domain, ip))
+
+    # Certificates that are closer to the expiration date are shown first
     expirations.sort(key=lambda x: x['remaining'])
 
     if expirations[0]['remaining'] <= timedelta(days=crit):
