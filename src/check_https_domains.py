@@ -29,23 +29,33 @@ from dateutil.parser import parse
 from dateutil.tz import tzutc
 from OpenSSL import crypto
 
-parser = ArgumentParser(description='Check domains',
-                        formatter_class=RawTextHelpFormatter)
-parser.add_argument('-s', action="store", dest='hostname', help='hostname',
-                    required=True)
-parser.add_argument('-i', action="store", dest='ip', help='ip of host',
-                    required=True)
-parser.add_argument('-d', action="store",
-                    dest='domains', help='domains of host', required=True)
-args = parser.parse_args()
-
 # Amount of days remaining before warning and critical states
 warn = 30
 crit = 2
 
+def parse_args():
+    parser = ArgumentParser(
+        description='Check domains',
+        formatter_class=RawTextHelpFormatter
+    )
 
-def get_domains():
-    domains = args.domains.split(',')
+    parser.add_argument(
+        '-s', dest='hostname', required=True,
+        help='hostname'
+    )
+    parser.add_argument(
+        '-i', dest='ip', required=True,
+        help='ip of host'
+    )
+    parser.add_argument(
+        '-d', dest='domains', required=True,
+        help='domains of host'
+    )
+
+    return parser.parse_args()
+
+def get_domains(domains):
+    domains = domains.split(',')
     if len(domains) == 1 and 'None' in domains:
         domains = []
     return domains
@@ -107,7 +117,9 @@ def return_result(state, message):
 
 
 def main():
-    domains = get_domains()
+    args = parse_args()
+    domains = get_domains(args.domains)
+
     if not (domains and domains != ['$_HOSTDOMAINS$']):
         return_result(3, 'UNKNOWN - No domain found for host: {}, ip: {}'
                       .format(args.hostname, args.ip))
