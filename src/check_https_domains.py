@@ -21,25 +21,27 @@ Copyright (c) 2017 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import ssl
 import sys
-import subprocess
-import shlex
 from argparse import ArgumentParser, RawTextHelpFormatter
+from datetime import datetime, timedelta
+from dateutil.parser import parse
+from dateutil.tz import tzutc
+from OpenSSL import crypto
 
 parser = ArgumentParser(description='Check domains',
                         formatter_class=RawTextHelpFormatter)
-parser.add_argument('-s', action="store", dest='hostname', help='hostname')
-parser.add_argument('-i', action="store", dest='ip', help='ip of host')
+parser.add_argument('-s', action="store", dest='hostname', help='hostname',
+                    required=True)
+parser.add_argument('-i', action="store", dest='ip', help='ip of host',
+                    required=True)
 parser.add_argument('-d', action="store",
-                    dest='domains', help='domains of host')
+                    dest='domains', help='domains of host', required=True)
 args = parser.parse_args()
 
-
-cmd = '/usr/lib/nagios/plugins/check_http --sni -H {} -I {} -S -C 30'
-
-# start with unknown state and notice that is has not changes
-state = 3
-state_changed = False
+# Amount of days remaining before warning and critical states
+warn = 30
+crit = 2
 
 
 def get_domains():
@@ -49,59 +51,68 @@ def get_domains():
     return domains
 
 
-def set_state(returncode):
-    global state
-    global state_changed
-    if state_changed:
-        if (returncode > state and state != 2) or returncode == 2:
-            state = returncode
+def get_check_result(domains, ip):
+    output = []
+    expirations = []
+    for domain_tmp in domains:
+        domain = domain_tmp.replace('*', 'www', 1)
+        conn = ssl.create_connection((ip, 443))
+        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        sock = context.wrap_socket(conn, server_hostname=domain)
+        cert = crypto.load_certificate(
+            crypto.FILETYPE_PEM,
+            ssl.DER_cert_to_PEM_cert(sock.getpeercert(True)))
+        common_name = cert.get_subject().commonName
+        sock.close()
+        not_after = parse(cert.get_notAfter().decode('utf-8'))
+        remaining = not_after - datetime.now(tzutc())
+        expirations.append({'remaining': remaining, 'common_name': common_name,
+                            'domain': domain_tmp, 'not_after': not_after})
+
+    expirations.sort(key=lambda x: x['remaining'])
+
+    if expirations[0]['remaining'] <= timedelta(days=crit):
+        state = 2
+        if expirations[0]['remaining'] < timedelta(0):
+            output.append(
+                'CRITICAL - There are certificates expired for {} days'.format(
+                    -expirations[0]['remaining'].days))
+        else:
+            output.append(
+                'CRITICAL - There are certificates expiring in {} days'.format(
+                    expirations[0]['remaining'].days))
+    elif expirations[0]['remaining'] <= timedelta(days=warn):
+        state = 1
+        output.append(
+            'WARNING - There are certificates expiring in {} days'.format(
+                expirations[0]['remaining'].days))
     else:
-        state = returncode
-        state_changed = True
+        state = 0
+        output.append('OK - Next certificate expiration is in {} days'.format(
+            expirations[0]['remaining'].days))
+
+    for expiration in expirations:
+        output.append(
+            'Certificate {} for domain {} will expire in {} days ({})'.format(
+                expiration['common_name'], expiration['domain'],
+                expiration['remaining'].days,
+                expiration['not_after'].strftime("%Y-%m-%d")))
+
+    return (state, '\n'.join(output))
 
 
-def check_domains(domains, ip, hostname):
-    msg = []
-    if domains and domains != ['$_HOSTDOMAINS$']:
-        for domain_tmp in domains:
-            domain = domain_tmp.replace('*', 'www', 1)
-            command = cmd.format(domain, ip)
-            args = shlex.split(command)
-            p = subprocess.Popen(
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            p.wait()
-            stdout, stderr = p.communicate()
-            rc = p.returncode
-            set_state(rc)
-            if rc != 0:
-                msg.insert(0, 'Error: {}.  Command: {}'
-                           .format(stdout, command))
-            else:
-                msg.append('{}. Domain {}'.format(stdout.rstrip('\n'), domain))
-            if stderr:
-                msg.insert(0, 'Error: {}.  Command: {}'
-                           .format(stderr, command))
-
-    else:
-        msg.insert(0, 'No domain found for host: {}, ip: {}'
-                   .format(hostname, ip))
-        set_state(3)
-    message = '\n'.join(msg)
-    return_result(message, state)
-
-
-def return_result(message, status):
-    print(message.rstrip('\n'))
-    sys.exit(status)
+def return_result(state, message):
+    print(message)
+    sys.exit(state)
 
 
 def main():
     domains = get_domains()
-    check_domains(domains, args.ip, args.hostname)
-    exit()
+    if not (domains and domains != ['$_HOSTDOMAINS$']):
+        return_result(3, 'UNKNOWN - No domain found for host: {}, ip: {}'
+                      .format(args.hostname, args.ip))
+    state, output = get_check_result(domains, args.ip)
+    return_result(state, output)
 
 
 if __name__ == '__main__':
