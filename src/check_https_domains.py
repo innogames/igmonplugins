@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - HTTPS Domains Check
 
-Copyright (c) 2017 InnoGames GmbH
+Copyright (c) 2019 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,87 +21,143 @@ Copyright (c) 2017 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import ssl
 import sys
-import subprocess
-import shlex
 from argparse import ArgumentParser, RawTextHelpFormatter
+from datetime import datetime, timedelta
+from dateutil.parser import parse as parse_date
+from dateutil.tz import tzutc
+from OpenSSL import crypto
 
-parser = ArgumentParser(description='Check domains',
-                        formatter_class=RawTextHelpFormatter)
-parser.add_argument('-s', action="store", dest='hostname', help='hostname')
-parser.add_argument('-i', action="store", dest='ip', help='ip of host')
-parser.add_argument('-d', action="store",
-                    dest='domains', help='domains of host')
-args = parser.parse_args()
-
-
-cmd = '/usr/lib/nagios/plugins/check_http --sni -H {} -I {} -S -C 30'
-
-# start with unknown state and notice that is has not changes
-state = 3
-state_changed = False
+# Amount of days remaining before warning and critical states
+warn = 30
+crit = 2
 
 
-def get_domains():
-    domains = args.domains.split(',')
+def parse_args():
+    parser = ArgumentParser(
+        description=(
+            'This Nagios check retrieves certificates for the domains '
+            'specified in the -d attribute and check for their expiration '
+            'dates.\nThe check goes into critical if less than {crit} days '
+            'are remaining and goes into warning if less than {warn} days '
+            'are remaining.'
+            .format(crit=crit, warn=warn)
+        ),
+        formatter_class=RawTextHelpFormatter
+    )
+
+    parser.add_argument(
+        '-s', dest='hostname', required=True,
+        help='Hostname of the host in Nagios. Only used for output building.'
+    )
+    parser.add_argument(
+        '-i', dest='ip', required=True,
+        help='IP of the host. The address where the certificate will be '
+             'retrieved from.'
+    )
+    parser.add_argument(
+        '-d', dest='domains', required=True,
+        help='Domains to retrieve certificates for. For multiple domains, '
+             'provide them as single string, comma separated.'
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    domains = get_domains(args.domains)
+
+    if not domains or domains == ['$_HOSTDOMAINS$']:
+        message = (
+            'UNKNOWN - No domain found for host: {}, ip: {}'
+            .format(args.hostname, args.ip)
+        )
+        print(message)
+        sys.exit(3)
+
+    state, output = get_check_result(domains, args.ip)
+    print(output)
+    sys.exit(state)
+
+
+def get_domains(domains):
+    domains = domains.split(',')
     if len(domains) == 1 and 'None' in domains:
         domains = []
     return domains
 
 
-def set_state(returncode):
-    global state
-    global state_changed
-    if state_changed:
-        if (returncode > state and state != 2) or returncode == 2:
-            state = returncode
-    else:
-        state = returncode
-        state_changed = True
+def fetch_cert_info(domain, ip):
+    domain = domain.replace('*', 'www', 1)
+    conn = ssl.create_connection((ip, 443))
+    context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+    with context.wrap_socket(conn, server_hostname=domain) as sock:
+        cert = crypto.load_certificate(
+            crypto.FILETYPE_PEM,
+            ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+        )
+    common_name = cert.get_subject().commonName
+    not_after = parse_date(cert.get_notAfter().decode('utf-8'))
+    remaining = not_after - datetime.now(tzutc())
+
+    data = {
+        'remaining': remaining, 'common_name': common_name,
+        'domain': domain, 'not_after': not_after
+    }
+    return data
 
 
-def check_domains(domains, ip, hostname):
-    msg = []
-    if domains and domains != ['$_HOSTDOMAINS$']:
-        for domain_tmp in domains:
-            domain = domain_tmp.replace('*', 'www', 1)
-            command = cmd.format(domain, ip)
-            args = shlex.split(command)
-            p = subprocess.Popen(
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+def get_check_result(domains, ip):
+    output = []
+    expirations = []
+
+    for domain in domains:
+        expirations.append(fetch_cert_info(domain, ip))
+
+    if not expirations:
+        return (3, 'Could not obtain expiration dates')
+
+    # Certificates that are closer to the expiration date are shown first
+    expirations.sort(key=lambda x: x['remaining'])
+
+    if expirations[0]['remaining'] <= timedelta(days=crit):
+        state = 2
+        if expirations[0]['remaining'] < timedelta(0):
+            output.append(
+                'CRITICAL - There are certificates expired for {} days'
+                .format(-expirations[0]['remaining'].days)
             )
-            p.wait()
-            stdout, stderr = p.communicate()
-            rc = p.returncode
-            set_state(rc)
-            if rc != 0:
-                msg.insert(0, 'Error: {}.  Command: {}'
-                           .format(stdout, command))
-            else:
-                msg.append('{}. Domain {}'.format(stdout.rstrip('\n'), domain))
-            if stderr:
-                msg.insert(0, 'Error: {}.  Command: {}'
-                           .format(stderr, command))
-
+        else:
+            output.append(
+                'CRITICAL - There are certificates expiring in {} days'
+                .format(expirations[0]['remaining'].days)
+            )
+    elif expirations[0]['remaining'] <= timedelta(days=warn):
+        state = 1
+        output.append(
+            'WARNING - There are certificates expiring in {} days'
+            .format(expirations[0]['remaining'].days)
+        )
     else:
-        msg.insert(0, 'No domain found for host: {}, ip: {}'
-                   .format(hostname, ip))
-        set_state(3)
-    message = '\n'.join(msg)
-    return_result(message, state)
+        state = 0
+        output.append(
+            'OK - Next certificate expiration is in {} days'
+            .format(expirations[0]['remaining'].days)
+        )
 
+    for expiration in expirations:
+        output.append(
+            'Certificate {} for domain {} will expire in {} days ({})'
+            .format(
+                expiration['common_name'], expiration['domain'],
+                expiration['remaining'].days,
+                expiration['not_after'].strftime("%Y-%m-%d")
+            )
+        )
 
-def return_result(message, status):
-    print(message.rstrip('\n'))
-    sys.exit(status)
-
-
-def main():
-    domains = get_domains()
-    check_domains(domains, args.ip, args.hostname)
-    exit()
+    return (state, '\n'.join(output))
 
 
 if __name__ == '__main__':
