@@ -143,7 +143,7 @@ class SystemdUnit:
                 (hasattr(self.type_properties, 'SuccessExitStatus') and
                  self.type_properties.ExecMainStatus not in
                  self.type_properties.SuccessExitStatus[0])
-                or self.type_properties.ExecMainStatus == 0
+                or self.type_properties.ExecMainStatus != 0
             ):
                 return (
                     self._warn_level,
