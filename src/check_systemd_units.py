@@ -138,14 +138,20 @@ class SystemdUnit:
             # See the man 5 systemd.service for ExecMainStatus and
             # SuccessExitStatus
             # All currently running services have ExecMainStatus=0
-            if (self.type_properties.ExecMainStatus not in
-                    self.type_properties.SuccessExitStatus[0] + [0]):
+            if (
+                # Old versions of systemd don't have ExecMainStatus
+                (hasattr(self.type_properties, 'SuccessExitStatus') and
+                 self.type_properties.ExecMainStatus not in
+                 self.type_properties.SuccessExitStatus[0])
+                or self.type_properties.ExecMainStatus == 0
+            ):
                 return (
                     self._warn_level,
                     'the service exited with {} code'.format(
                         self.type_properties.ExecMainStatus
                     )
                 )
+                print()
             if (
                 self.unit_properties.ActiveState == 'active'
                 and self.unit_properties.SubState == 'exited'
