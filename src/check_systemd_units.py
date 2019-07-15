@@ -334,7 +334,11 @@ def process(units, args):
 
     # Last, the others
     if args.check_all:
+        logger.info('Ignored units are: {}'.format(args.ignored_units))
         for unit in units:
+            logger.debug('Unit name is: {}'.format(unit))
+            if str(unit) in args.ignored_units:
+                continue
             check_result = unit.check(args.timer_warn, args.timer_crit,
                                       critical=False)
             if check_result[0]:
