@@ -259,8 +259,8 @@ def parse_args():
         action='append',
         dest='critical_units',
         default=[],
-        help='unit to return critical when failed. Checking timers implicitly'
-             ' checks the timer\'s service too',
+        help='unit to return critical when failed. Checking a timer unit'
+             ' will implicitly check the related service unit as well',
     )
     parser.add_argument(
         '-i',
