@@ -189,7 +189,9 @@ class SystemdUnit:
         intervals = [p[1] for p in self.type_properties.TimersMonotonic
                      if p[0] in checked_intervals]
         logger.debug('Monotonic timers are: {}'.format(intervals))
-        if intervals:
+        # We check intervals only if timer has been triggered after reboot,
+        # otherwise LastTriggerUSec=0 (1970-01-01:00:00:00)
+        if intervals and self.type_properties.LastTriggerUSec != 0:
             # We could check only monotonic triggers for regular execution
             min_interval = min(intervals) / m
             inactivity = (
