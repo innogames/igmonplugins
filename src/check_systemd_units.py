@@ -186,12 +186,12 @@ class SystemdUnit:
             return (
                 self._crit_level, 'the timer is not active'
             )
-        intervals = self.type_properties.TimersMonotonic
+        intervals = [p[1] for p in self.type_properties.TimersMonotonic
+                     if p[0] in checked_intervals]
         logger.debug('Monotonic timers are: {}'.format(intervals))
         if intervals:
             # We could check only monotonic triggers for regular execution
-            min_interval = min(p[1] for p in intervals
-                               if p[0] in checked_intervals) / m
+            min_interval = min(intervals) / m
             inactivity = (
                 now - self.type_properties.LastTriggerUSec / m
             )
