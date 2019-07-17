@@ -112,8 +112,10 @@ class SystemdUnit:
             self._crit_level = Codes.WARNING
             self._warn_level = Codes.OK
 
-        if (self.unit_properties.LoadState != 'loaded' and
-                self.unit_properties.ActiveState != 'inactive'):
+        if (
+                self.unit_properties.LoadState != 'loaded' and
+                self.unit_properties.ActiveState != 'inactive'
+        ):
             return (
                 Codes.CRITICAL,
                 'the unit is not loaded but not inactive'
@@ -138,13 +140,18 @@ class SystemdUnit:
             # See the man 5 systemd.service for ExecMainStatus and
             # SuccessExitStatus
             # All currently running services have ExecMainStatus=0
-            if (
-                # Old versions of systemd don't have ExecMainStatus
-                (hasattr(self.type_properties, 'SuccessExitStatus') and
-                 self.type_properties.ExecMainStatus not in
-                 self.type_properties.SuccessExitStatus[0])
+            last_run_failed = (
+                (
+                    # SuccessExitStatus is not always present in older versions
+                    # of systemd
+                    hasattr(self.type_properties, 'SuccessExitStatus') and
+                    self.type_properties.ExecMainStatus not in
+                    self.type_properties.SuccessExitStatus[0]
+                )
                 or self.type_properties.ExecMainStatus != 0
-            ):
+            )
+
+            if last_run_failed:
                 return (
                     self._warn_level,
                     'the service exited with {} code'.format(
@@ -170,6 +177,7 @@ class SystemdUnit:
                 return (
                     self._warn_level, 'the service is exited'
                 )
+
         return (Codes.OK, '')
 
     def _check_timer(self, timer_warn, timer_crit):
@@ -187,7 +195,7 @@ class SystemdUnit:
 
         # This might check the service unit twice. We need to do that as we
         # would not check timer service unit at all if the user didn't
-        # explicilty ask for them via arguments.
+        # explicitly ask for them via arguments.
         service_unit = SystemdUnit(
             systemd_manager.get_unit(self.type_properties.Unit)
         )
@@ -325,7 +333,7 @@ def main():
     else:
         results = process([SystemdUnit(u) for u in units], args)
         logger.info(
-            "criticals are: {}\nwarnings are: {}"
+            'criticals are: {}\nwarnings are: {}'
             .format(results[2], results[1])
         )
         exit_code, message = gen_output(results)
