@@ -158,7 +158,7 @@ class SystemdUnit:
                         self.type_properties.ExecMainStatus
                     )
                 )
-                print()
+
             if (
                 self.unit_properties.ActiveState == 'active'
                 and self.unit_properties.SubState == 'exited'
