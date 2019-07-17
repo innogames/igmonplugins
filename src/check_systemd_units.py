@@ -176,54 +176,15 @@ class SystemdUnit:
         '''
         Detects problems for a timer unit
         '''
-        checked_intervals = [
-            'OnUnitActiveUSec',
-            'OnUnitInactiveUSec',
-        ]
-        # Microseconds to seconds
-        m = 1000000
+        intervals = self._check_intervals(timer_warn, timer_crit)
+        if intervals:
+            return intervals
+
         if self.unit_properties.ActiveState != 'active':
             return (
                 self._crit_level, 'the timer is not active'
             )
-        intervals = [p[1] for p in self.type_properties.TimersMonotonic
-                     if p[0] in checked_intervals]
-        logger.debug('Monotonic timers are: {}'.format(intervals))
-        # We check intervals only if timer has been triggered after reboot,
-        # otherwise LastTriggerUSec=0 (1970-01-01:00:00:00)
-        if intervals and self.type_properties.LastTriggerUSec != 0:
-            # We could check only monotonic triggers for regular execution
-            min_interval = min(intervals) / m
-            inactivity = (
-                now - self.type_properties.LastTriggerUSec / m
-            )
-            last_execute = datetime.fromtimestamp(
-                self.type_properties.LastTriggerUSec / m
-            )
-            logger.info(
-                '{}: min_interval={}, inactivity={}, last_execute={}, '
-                'since_last_execute / min_interval={}'
-                .format(
-                    str(self), min_interval, inactivity, last_execute,
-                    inactivity / min_interval
-                )
-            )
-            if timer_crit <= inactivity / min_interval:
-                return (
-                    self._crit_level,
-                    'the timer hasn\'t been launched since {}, look at {}'
-                    .format(
-                        last_execute, self.type_properties.Unit
-                    )
-                )
-            if timer_warn <= inactivity / min_interval:
-                return (
-                    self._warn_level,
-                    'the timer hasn\'t been launched since {}, look at {}'
-                    .format(
-                        last_execute, self.type_properties.Unit
-                    )
-                )
+
         # This might check the service unit twice. We need to do that as we
         # would not check timer service unit at all if the user didn't
         # explicilty ask for them via arguments.
@@ -233,6 +194,57 @@ class SystemdUnit:
         return service_unit.check(
             timer_warn, timer_crit, self.__critical, timer=True
         )
+
+    def _check_intervals(self, timer_warn, timer_crit):
+        # We check intervals only if timer has been triggered after reboot,
+        # otherwise LastTriggerUSec=0 (1970-01-01:00:00:00)
+        if self.type_properties.LastTriggerUSec == 0:
+            return None
+
+        checked_intervals = ['OnUnitActiveUSec', 'OnUnitInactiveUSec']
+        # Microseconds to seconds
+        m = 1000000
+
+        intervals = [
+            p[1] for p in self.type_properties.TimersMonotonic
+            if p[0] in checked_intervals
+        ]
+        logger.debug('Monotonic timers are: {}'.format(intervals))
+        if not intervals:
+            return None
+
+        # We can check only monotonic triggers for regular execution
+        min_interval = min(intervals) / m
+        inactivity = (
+            now - self.type_properties.LastTriggerUSec / m
+        )
+        last_execute = datetime.fromtimestamp(
+            self.type_properties.LastTriggerUSec / m
+        )
+        logger.info(
+            '{}: min_interval={}, inactivity={}, last_execute={}, '
+            'since_last_execute / min_interval={}'
+            .format(
+                str(self), min_interval, inactivity, last_execute,
+                inactivity / min_interval
+            )
+        )
+
+        if timer_crit <= inactivity / min_interval:
+            return (
+                self._crit_level,
+                'the timer hasn\'t been launched since {}, look at {}'
+                .format(last_execute, self.type_properties.Unit)
+            )
+
+        if timer_warn <= inactivity / min_interval:
+            return (
+                self._warn_level,
+                'the timer hasn\'t been launched since {}, look at {}'
+                .format(last_execute, self.type_properties.Unit)
+            )
+
+        return None
 
 
 def parse_args():
