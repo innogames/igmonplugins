@@ -184,9 +184,9 @@ class SystemdUnit:
         '''
         Detects problems for a timer unit
         '''
-        intervals = self._check_intervals(timer_warn, timer_crit)
-        if intervals:
-            return intervals
+        long_not_running = self._check_intervals(timer_warn, timer_crit)
+        if long_not_running:
+            return long_not_running
 
         if self.unit_properties.ActiveState != 'active':
             return (
