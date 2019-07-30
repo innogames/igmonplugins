@@ -112,8 +112,10 @@ class SystemdUnit:
             self._crit_level = Codes.WARNING
             self._warn_level = Codes.OK
 
-        if (self.unit_properties.LoadState != 'loaded' and
-                self.unit_properties.ActiveState != 'inactive'):
+        if (
+                self.unit_properties.LoadState != 'loaded' and
+                self.unit_properties.ActiveState != 'inactive'
+        ):
             return (
                 Codes.CRITICAL,
                 'the unit is not loaded but not inactive'
@@ -138,20 +140,25 @@ class SystemdUnit:
             # See the man 5 systemd.service for ExecMainStatus and
             # SuccessExitStatus
             # All currently running services have ExecMainStatus=0
-            if (
-                # Old versions of systemd don't have ExecMainStatus
-                (hasattr(self.type_properties, 'SuccessExitStatus') and
-                 self.type_properties.ExecMainStatus not in
-                 self.type_properties.SuccessExitStatus[0])
+            last_run_failed = (
+                (
+                    # SuccessExitStatus is not always present in older versions
+                    # of systemd
+                    hasattr(self.type_properties, 'SuccessExitStatus') and
+                    self.type_properties.ExecMainStatus not in
+                    self.type_properties.SuccessExitStatus[0]
+                )
                 or self.type_properties.ExecMainStatus != 0
-            ):
+            )
+
+            if last_run_failed:
                 return (
                     self._warn_level,
                     'the service exited with {} code'.format(
                         self.type_properties.ExecMainStatus
                     )
                 )
-                print()
+
             if (
                 self.unit_properties.ActiveState == 'active'
                 and self.unit_properties.SubState == 'exited'
@@ -170,67 +177,82 @@ class SystemdUnit:
                 return (
                     self._warn_level, 'the service is exited'
                 )
+
         return (Codes.OK, '')
 
     def _check_timer(self, timer_warn, timer_crit):
         '''
         Detects problems for a timer unit
         '''
-        checked_intervals = [
-            'OnUnitActiveUSec',
-            'OnUnitInactiveUSec',
-        ]
-        # Microseconds to seconds
-        m = 1000000
+        long_not_running = self._check_intervals(timer_warn, timer_crit)
+        if long_not_running:
+            return long_not_running
+
         if self.unit_properties.ActiveState != 'active':
             return (
                 self._crit_level, 'the timer is not active'
             )
-        intervals = [p[1] for p in self.type_properties.TimersMonotonic
-                     if p[0] in checked_intervals]
-        logger.debug('Monotonic timers are: {}'.format(intervals))
-        if intervals:
-            # We could check only monotonic triggers for regular execution
-            min_interval = min(intervals) / m
-            inactivity = (
-                now - self.type_properties.LastTriggerUSec / m
-            )
-            last_execute = datetime.fromtimestamp(
-                self.type_properties.LastTriggerUSec / m
-            )
-            logger.info(
-                '{}: min_interval={}, inactivity={}, last_execute={}, '
-                'since_last_execute / min_interval={}'
-                .format(
-                    str(self), min_interval, inactivity, last_execute,
-                    inactivity / min_interval
-                )
-            )
-            if timer_crit <= inactivity / min_interval:
-                return (
-                    self._crit_level,
-                    'the timer hasn\'t been launched since {}, look at {}'
-                    .format(
-                        last_execute, self.type_properties.Unit
-                    )
-                )
-            if timer_warn <= inactivity / min_interval:
-                return (
-                    self._warn_level,
-                    'the timer hasn\'t been launched since {}, look at {}'
-                    .format(
-                        last_execute, self.type_properties.Unit
-                    )
-                )
+
         # This might check the service unit twice. We need to do that as we
         # would not check timer service unit at all if the user didn't
-        # explicilty ask for them via arguments.
+        # explicitly ask for them via arguments.
         service_unit = SystemdUnit(
             systemd_manager.get_unit(self.type_properties.Unit)
         )
         return service_unit.check(
             timer_warn, timer_crit, self.__critical, timer=True
         )
+
+    def _check_intervals(self, timer_warn, timer_crit):
+        # We check intervals only if timer has been triggered after reboot,
+        # otherwise LastTriggerUSec=0 (1970-01-01:00:00:00)
+        if self.type_properties.LastTriggerUSec == 0:
+            return None
+
+        checked_intervals = ['OnUnitActiveUSec', 'OnUnitInactiveUSec']
+        # Microseconds to seconds
+        m = 1000000
+
+        intervals = [
+            p[1] for p in self.type_properties.TimersMonotonic
+            if p[0] in checked_intervals
+        ]
+        logger.debug('Monotonic timers are: {}'.format(intervals))
+        if not intervals:
+            return None
+
+        # We can check only monotonic triggers for regular execution
+        min_interval = min(intervals) / m
+        inactivity = (
+            now - self.type_properties.LastTriggerUSec / m
+        )
+        last_execute = datetime.fromtimestamp(
+            self.type_properties.LastTriggerUSec / m
+        )
+        logger.info(
+            '{}: min_interval={}, inactivity={}, last_execute={}, '
+            'since_last_execute / min_interval={}'
+            .format(
+                str(self), min_interval, inactivity, last_execute,
+                inactivity / min_interval
+            )
+        )
+
+        if timer_crit <= inactivity / min_interval:
+            return (
+                self._crit_level,
+                'the timer hasn\'t been launched since {}, look at {}'
+                .format(last_execute, self.type_properties.Unit)
+            )
+
+        if timer_warn <= inactivity / min_interval:
+            return (
+                self._warn_level,
+                'the timer hasn\'t been launched since {}, look at {}'
+                .format(last_execute, self.type_properties.Unit)
+            )
+
+        return None
 
 
 def parse_args():
@@ -311,7 +333,7 @@ def main():
     else:
         results = process([SystemdUnit(u) for u in units], args)
         logger.info(
-            "criticals are: {}\nwarnings are: {}"
+            'criticals are: {}\nwarnings are: {}'
             .format(results[2], results[1])
         )
         exit_code, message = gen_output(results)
