@@ -28,9 +28,17 @@
 #2   CRITICAL
 #3   UNKNOWN
 
-birdc 'show protocols' | awk '$2=="BGP" { ORS=" "; print $1":"; for (i=3; i<=NF; i++) print $i; ORS="\n"; print ""}' > /tmp/bgpstatus
+set -e
 
-while read proto; do
+FOUND="no"
+
+BIRDC="$(mktemp)"
+
+/usr/local/sbin/birdc 'show protocols' | awk '$2=="BGP" { ORS=" "; print $1":"; for (i=3; i<=NF; i++) print $i; ORS="\n"; print ""}' > "$BIRDC"
+
+# Read from file, this way no extra shell is spawned which would make it
+# impossible to assign data to variables.
+while read -r proto; do
     router=${proto%%:*}
     message=${proto#*:}
     status=${message##* }
@@ -38,15 +46,22 @@ while read proto; do
     if [ "$status" != "Established" ]; then
         CRIT="yes"
     fi
-    routers="${routers}${router}: ${message}"$'\n'
-done < /tmp/bgpstatus
+    routers="${routers}${router}: ${message}\n"
+    FOUND="yes"
+done < "$BIRDC"
 
-if [ -n "$CRIT" ]; then
+rm "$BIRDC"
+
+if [ "$FOUND" = "no" ]; then
+    echo "Unable to read birdc status information"
+    printf "$routers"
+    exit 3
+elif [ -n "$CRIT" ]; then
     echo "No connection to some routers!"
-    echo "$routers"
+    printf "$routers"
     exit 2
 else
     echo "All routers are fine."
-    echo "$routers"
+    printf "$routers"
     exit 0
 fi
