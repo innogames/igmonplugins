@@ -38,8 +38,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--eshost', dest='eshost', required=True,
-        help='Elasticsearch host to run the query against'
+        'host', help='Elasticsearch host to run the query against'
     )
 
     return parser.parse_args()
@@ -47,7 +46,7 @@ def parse_args():
 def main():
     failed_indices = []
     args = parse_args()
-    es = Elasticsearch(args.eshost)
+    es = Elasticsearch(args.host)
     indices = es.indices.get_settings()
     for index in indices:
         # Except system indices
@@ -57,7 +56,7 @@ def main():
             indices[index]['settings']['index']['lifecycle']
         except KeyError:
             failed_indices.append(index)
-    if len(failed_indices) > 0:
+    if failed_indices:
         print('No lifecycle policy found for {}'.format(failed_indices))
         sys.exit(1)
     print('Found a lifecycle policy for every index')

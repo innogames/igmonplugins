@@ -35,15 +35,14 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--eshost', dest='eshost', required=True,
-        help='Elasticsearch host to run the query against'
+        'host', help='Elasticsearch host to run the query against'
     )
 
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    es = Elasticsearch(args.eshost)
+    es = Elasticsearch(args.host)
     health = es.cluster.health()
     if health['status'] == 'red':
         print('Cluster status is red')

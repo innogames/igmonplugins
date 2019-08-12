@@ -23,7 +23,6 @@ Copyright (c) 2019 InnoGames GmbH
 # THE SOFTWARE.
 
 import sys
-import io
 from argparse import ArgumentParser, RawTextHelpFormatter
 from elasticsearch import Elasticsearch
 
@@ -38,22 +37,19 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--eshost', dest='eshost', required=True,
-        help='Elasticsearch host to run the query against'
+        'host', help='Elasticsearch host to run the query against'
     )
     parser.add_argument(
-        '-i', '--index', dest='index', required=True,
-        help='Index Prefix to check for'
+        'index', help='Index Prefix to check for'
     )
 
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    es = Elasticsearch(args.eshost)
+    es = Elasticsearch(args.host)
     # suppress print output from es function
-    text_trap = io.StringIO()
-    sys.stderr = text_trap
+    sys.stderr = None
     if not es.indices.exists(args.index + '*', allow_no_indices=False):
         print('Index not found in cluster: {}'.format(args.index))
         sys.exit(1)
