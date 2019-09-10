@@ -140,16 +140,19 @@ class SystemdUnit:
             # See the man 5 systemd.service for ExecMainStatus and
             # SuccessExitStatus
             # All currently running services have ExecMainStatus=0
-            last_run_failed = (
-                (
-                    # SuccessExitStatus is not always present in older versions
-                    # of systemd
-                    hasattr(self.type_properties, 'SuccessExitStatus') and
-                    self.type_properties.ExecMainStatus not in
-                    self.type_properties.SuccessExitStatus[0]
-                )
-                or self.type_properties.ExecMainStatus != 0
-            )
+
+            # SuccessExitStatus is not always present in older versions
+            # of systemd.
+            # SuccessExitStatus[0] is an array that could be empty.
+            if hasattr(self.type_properties, 'SuccessExitStatus') and \
+                    len(self.type_properties.SuccessExitStatus[0]):
+                last_run_failed = self.type_properties.ExecMainStatus not in \
+                                  self.type_properties.SuccessExitStatus[0]
+            else:
+                # We only want to rely purely on ExecMainStatus != 0 if
+                # we don't have the SuccessExitStatus attribute or if the
+                # SuccessExitStatus array is empty.
+                last_run_failed = self.type_properties.ExecMainStatus != 0
 
             if last_run_failed:
                 return (
