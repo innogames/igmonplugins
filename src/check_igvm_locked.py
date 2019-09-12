@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - IGVM locked Check
 This script checks if a vm or hypervisor is igvm_locked
 if so the check will go to the state warning never critical.
@@ -36,7 +36,7 @@ def main():
     )
     parser.add_argument("monitoring_master", type=str)
     parser.add_argument("--time-in-minutes", type=int, default=480)
-    parser.add_argument("-v")
+    parser.add_argument("-v", type=bool, default=False)
     args = parser.parse_args()
 
     max_minutes = args.time_in_minutes
