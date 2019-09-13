@@ -187,7 +187,18 @@ class SystemdUnit:
         '''
         Detects problems for a timer unit
         '''
-        long_not_running = self._check_intervals(timer_warn, timer_crit)
+        # This might check the service unit twice. We need to do that as we
+        # would not check timer service unit at all if the user didn't
+        # explicitly ask for them via arguments.
+        service_unit = SystemdUnit(
+            systemd_manager.get_unit(self.type_properties.Unit)
+        )
+
+        long_not_running = self._check_intervals(
+            service_unit,
+            timer_warn,
+            timer_crit,
+        )
         if long_not_running:
             return long_not_running
 
@@ -196,63 +207,83 @@ class SystemdUnit:
                 self._crit_level, 'the timer is not active'
             )
 
-        # This might check the service unit twice. We need to do that as we
-        # would not check timer service unit at all if the user didn't
-        # explicitly ask for them via arguments.
-        service_unit = SystemdUnit(
-            systemd_manager.get_unit(self.type_properties.Unit)
-        )
         return service_unit.check(
             timer_warn, timer_crit, self.__critical, timer=True
         )
 
-    def _check_intervals(self, timer_warn, timer_crit):
+    def _check_intervals(self, service_unit, timer_warn, timer_crit):
         # We check intervals only if timer has been triggered after reboot,
         # otherwise LastTriggerUSec=0 (1970-01-01:00:00:00)
         if self.type_properties.LastTriggerUSec == 0:
             return None
 
+        # We can check only monotonic triggers for regular execution
         checked_intervals = ['OnUnitActiveUSec', 'OnUnitInactiveUSec']
         # Microseconds to seconds
         m = 1000000
 
         intervals = [
-            p[1] for p in self.type_properties.TimersMonotonic
+            (p[0], p[1]) for p in self.type_properties.TimersMonotonic
             if p[0] in checked_intervals
         ]
         logger.debug('Monotonic timers are: {}'.format(intervals))
         if not intervals:
             return None
 
-        # We can check only monotonic triggers for regular execution
-        min_interval = min(intervals) / m
-        inactivity = (
-            now - self.type_properties.LastTriggerUSec / m
-        )
-        last_execute = datetime.fromtimestamp(
-            self.type_properties.LastTriggerUSec / m
-        )
+        if len(intervals) > 1:
+            return (
+                Codes.UNKNOWN,
+                '{} has multiple triggers configured'.format(str(self))
+            )
+
+        # Doing the math
+        trigger, interval = intervals[0]
+        interval /= m
+        last_trigger = self.type_properties.LastTriggerUSec / m
+
+        if trigger == 'OnUnitActiveUSec':
+            state_change = (
+                service_unit.unit_properties.ActiveEnterTimestamp / m
+            )
+        else:
+            state_change = (
+                service_unit.unit_properties.InactiveEnterTimestamp / m
+            )
+
+        # If the unit was started everything is fine
+        if last_trigger > state_change:
+            return None
+
+        # A ratio of 1 means the timer has exactly started the unit after
+        # the amount of time it was configured. lower means it should not
+        # execute, yet, and higher means it should have been executed.
+        not_triggered_since = now - state_change
+        ratio = not_triggered_since / interval
+
         logger.info(
-            '{}: min_interval={}, inactivity={}, last_execute={}, '
-            'since_last_execute / min_interval={}'
+            '{}: interval={}, last_trigger={}, state_change={}, '
+            'not_triggered_since={}, '
+            'not_triggered_since / interval={}'
             .format(
-                str(self), min_interval, inactivity, last_execute,
-                inactivity / min_interval
+                str(self), interval, last_trigger, state_change,
+                not_triggered_since, ratio
             )
         )
 
-        if timer_crit <= inactivity / min_interval:
+        last_trigger_human = datetime.fromtimestamp(last_trigger)
+
+        if timer_crit <= ratio:
             return (
                 self._crit_level,
                 'the timer hasn\'t been launched since {}, look at {}'
-                .format(last_execute, self.type_properties.Unit)
+                    .format(last_trigger_human, str(service_unit))
             )
 
-        if timer_warn <= inactivity / min_interval:
+        if timer_warn <= ratio:
             return (
                 self._warn_level,
                 'the timer hasn\'t been launched since {}, look at {}'
-                .format(last_execute, self.type_properties.Unit)
+                    .format(last_trigger_human, str(service_unit))
             )
 
         return None
