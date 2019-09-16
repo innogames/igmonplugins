@@ -34,9 +34,9 @@ def main():
     parser = argparse.ArgumentParser(
         description='nagios check for long running igvm_locked attribute',
     )
-    parser.add_argument("monitoring_master", type=str)
-    parser.add_argument("--time-in-minutes", type=int, default=480)
-    parser.add_argument("-v", type=bool, default=False)
+    parser.add_argument('monitoring_master', type=str)
+    parser.add_argument('--time-in-minutes', type=int, default=480)
+    parser.add_argument('-v', action='store_true')
     args = parser.parse_args()
 
     max_minutes = args.time_in_minutes
@@ -67,8 +67,8 @@ def main():
 def nagios_create(hosts_locked, hosts_not_locked, max_minutes):
     nsca_output = ""
     for host in hosts_locked:
-        nsca_output += ("{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer"
-                        " than {}h {}m\x17"
+        nsca_output += ('{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer'
+                        ' than {}h {}m\x17'
                         .format(host['hostname'], 1, int(max_minutes / 60),
                                 int(max_minutes - 60 * (max_minutes / 60))))
 
@@ -100,16 +100,16 @@ def console_out(hosts_locked, max_minutes):
     count_locked_servers = 0
     locked_hosts = ""
     for host in hosts_locked:
-        locked_hosts += "{}:{}\n".format(host['hostname'], host['igvm_locked'])
+        locked_hosts += '{}:{}\n'.format(host['hostname'], host['igvm_locked'])
         count_locked_servers += 1
 
     if locked_hosts == "":
-        print("No igvm_locked Servers !!!")
+        print('No igvm_locked Servers !!!')
     else:
         hours = int(max_minutes / 60)
         minutes = max_minutes - (int(max_minutes / 60) * 60)
 
-        print("({}) server/s are/is locked longer than {}h and {}m : \n{}"
+        print('({}) server/s are/is locked longer than {}h and {}m : \n{}'
               .format(count_locked_servers, hours, minutes, locked_hosts))
 
 
