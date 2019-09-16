@@ -15,17 +15,16 @@
 # Copyright (c) 2018 InnoGames GmbH
 #
 
+import logging
 from argparse import ArgumentParser
-from sys import exit
-
 from datetime import datetime
+from sys import exit
+from time import time
+
 from systemd_dbus.exceptions import SystemdError
 from systemd_dbus.manager import Manager
 from systemd_dbus.service import Service
 from systemd_dbus.timer import Timer
-from time import time
-
-import logging
 
 logging.basicConfig(
     format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
@@ -219,8 +218,6 @@ class SystemdUnit:
 
         # We can check only monotonic triggers for regular execution
         checked_intervals = ['OnUnitActiveUSec', 'OnUnitInactiveUSec']
-        # Microseconds to seconds
-        m = 1000000
 
         intervals = [
             (p[0], p[1]) for p in self.type_properties.TimersMonotonic
@@ -230,15 +227,27 @@ class SystemdUnit:
         if not intervals:
             return None
 
-        if len(intervals) > 1:
-            return (
-                Codes.UNKNOWN,
-                '{} has multiple triggers configured'.format(str(self))
+        # Check each collected metric on its own
+        for interval in intervals:
+            result = self._check_interval(
+                service_unit,
+                interval,
+                timer_warn,
+                timer_crit,
             )
 
+            if result:
+                return result
+
+        return None
+
+    def _check_interval(self, service_unit, interval, timer_warn, timer_crit):
+        # Microseconds to seconds
+        m = 1000000
+
         # Doing the math
-        trigger, interval = intervals[0]
-        interval /= m
+        trigger, start_interval = interval
+        start_interval /= m
         last_trigger = self.type_properties.LastTriggerUSec / m
 
         if trigger == 'OnUnitActiveUSec':
@@ -258,15 +267,18 @@ class SystemdUnit:
         # the amount of time it was configured. lower means it should not
         # execute, yet, and higher means it should have been executed.
         not_triggered_since = now - state_change
-        ratio = not_triggered_since / interval
+        ratio = not_triggered_since / start_interval
 
         logger.info(
             '{}: interval={}, last_trigger={}, state_change={}, '
             'not_triggered_since={}, '
-            'not_triggered_since / interval={}'
-            .format(
-                str(self), interval, last_trigger, state_change,
-                not_triggered_since, ratio
+            'not_triggered_since / interval={}'.format(
+                str(self),
+                start_interval,
+                last_trigger,
+                state_change,
+                not_triggered_since,
+                ratio,
             )
         )
 
