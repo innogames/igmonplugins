@@ -134,6 +134,17 @@ class SystemdUnit:
         '''
         Detects problems for a service unit
         '''
+
+        if (
+            self.unit_properties.ActiveState == 'activating' and
+            self.unit_properties.SubState == 'auto-restart'
+        ):
+            # Ignore service units that are currently restarting but only tell
+            # us if they are failed. This allows us to use systemd to restart
+            # services silently without raising a warning which requires no
+            # manual action.
+            return (Codes.OK, '')
+
         # Most probably, oneshot is related to some timer
         if self.type_properties.Type == 'oneshot':
             # See the man 5 systemd.service for ExecMainStatus and
