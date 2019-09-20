@@ -80,8 +80,8 @@ def main():
     try:
         state, output = get_check_result(domains, args.ip)
     except ConnectionRefusedError:
-        output = 'WARNING - The host refused the connection'
-        state = 2
+        output = 'CRITICAL - The host refused the connection'
+        state = 1
 
     print(output)
     sys.exit(state)
