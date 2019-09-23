@@ -77,7 +77,12 @@ def main():
         print(message)
         sys.exit(3)
 
-    state, output = get_check_result(domains, args.ip)
+    try:
+        state, output = get_check_result(domains, args.ip)
+    except ConnectionRefusedError:
+        output = 'CRITICAL - The host refused the connection'
+        state = 1
+
     print(output)
     sys.exit(state)
 
@@ -91,6 +96,7 @@ def get_domains(domains):
 
 def fetch_cert_info(domain, ip):
     domain = domain.replace('*', 'www', 1)
+
     conn = ssl.create_connection((ip, 443))
     context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     with context.wrap_socket(conn, server_hostname=domain) as sock:
@@ -98,6 +104,7 @@ def fetch_cert_info(domain, ip):
             crypto.FILETYPE_PEM,
             ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
         )
+
     common_name = cert.get_subject().commonName
     not_after = parse_date(cert.get_notAfter().decode('utf-8'))
     remaining = not_after - datetime.now(tzutc())
