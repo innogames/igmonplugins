@@ -28,16 +28,36 @@ from datetime import datetime, timezone, timedelta
 from subprocess import Popen, PIPE, DEVNULL
 
 import argparse
+import logging
+
+logging.basicConfig(
+    format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 def main():
     parser = argparse.ArgumentParser(
         description='nagios check for long running igvm_locked attribute',
     )
-    parser.add_argument('monitoring_master', type=str)
-    parser.add_argument('--time-in-minutes', type=int, default=480)
-    parser.add_argument('-v', action='store_true')
+    parser.add_argument(
+        'monitoring_master', type=str,
+        help='Server which will receive the passive check results')
+    parser.add_argument(
+        '--time-in-minutes', type=int, default=480,
+        help='Time in minutes that a machine can be igvm_locked before being '
+             'considered stale'
+    )
+    parser.add_argument(
+        '-v', action='store_true', dest='verbose',
+        help='Run the check in verbose mode'
+    )
     args = parser.parse_args()
+
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.FATAL)
 
     max_minutes = args.time_in_minutes
     master = args.monitoring_master
@@ -55,25 +75,33 @@ def main():
             continue
 
         locked_time = datetime.now(timezone.utc) - host['igvm_locked']
-        if locked_time > timedelta(minutes=max_minutes):
+        if locked_time >= timedelta(minutes=max_minutes):
             hosts_locked.append(host)
         else:
             hosts_not_locked.append(host)
 
-    if args.v:
-        console_out(hosts_locked, max_minutes)
+    console_out(hosts_locked, max_minutes)
 
     results = nagios_create(hosts_locked, hosts_not_locked, max_minutes)
 
     nsca_output = ""
+    exit_code = 0
     for result in results:
         if (len(nsca_output) + len(result)) >= 5000:
-            nagios_send(master, nsca_output)
+            ret = nagios_send(master, nsca_output)
+            if not ret:
+                exit_code = 1
             nsca_output = result
         else:
             nsca_output += result
 
-    nagios_send(master, nsca_output)
+    ret = nagios_send(master, nsca_output)
+    if not ret:
+        exit_code = 1
+
+    if exit_code:
+        logger.warning('Failed to submit NSCA results')
+    exit(exit_code)
 
 
 def nagios_create(hosts_locked, hosts_not_locked, max_minutes):
@@ -109,20 +137,23 @@ def nagios_send(host, nsca_output):
 
 
 def console_out(hosts_locked, max_minutes):
-    count_locked_servers = 0
-    locked_hosts = ""
+    locked_hosts = []
     for host in hosts_locked:
-        locked_hosts += '{}:{}\n'.format(host['hostname'], host['igvm_locked'])
-        count_locked_servers += 1
+        locked_hosts.append(
+            '{}:{}'.format(host['hostname'], host['igvm_locked'])
+        )
 
-    if locked_hosts == "":
-        print('No igvm_locked Servers !!!')
+    if not locked_hosts:
+        logger.info('No servers locked for more than 24 hours')
     else:
         hours = int(max_minutes / 60)
         minutes = max_minutes - (int(max_minutes / 60) * 60)
 
-        print('({}) server/s are/is locked longer than {}h and {}m : \n{}'
-              .format(count_locked_servers, hours, minutes, locked_hosts))
+        logger.info(
+            '{} servers are locked for more than {}h and {}m: \n{}'.format(
+                len(locked_hosts), hours, minutes, '\n'.join(locked_hosts)
+            )
+        )
 
 
 if __name__ == '__main__':
