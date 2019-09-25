@@ -30,7 +30,6 @@ from adminapi.dataset.filters import Any, Not
 from datetime import datetime, timedelta, timezone
 from subprocess import Popen, DEVNULL, PIPE
 
-
 logging.basicConfig(
     format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
 )
@@ -138,23 +137,21 @@ def nagios_send(host, nsca_output):
 
 
 def console_out(hosts_locked, max_minutes):
-    locked_hosts = []
-    for host in hosts_locked:
-        locked_hosts.append(
-            '{}:{}'.format(host['hostname'], host['igvm_locked'])
-        )
+    locked_hosts = ['{}:{}'.format(host['hostname'], host['igvm_locked'])
+                    for host in hosts_locked]
 
     if not locked_hosts:
         logger.info('No servers locked for more than 24 hours')
-    else:
-        hours = int(max_minutes / 60)
-        minutes = max_minutes - (int(max_minutes / 60) * 60)
+        return
 
-        logger.info(
-            '{} servers are locked for more than {}h and {}m: \n{}'.format(
-                len(locked_hosts), hours, minutes, '\n'.join(locked_hosts)
-            )
+    hours = int(max_minutes / 60)
+    minutes = max_minutes - (int(max_minutes / 60) * 60)
+
+    logger.info(
+        '{} servers are locked for more than {}h and {}m: \n{}'.format(
+            len(locked_hosts), hours, minutes, '\n'.join(locked_hosts)
         )
+    )
 
 
 if __name__ == '__main__':
