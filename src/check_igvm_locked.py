@@ -58,7 +58,7 @@ def main():
     if args.verbose:
         logger.setLevel(logging.DEBUG)
     else:
-        logger.setLevel(logging.FATAL)
+        logger.setLevel(logging.ERROR)
 
     max_minutes = args.time_in_minutes
     master = args.monitoring_master
@@ -101,7 +101,7 @@ def main():
         exit_code = 1
 
     if exit_code:
-        logger.warning('Failed to submit NSCA results')
+        logger.error('Failed to submit NSCA results')
     exit(exit_code)
 
 
