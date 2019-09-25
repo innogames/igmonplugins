@@ -48,6 +48,7 @@ def main():
 
     hosts_not_locked = []
     hosts_locked = []
+
     for host in hosts:
         if not host['igvm_locked']:
             hosts_not_locked.append(host)
@@ -58,23 +59,34 @@ def main():
             hosts_locked.append(host)
         else:
             hosts_not_locked.append(host)
+
     if args.v:
         console_out(hosts_locked, max_minutes)
-    nsca_out = nagios_create(hosts_locked, hosts_not_locked, max_minutes)
-    nagios_send(master, nsca_out)
+
+    results = nagios_create(hosts_locked, hosts_not_locked, max_minutes)
+
+    nsca_output = ""
+    for result in results:
+        if (len(nsca_output) + len(result)) >= 5000:
+            nagios_send(master, nsca_output)
+            nsca_output = result
+        else:
+            nsca_output += result
+
+    nagios_send(master, nsca_output)
 
 
 def nagios_create(hosts_locked, hosts_not_locked, max_minutes):
-    nsca_output = ""
+    nsca_output = []
     for host in hosts_locked:
-        nsca_output += ('{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer'
-                        ' than {}h {}m\x17'
-                        .format(host['hostname'], 1, int(max_minutes / 60),
-                                int(max_minutes - 60 * (max_minutes / 60))))
+        nsca_output.append('{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer'
+                           ' than {}h {}m\x17'
+                           .format(host['hostname'], 1, int(max_minutes / 60),
+                                   int(max_minutes - 60 * (max_minutes / 60))))
 
     for host in hosts_not_locked:
-        nsca_output += ('{}\tigvm_locked\t{}\tOK\x17'
-                        .format(host['hostname'], 0))
+        nsca_output.append('{}\tigvm_locked\t{}\tOK\x17'
+                           .format(host['hostname'], 0))
 
     return nsca_output
 
