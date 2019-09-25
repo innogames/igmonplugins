@@ -59,8 +59,11 @@ def main():
     else:
         logger.setLevel(logging.ERROR)
 
-    max_minutes = args.time_in_minutes
     master = args.monitoring_master
+
+    max_time = args.time_in_minutes
+    max_hours = int(max_time / 60)
+    max_minutes = int(max_time - max_hours * 60)
 
     hosts = Query({'servertype': Any('hypervisor', 'vm'),
                    'no_monitoring': False, 'state': Not('retired')},
@@ -75,14 +78,16 @@ def main():
             continue
 
         locked_time = datetime.now(timezone.utc) - host['igvm_locked']
-        if locked_time >= timedelta(minutes=max_minutes):
+        if locked_time >= timedelta(minutes=max_time):
             hosts_locked.append(host)
         else:
             hosts_not_locked.append(host)
 
-    console_out(hosts_locked, max_minutes)
+    console_out(hosts_locked, max_minutes, max_hours)
 
-    results = nagios_create(hosts_locked, hosts_not_locked, max_minutes)
+    results = nagios_create(
+        hosts_locked, hosts_not_locked, max_minutes, max_hours
+    )
 
     nsca_output = ""
     exit_code = 0
@@ -104,13 +109,14 @@ def main():
     exit(exit_code)
 
 
-def nagios_create(hosts_locked, hosts_not_locked, max_minutes):
+def nagios_create(hosts_locked, hosts_not_locked, max_minutes, max_hours):
     nsca_output = []
     for host in hosts_locked:
         nsca_output.append('{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer'
                            ' than {}h {}m\x17'
-                           .format(host['hostname'], 1, int(max_minutes / 60),
-                                   int(max_minutes - 60 * (max_minutes / 60))))
+            .format(
+            host['hostname'], 1, max_hours, max_minutes)
+        )
 
     for host in hosts_not_locked:
         nsca_output.append('{}\tigvm_locked\t{}\tOK\x17'
@@ -136,20 +142,21 @@ def nagios_send(host, nsca_output):
     return not bool(returncode)
 
 
-def console_out(hosts_locked, max_minutes):
+def console_out(hosts_locked, max_minutes, max_hours):
     locked_hosts = ['{}:{}'.format(host['hostname'], host['igvm_locked'])
                     for host in hosts_locked]
 
     if not locked_hosts:
-        logger.info('No servers locked for more than 24 hours')
+        logger.info(
+            'No servers locked for more than {}h and {}m'.format(
+                max_hours, max_minutes
+            )
+        )
         return
-
-    hours = int(max_minutes / 60)
-    minutes = max_minutes - (int(max_minutes / 60) * 60)
 
     logger.info(
         '{} servers are locked for more than {}h and {}m: \n{}'.format(
-            len(locked_hosts), hours, minutes, '\n'.join(locked_hosts)
+            len(locked_hosts), max_hours, max_minutes, '\n'.join(locked_hosts)
         )
     )
 
