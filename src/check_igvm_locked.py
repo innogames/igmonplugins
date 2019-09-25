@@ -92,6 +92,7 @@ def main():
     nsca_output = ""
     exit_code = 0
     for result in results:
+        # todo: comment why i did this
         if (len(nsca_output) + len(result)) >= 5000:
             ret = nagios_send(master, nsca_output)
             if not ret:
@@ -110,19 +111,16 @@ def main():
 
 
 def nagios_create(hosts_locked, hosts_not_locked, max_minutes, max_hours):
-    nsca_output = []
-    for host in hosts_locked:
-        nsca_output.append('{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer'
-                           ' than {}h {}m\x17'
-            .format(
-            host['hostname'], 1, max_hours, max_minutes)
-        )
+    template = ('{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer'
+                'than {}h {}m\x17')
+    out_locked = [template.format(host['hostname'], 1, max_hours, max_minutes)
+                  for host in hosts_locked]
 
-    for host in hosts_not_locked:
-        nsca_output.append('{}\tigvm_locked\t{}\tOK\x17'
-                           .format(host['hostname'], 0))
+    template = '{}\tigvm_locked\t{}\tOK\x17'
+    out_not_locked = [template.format(host['hostname'], 0)
+                      for host in hosts_not_locked]
 
-    return nsca_output
+    return (out_locked + out_not_locked)
 
 
 def nagios_send(host, nsca_output):
