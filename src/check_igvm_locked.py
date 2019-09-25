@@ -22,13 +22,14 @@ Copyright (c) 2019 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from adminapi.dataset import Query
-from adminapi.dataset.filters import Not, Any
-from datetime import datetime, timezone, timedelta
-from subprocess import Popen, PIPE, DEVNULL
-
 import argparse
 import logging
+
+from adminapi.dataset import Query
+from adminapi.dataset.filters import Any, Not
+from datetime import datetime, timedelta, timezone
+from subprocess import Popen, DEVNULL, PIPE
+
 
 logging.basicConfig(
     format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
