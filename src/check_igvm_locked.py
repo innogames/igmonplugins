@@ -116,16 +116,21 @@ def main():
 
 
 def nagios_create(hosts_locked, hosts_not_locked, max_minutes, max_hours):
-    template = ('{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer'
-                'than {}h {}m\x17')
-    out_locked = [template.format(host['hostname'], 1, max_hours, max_minutes)
-                  for host in hosts_locked]
+    template = (
+        '{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer than {}h {}m\x17'
+    )
+    out_locked = [
+        template.format(
+            host['hostname'], 1, max_hours, max_minutes
+        ) for host in hosts_locked
+    ]
 
     template = '{}\tigvm_locked\t{}\tOK\x17'
-    out_not_locked = [template.format(host['hostname'], 0)
-                      for host in hosts_not_locked]
+    out_not_locked = [
+        template.format(host['hostname'], 0) for host in hosts_not_locked
+    ]
 
-    return (out_locked + out_not_locked)
+    return out_locked + out_not_locked
 
 
 def nagios_send(host, nsca_output):
