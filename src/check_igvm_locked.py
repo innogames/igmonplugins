@@ -92,7 +92,10 @@ def main():
     nsca_output = ""
     exit_code = 0
     for result in results:
-        # todo: comment why i did this
+        # send_nsca has a maximum input buffer of ~5100 bytes.
+        # We need to split our data in chunks no bigger than 5000 characters,
+        # otherwise Nagios will get partial output and a lot of services won't
+        # get new data
         if (len(nsca_output) + len(result)) >= 5000:
             ret = nagios_send(master, nsca_output)
             if not ret:
@@ -101,6 +104,8 @@ def main():
         else:
             nsca_output += result
 
+    # This last nagios send, cover the remaining output that wasn't sent
+    # inside the loop.
     ret = nagios_send(master, nsca_output)
     if not ret:
         exit_code = 1
