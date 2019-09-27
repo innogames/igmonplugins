@@ -67,6 +67,14 @@ CPU_OIDS = {
     'force10_mxl': '1.3.6.1.4.1.6027.3.26.1.4.4.1.4.2.1.1',
 }
 
+PORT_SKIPS = {
+    'procurve': re.compile('^(DEFAULT_VLAN|(VLAN|Trk|lo)[0-9]+)$'),
+    'powerconnect': re.compile('^(CPU|(Vl|Po)[0-9]+)$'),
+    'force10_mxl': re.compile(
+        '^(NULL 0|ManagementEthernet [0-9]+/[0-9]+|(Vlan|Port-channel) [0-9]+)$'
+    ),
+}
+
 
 class SwitchException(Exception):
     pass
@@ -257,28 +265,8 @@ def check_ports(snmp, model, args):
             if port_index >= 1000000:
                 continue
 
-        elif model == 'powerconnect':
-            if (
-                port_names[port_index].startswith('Vl') or
-                port_names[port_index].startswith('CPU') or
-                port_names[port_index].startswith('Po')
-            ):
-                continue
-        elif model == 'procurve':
-            if (
-                port_names[port_index].startswith('DEFAULT_VLAN') or
-                port_names[port_index].startswith('VLAN') or
-                port_names[port_index].startswith('Trk') or
-                port_names[port_index].startswith('lo0')
-            ):
-                continue
-        elif model == 'force10_mxl':
-            if (
-                port_names[port_index].startswith('Vlan') or
-                port_names[port_index].startswith('NULL') or
-                port_names[port_index].startswith('ManagementEthernet') or
-                port_names[port_index].startswith('Port-channel')
-            ):
+        elif model in PORT_SKIPS.keys():
+            if PORT_SKIPS[model].match(port_names[port_index]):
                 continue
 
         local_exit = 1
