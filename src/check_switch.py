@@ -292,8 +292,12 @@ def check_ports(snmp, model, args):
         # Stack port
         if port_oper_states[port_index] == 6:
             if port_admin_states[port_index] == 2:
-                local_exit = 2
-                msg = 'CRITICAL: Stack port disabled.'
+                if model == 'extreme':
+                    local_exit = 0
+                    msg = 'OK: 40G port without SFP'
+                else:
+                    local_exit = 2
+                    msg = 'CRITICAL: Stack port disabled.'
             if port_admin_states[port_index] == 1:
                 if not port_aliases[port_index]:
                     local_exit = 1
