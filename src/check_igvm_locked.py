@@ -104,7 +104,7 @@ def main():
         else:
             nsca_output += result
 
-    # This last nagios send, cover the remaining output that wasn't sent
+    # This last nagios sending covers the remaining output that wasn't sent
     # inside the loop.
     ret = nagios_send(master, nsca_output)
     if not ret:
@@ -120,14 +120,14 @@ def nagios_create(hosts_locked, hosts_not_locked, max_minutes, max_hours):
         '{}\tigvm_locked\t{}\tWARNING - IGVM-locked longer than {}h {}m\x17'
     )
     out_locked = [
-        template.format(
-            host['hostname'], 1, max_hours, max_minutes
-        ) for host in hosts_locked
+        template.format(host['hostname'], 1, max_hours, max_minutes)
+        for host in hosts_locked
     ]
 
     template = '{}\tigvm_locked\t{}\tOK\x17'
     out_not_locked = [
-        template.format(host['hostname'], 0) for host in hosts_not_locked
+        template.format(host['hostname'], 0)
+        for host in hosts_not_locked
     ]
 
     return out_locked + out_not_locked
