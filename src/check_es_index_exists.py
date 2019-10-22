@@ -25,6 +25,7 @@ Copyright (c) 2019 InnoGames GmbH
 import sys
 from argparse import ArgumentParser, RawTextHelpFormatter
 from elasticsearch import Elasticsearch
+from ssl import create_default_context
 
 def parse_args():
     parser = ArgumentParser(
@@ -42,17 +43,37 @@ def parse_args():
     parser.add_argument(
         'index', help='Index Prefix to check for'
     )
+    parser.add_argument(
+        '-u', '--user', help='Monitoring user'
+    )
+    parser.add_argument(
+        '-p', '--password', help='Password for monitoring user'
+    )
+    parser.add_argument(
+        '--root_ca', help='CA file matching the servers certificate'
+    )
 
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    es = Elasticsearch(args.host)
+
+    connect_params = {}
+    if args.root_ca:
+        connect_params['scheme'] = 'https'
+        connect_params['ssl_context'] = create_default_context(cafile = args.root_ca)
+
+    if args.user and args.password:
+        connect_params['http_auth'] = (args.user, args.password)
+
+    es = Elasticsearch([args.host], **connect_params)
+
     # suppress print output from es function
     sys.stderr = None
     if not es.indices.exists(args.index + '*', allow_no_indices=False):
         print('Index not found in cluster: {}'.format(args.index))
         sys.exit(1)
+
     print('Index {} found'.format(args.index))
 
 if __name__ == '__main__':
