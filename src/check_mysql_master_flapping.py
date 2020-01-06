@@ -108,12 +108,16 @@ def get_heartbeat_delta_min(user, password, host, unix_socket, database, table):
     :return: int
     """
 
+    # Due to added IPv6 support, the loadbalancer will do one request for each
+    # protocol, resulting in triggering this check. As the loadbalancer
+    # guarantees the same master for both protocols, we only check for IPv4
+    # addresses.
     timestamps = query_database(
         user,
         password,
         host,
         unix_socket,
-        'SELECT heartbeat from {}.{} ORDER BY heartbeat DESC LIMIT 2'.format(
+        'SELECT heartbeat from {}.{} WHERE IS_IPV4(master_ip) ORDER BY heartbeat DESC LIMIT 2'.format(
             database, table
         ),
     )
