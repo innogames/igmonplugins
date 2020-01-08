@@ -99,7 +99,7 @@ def execute(cmd):
 
 
 def parse_qemu_version(version):
-    r = re.compile(r'.*version\s([\d\.]+\([\w\d\.\s:\+-]+\)).*')
+    r = re.compile(r'.*version\s([\d\.]+\s?\([\w\d\.\s:\+-]+\)).*')
     match = r.match(version)
     # Return None if couldn't match string. Deal with None as couldn't
     # retrieve version.
