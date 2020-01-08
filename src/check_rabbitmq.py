@@ -365,7 +365,9 @@ class Gateway:
         samples = []
         for metric in ['lengths', 'data_rates', 'msg_rates', 'node_stats']:
             samples.append('{}_age={}'.format(metric, self.length))
-            samples.append('{}_incr={}'.format(metric, self.length))
+            # We must add 1 to the increment rate to get the correct
+            # amount of samples.
+            samples.append('{}_incr={}'.format(metric, self.length + 1))
 
         url += '?{}'.format('&'.join(samples))
 
