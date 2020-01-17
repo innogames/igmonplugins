@@ -38,7 +38,7 @@ subs = {}
 for iterate_param in args.iterate_over:
     subs[iterate_param] = subprocess.Popen(args.origin_command + ' ' + iterate_param , stdout=subprocess.PIPE, shell=True)
 
-for iterate_param, process in subs.iteritems():
+for iterate_param, process in subs.items():
     out, err = process.communicate()
     # Return the worst error code, because nagios interprets '3' as unknown we have to do some magic
     if process.returncode != 0:
