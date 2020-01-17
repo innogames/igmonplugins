@@ -51,8 +51,8 @@ if exit_code == 0 and unknown:
     exit_code = 3
 
 if not message:
-    print('Everything is fine')
+    print 'Everything is fine'
 else:
-    print('Found some problems: ' + message.replace('\n', ' <> '))
+    print 'Found some problems: ' + message.replace('\n', ' <> ')
 
 sys.exit(exit_code)
