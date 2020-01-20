@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Wrapper Script to Run Multiple Checks
 
 Copyright (c) 2017 InnoGames GmbH
@@ -38,7 +38,7 @@ subs = {}
 for iterate_param in args.iterate_over:
     subs[iterate_param] = subprocess.Popen(args.origin_command + ' ' + iterate_param , stdout=subprocess.PIPE, shell=True)
 
-for iterate_param, process in subs.iteritems():
+for iterate_param, process in subs.items():
     out, err = process.communicate()
     # Return the worst error code, because nagios interprets '3' as unknown we have to do some magic
     if process.returncode != 0:
@@ -51,8 +51,8 @@ if exit_code == 0 and unknown:
     exit_code = 3
 
 if not message:
-    print 'Everything is fine'
+    print('Everything is fine')
 else:
-    print 'Found some problems: ' + message.replace('\n', ' <> ')
+    print('Found some problems: ' + message.replace('\n', ' <> '))
 
 sys.exit(exit_code)
