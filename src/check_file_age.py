@@ -71,16 +71,16 @@ def main():
     status = 'OK'
     code = 0
 
-    if age > args.critical*60:
+    if age > args.critical * 60:
         code = 2
         status = 'CRITICAL'
-    elif age > args.warning*60:
+    elif age > args.warning * 60:
         code = 1
         status = 'WARNING'
 
     print(
         '{} - {} last changed {} minutes ago'.format(
-            status, args.path, round(age/60)
+            status, args.path, round(age / 60)
         )
     )
     exit(code)
