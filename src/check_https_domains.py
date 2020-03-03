@@ -57,7 +57,7 @@ def parse_args():
              'retrieved from.'
     )
     parser.add_argument(
-        '-p', dest='port', required=False, default=443, type=int,
+        '-p', '--port', type=int, default=443,
         help='Port on the host where Nagios will connect to. Defaults to 443.'
     )
     parser.add_argument(
