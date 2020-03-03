@@ -57,6 +57,10 @@ def parse_args():
              'retrieved from.'
     )
     parser.add_argument(
+        '-p', '--port', type=int, default=443,
+        help='Port on the host where Nagios will connect to. Defaults to 443.'
+    )
+    parser.add_argument(
         '-d', dest='domains', required=True,
         help='Domains to retrieve certificates for. For multiple domains, '
              'provide them as single string, comma separated.'
@@ -78,7 +82,7 @@ def main():
         sys.exit(3)
 
     try:
-        state, output = get_check_result(domains, args.ip)
+        state, output = get_check_result(domains, args.ip, args.port)
     except ConnectionRefusedError:
         output = 'CRITICAL - The host refused the connection'
         state = 1
@@ -94,10 +98,10 @@ def get_domains(domains):
     return domains
 
 
-def fetch_cert_info(domain, ip):
+def fetch_cert_info(domain, ip, port):
     domain = domain.replace('*', 'www', 1)
 
-    conn = ssl.create_connection((ip, 443))
+    conn = ssl.create_connection((ip, port))
     context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     with context.wrap_socket(conn, server_hostname=domain) as sock:
         cert = crypto.load_certificate(
@@ -116,12 +120,12 @@ def fetch_cert_info(domain, ip):
     return data
 
 
-def get_check_result(domains, ip):
+def get_check_result(domains, ip, port):
     output = []
     expirations = []
 
     for domain in domains:
-        expirations.append(fetch_cert_info(domain, ip))
+        expirations.append(fetch_cert_info(domain, ip, port))
 
     if not expirations:
         return (3, 'Could not obtain expiration dates')
