@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+
+
 """InnoGames Monitoring Plugins - File Age Check
 
 This script checks the age of a file and raises a warning or critical state
 depending on the thresholds specified as arguments
 
-Copyright 2019 InnoGames GmbH
+Copyright 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -28,21 +30,42 @@ from argparse import ArgumentParser
 import os
 import time
 
+
+def parse_args():
+    """Get argument parser -> ArgumentParser"""
+
+    parser = ArgumentParser()
+
+    parser.add_argument(
+        '--path', '-p',
+        required=True,
+        help='path of file to check'
+    )
+    parser.add_argument(
+        '--warning', '-w',
+        default=30, type=int,
+        help='warning threshold in minutes for file age'
+    )
+    parser.add_argument(
+        '--critical', '-c',
+        default=60, type=int,
+        help='critical threshold in minutes for file age'
+    )
+
+    return parser.parse_args()
+
+
 def main():
     """Main entrypoint, performs check of file age"""
 
-    args = get_parser().parse_args()
+    args = parse_args()
 
-    if not args.path:
-        print('UNKNOWN - no path supplied')
-        exit(3)
-
-    age = 0
     try:
         age = time.time() - os.path.getmtime(args.path)
     except OSError:
-        print('UNKNOWN - {} is not present or no permissions'.format(
-            args.path))
+        print(
+            'UNKNOWN - {} is not present or no permissions'.format(args.path)
+            )
         exit(3)
 
     status = 'OK'
@@ -55,27 +78,12 @@ def main():
         code = 1
         status = 'WARNING'
 
-    print('{} - {} last changed {} minutes ago'.format(
-        status, args.path, round(age/60)))
+    print(
+        '{} - {} last changed {} minutes ago'.format(
+            status, args.path, round(age/60)
+        )
+    )
     exit(code)
-
-
-def get_parser():
-    """Get argument parser -> ArgumentParser"""
-
-    parser = ArgumentParser()
-
-    parser.add_argument('--path', '-p', help='path of file to check')
-    parser.add_argument(
-        '--warning', '-w',
-        help='warning threshold in minutes for file age',
-        default=30, type=int)
-    parser.add_argument(
-        '--critical', '-c',
-        help='critical threshold in minutes for file age',
-        default=60, type=int)
-
-    return parser
 
 
 if __name__ == '__main__':
