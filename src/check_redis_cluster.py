@@ -48,18 +48,16 @@ def main():
 
     if master_state != 'unknown' and slave_state != 'unknown':
         if cluster_state_master != 'ok' and cluster_state_slave != 'ok':
-            print('CRITICAL - cluster is broken')
+            print('cluster is broken')
             code = 2
-        elif master_state != 'master' or slave_state != 'slave':
-            print('WARNING - cluster status is degraded')
-            if master_state != 'master':
-                print('{} got demoted to slave'.format(master_addr))
-                code = 1
-            if slave_state != 'slave':
-                print('{} got promoted to master'.format(slave_addr))
-                code = 1
+        elif master_state == slave_state:
+            code = 1
+            print(
+                'Redundancy lost: Two {}s on the same host! '
+                'If this host fails we will experience data loss!'
+                .format(master_state))
         else:
-            print('OK - cluster status is OK')
+            print('cluster status is OK')
             print('{} - {}'.format(master_addr, master_state))
             print('{} - {}'.format(slave_addr, slave_state))
             code = 0
