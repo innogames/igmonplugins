@@ -243,7 +243,7 @@ class CheckClusters(Check):
             for t in tables:
                 logger.debug('Select from distributed table `{}`'.format(t))
                 try:
-                    self.execute('SELECT * FROM {} LIMIT 1'.format(t))
+                    self.execute('SELECT 1 FROM {} LIMIT 1'.format(t))
                 except ServerException as e:
                     logger.warning('Fail to read from `{}`, exception is: {}'
                                    .format(t, e.message))
