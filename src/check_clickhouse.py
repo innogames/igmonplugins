@@ -212,7 +212,7 @@ class CheckClusters(Check):
         clusters = self.execute_dict(
             r'''
             SELECT
-                splitByChar('\'', engine_full)[2] AS cluster,
+                splitByChar('\'', t.engine_full)[2] AS cluster,
                 groupArray(concat(t.database, '.', t.name)) AS tables
             FROM system.tables AS t
             INNER JOIN
@@ -238,22 +238,10 @@ class CheckClusters(Check):
             self.code.current = Code.CRITICAL
             messages.append('Clusters not found on server: {}'.format(missing))
 
-        def check_tables(tables: List[str]) -> List[str]:
-            failed = []
-            for t in tables:
-                logger.debug('Select from distributed table `{}`'.format(t))
-                try:
-                    self.execute('SELECT 1 FROM {} LIMIT 1'.format(t))
-                except ServerException as e:
-                    logger.warning('Fail to read from `{}`, exception is: {}'
-                                   .format(t, e.message))
-                    failed.append(t)
-            return failed
-
         for cl in clusters:
             logger.debug('Tables for cluster `{cluster}` are {tables}'
                          .format_map(cl))
-            failed_tables = check_tables(cl['tables'])
+            failed_tables = self._check_tables(cl['tables'])
             if not failed_tables:
                 continue
             self.code.current = Code.CRITICAL
@@ -264,6 +252,18 @@ class CheckClusters(Check):
 
         messages = messages or ['All clusters are fine: {}'.format(clusters)]
         return self.exit('; '.join(messages))
+
+    def _check_tables(self, tables: List[str]) -> List[str]:
+        failed = []
+        for t in tables:
+            logger.debug('Select from distributed table `{}`'.format(t))
+            try:
+                self.execute('SELECT 1 FROM {} LIMIT 1'.format(t))
+            except ServerException as e:
+                logger.warning('Fail to read from `{}`, exception is: {}'
+                               .format(t, e.message))
+                failed.append(t)
+        return failed
 
 
 class CheckParts(Check):
