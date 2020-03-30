@@ -6,7 +6,7 @@
 #
 # Usage examples:
 #
-#   check_clickhouse.py clusters -c cluster_name
+#   check_clickhouse.py clusters
 #   check_clickhouse.py parts
 #   check_clickhouse.py replication
 #
@@ -96,8 +96,10 @@ def add_subparser_clusters(subparsers: _SubParsersAction):
     )
     parser_clusters.set_defaults(check=CheckClusters)
     parser_clusters.add_argument(
-        '-c', '--clusters', action='append', default=[], required=True,
-        help='cluster names, could be defined multiple times',
+        '-c', '--clusters', action='append', default=[],
+        help='cluster names that MUST be presented on the server. '
+        'If the argument is omitted, then only clusters with Distributed '
+        'tables are checked. Could be defined multiple times',
     )
 
 
@@ -218,8 +220,11 @@ class CheckClusters(Check):
 
     def __call__(self, config: dict) -> ExitStruct:
         """
-        Accepts args with 'clusters' attribute and checks every related
+        Accepts args with `clusters` attribute and checks every related
         Distributed table, if it is readable
+
+        If config['clusters'] is an empty list, then checks every presented
+        Distributed table
         """
         logger.debug('Cluster check, config={}'.format(pformat(config)))
         self.check_config(config, {'clusters'})
@@ -265,8 +270,7 @@ class CheckClusters(Check):
                 array contains tuples of (database, table) for tables behind
                 the Distributed tables
         """
-        data = self.execute_dict(
-            r'''
+        query = r'''
             SELECT
                 splitByChar('\'', t.engine_full)[2] AS cluster,
                 groupArray(concat(t.database, '.', t.name)) AS tables,
@@ -282,15 +286,18 @@ class CheckClusters(Check):
                     cluster,
                     max(has(resolves, host_name)) AS local
                 FROM system.clusters
-                WHERE cluster IN %(clusters)s
+                {where_clause}
                 GROUP BY cluster
             ) AS c USING (cluster)
             WHERE t.engine = 'Distributed'
             GROUP BY cluster
-            ''',
-            {'clusters': tuple(clusters)},
-        )
-        return data
+        '''
+        if clusters:
+            query = query.format(where_clause='WHERE cluster IN %(clusters)s')
+            return self.execute_dict(query, {'clusters': tuple(clusters)})
+        else:
+            query = query.format(where_clause='')
+            return self.execute_dict(query)
 
     def _check_tables(self, tables: List[str],
                       local_tables: List[list]) -> List[str]:
