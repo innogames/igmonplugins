@@ -82,7 +82,7 @@ def main():
         code, message = check(args.__dict__)
         print(message)
         sys.exit(code)
-    except NetworkError as e:
+    except (NetworkError, ServerException) as e:
         check.code.current = Code.CRITICAL
         code, message = check.exit(e.message)
         print(message)
@@ -232,6 +232,7 @@ class CheckClusters(Check):
             .format(pformat(clusters))
         )
 
+        # Check if any of config['clusters'] doesn't have Distributed tables
         existing = {c['cluster'] for c in clusters}
         missing = set(config['clusters']) - existing
         if missing:
@@ -251,17 +252,18 @@ class CheckClusters(Check):
                 .format(cl['cluster'], failed_tables)
             )
 
-        messages = messages or ['All clusters are fine: {}'.format(clusters)]
+        summary = [{c['cluster']: list(c['tables'])} for c in clusters]
+        messages = messages or ['All clusters are fine: {}'.format(summary)]
         return self.exit('; '.join(messages))
 
     def _get_clusters(self, clusters: List[str]) -> List[dict]:
         """
         Returns list of dicts with the following keys:
-        - cluster: cluster name
-        - tables: tables belongs to cluster
-        - local_tables: if the checking node belongs to cluster, then this
-            array contains tuples of (database, table) for tables behind
-            the Distributed tables
+            - cluster: cluster name
+            - tables: tables belongs to cluster
+            - local_tables: if the checking node belongs to cluster, then this
+                array contains tuples of (database, table) for tables behind
+                the Distributed tables
         """
         data = self.execute_dict(
             r'''
