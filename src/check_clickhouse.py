@@ -196,6 +196,23 @@ class Check(object):
 
 
 class CheckClusters(Check):
+    # Here are ClickHouse data types that allow to optimize query by
+    # partition key `WHERE` clause
+    defaults_per_type_family = {
+        ('Array'): '[]',
+        ('DEC', 'Decimal', 'Decimal32', 'Decimal64', 'Decimal128',
+         'DOUBLE', 'FLOAT', 'Float32', 'Float64',
+         'BIGINT', 'INT', 'INTEGER', 'SMALLINT', 'TINYINT',
+         'Int8', 'Int16', 'Int32', 'Int64',
+         'UInt8', 'UInt16', 'UInt32', 'UInt64'
+         'IPv4'): 0,
+        ('BINARY', 'BLOB', 'CHAR', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB',
+         'MEDIUMTEXT', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'VARCHAR',
+         'FixedString', 'String',
+         'IPv6'): "''",
+        ('Date', 'DateTime', 'DateTime64', 'TIMESTAMP'): 'now()',
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -209,24 +226,7 @@ class CheckClusters(Check):
 
         messages = []  # type: List[str]
         # Request config['clusters'] from ClickHouse
-        clusters = self.execute_dict(
-            r'''
-            SELECT
-                splitByChar('\'', t.engine_full)[2] AS cluster,
-                groupArray(concat(t.database, '.', t.name)) AS tables
-            FROM system.tables AS t
-            INNER JOIN
-            (
-                SELECT cluster
-                FROM system.clusters
-                WHERE cluster IN %(clusters)s
-                GROUP BY cluster
-            ) AS c USING (cluster)
-            WHERE t.engine = 'Distributed'
-            GROUP BY cluster
-            ''',
-            {'clusters': tuple(config['clusters'])},
-        )
+        clusters = self._get_clusters(config['clusters'])
         logger.debug(
             'Existing clusters on ClickHouse server are: {}'
             .format(pformat(clusters))
@@ -241,7 +241,8 @@ class CheckClusters(Check):
         for cl in clusters:
             logger.debug('Tables for cluster `{cluster}` are {tables}'
                          .format_map(cl))
-            failed_tables = self._check_tables(cl['tables'])
+            failed_tables = self._check_tables(cl['tables'],
+                                               cl['local_tables'])
             if not failed_tables:
                 continue
             self.code.current = Code.CRITICAL
@@ -253,17 +254,108 @@ class CheckClusters(Check):
         messages = messages or ['All clusters are fine: {}'.format(clusters)]
         return self.exit('; '.join(messages))
 
-    def _check_tables(self, tables: List[str]) -> List[str]:
+    def _get_clusters(self, clusters: List[str]) -> List[dict]:
+        """
+        Returns list of dicts with the following keys:
+        - cluster: cluster name
+        - tables: tables belongs to cluster
+        - local_tables: if the checking node belongs to cluster, then this
+            array contains tuples of (database, table) for tables behind
+            the Distributed tables
+        """
+        data = self.execute_dict(
+            r'''
+            SELECT
+                splitByChar('\'', t.engine_full)[2] AS cluster,
+                groupArray(concat(t.database, '.', t.name)) AS tables,
+                groupArrayIf([
+                    splitByChar('\'', t.engine_full)[4],
+                    splitByChar('\'', t.engine_full)[6]
+                ], c.local) AS local_tables
+            FROM system.tables AS t
+            INNER JOIN
+            (
+                WITH [hostName(), fqdn()] AS resolves
+                SELECT
+                    cluster,
+                    max(has(resolves, host_name)) AS local
+                FROM system.clusters
+                WHERE cluster IN %(clusters)s
+                GROUP BY cluster
+            ) AS c USING (cluster)
+            WHERE t.engine = 'Distributed'
+            GROUP BY cluster
+            ''',
+            {'clusters': tuple(clusters)},
+        )
+        return data
+
+    def _check_tables(self, tables: List[str],
+                      local_tables: List[list]) -> List[str]:
         failed = []
-        for t in tables:
-            logger.debug('Select from distributed table `{}`'.format(t))
+        # If there're no local_tables (the cluster is remote),
+        # then we create list of empty lists with the len of tables
+        local_tables = local_tables or [[]] * len(tables)
+        for t, lt in zip(tables, local_tables):
+            logger.debug('Select from distributed table `{}`,'
+                         ' local table is {}'.format(t, lt))
             try:
-                self.execute('SELECT 1 FROM {} LIMIT 1'.format(t))
+                self.execute(self._optimized_request(t, lt))
             except ServerException as e:
                 logger.warning('Fail to read from `{}`, exception is: {}'
                                .format(t, e.message))
                 failed.append(t)
         return failed
+
+    def _optimized_request(self, table: str, local_table: list) -> str:
+        """
+        This method is trying to optimize request by adding 'WHERE' clause
+        with partitioning key. In the best case WHERE won't match anything
+        and SELECT will over almost immediately. Here the next steps are done:
+            - See if the current host is the part of the checked cluster
+            (local_tables is not empty)
+            - Get columns in partitioning key
+            - Add `WHERE` clause for compatible types, see
+            CheckClusters.defaults_per_type_family dict
+        """
+
+        query = r'SELECT 1 FROM {table} {where} LIMIT 1'
+        f_config = {'table': table, 'where': ''}
+        unoptimized_query = query.format_map(f_config)
+        # Nothing to optimize if local_tables is empty
+        if not local_table:
+            return unoptimized_query
+
+        p_keys = self.execute_dict(
+            r'''
+            SELECT name,
+                splitByChar('(', type)[1] AS type
+            FROM system.columns
+            WHERE database = %(database)s
+                AND table = %(table)s
+                AND is_in_partition_key
+            ''',
+            {'database': local_table[0], 'table': local_table[1]}
+        )
+        logger.debug('Partition keys for table {}.{} are: {}'
+                     .format(local_table[0], local_table[1], p_keys))
+        # p_keys could be empty if Distributed is created above Logs engine
+        if not p_keys:
+            return unoptimized_query
+
+        condition = '{column} = {default}'
+        conditions = [
+            condition.format(column=k['name'], default=default)
+            for k in p_keys
+            for types, default in self.defaults_per_type_family.items()
+            if k['type'] in types
+        ]
+        if conditions:
+            f_config['where'] = 'WHERE ' + ' AND '.join(conditions)
+
+        optimized_query = query.format_map(f_config)
+        logger.debug('Optimized query is {}'.format(optimized_query))
+        return optimized_query
 
 
 class CheckParts(Check):
