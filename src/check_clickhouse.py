@@ -92,13 +92,13 @@ def main():
 def add_subparser_clusters(subparsers: _SubParsersAction):
     parser_clusters = subparsers.add_parser(
         'clusters', formatter_class=ArgumentDefaultsHelpFormatter,
-        help='checks basic availability of Distributed tables',
+        help='checks basic availability of Distributed() tables',
     )
     parser_clusters.set_defaults(check=CheckClusters)
     parser_clusters.add_argument(
         '-c', '--clusters', action='append', default=[],
-        help='cluster names that MUST be presented on the server. '
-        'If the argument is omitted, then only clusters with Distributed '
+        help='cluster names that MUST be presented on the server. If the '
+        'argument is omitted, then only clusters with Distributed() '
         'tables are checked. Could be defined multiple times',
     )
 
@@ -221,10 +221,10 @@ class CheckClusters(Check):
     def __call__(self, config: dict) -> ExitStruct:
         """
         Accepts args with `clusters` attribute and checks every related
-        Distributed table, if it is readable
+        Distributed() table, if it is readable
 
         If config['clusters'] is an empty list, then checks every presented
-        Distributed table
+        Distributed() table
         """
         logger.debug('Cluster check, config={}'.format(pformat(config)))
         self.check_config(config, {'clusters'})
@@ -237,7 +237,7 @@ class CheckClusters(Check):
             .format(pformat(clusters))
         )
 
-        # Check if any of config['clusters'] doesn't have Distributed tables
+        # Check if any of config['clusters'] doesn't have Distributed() tables
         existing = {c['cluster'] for c in clusters}
         missing = set(config['clusters']) - existing
         if missing:
@@ -268,7 +268,7 @@ class CheckClusters(Check):
             - tables: tables belongs to cluster
             - local_tables: if the checking node belongs to cluster, then this
                 array contains tuples of (database, table) for tables behind
-                the Distributed tables
+                the Distributed() tables
         """
         query = r'''
             SELECT
@@ -306,7 +306,7 @@ class CheckClusters(Check):
         # then we create list of empty lists with the len of tables
         local_tables = local_tables or [[]] * len(tables)
         for t, lt in zip(tables, local_tables):
-            logger.debug('Select from distributed table `{}`,'
+            logger.debug('Select from Distributed() table `{}`,'
                          ' local table is {}'.format(t, lt))
             try:
                 self.execute(self._optimized_request(t, lt))
@@ -348,7 +348,7 @@ class CheckClusters(Check):
         )
         logger.debug('Partition keys for table {}.{} are: {}'
                      .format(local_table[0], local_table[1], p_keys))
-        # p_keys could be empty if Distributed is created above Logs engine
+        # p_keys could be empty if Distributed() is created above Logs engine
         if not p_keys:
             return unoptimized_query
 
