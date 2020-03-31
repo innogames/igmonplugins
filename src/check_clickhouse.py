@@ -25,7 +25,7 @@ from clickhouse_driver.errors import (  # type: ignore  # missing stubs
     NetworkError, ServerException,
 )
 from pprint import pformat
-from typing import Tuple, List, Union, Set
+from typing import List, Optional, Tuple, Union
 
 import logging
 import sys
@@ -198,27 +198,7 @@ class Check(object):
 
 
 class CheckClusters(Check):
-    # Here are ClickHouse data types that allow to optimize query by
-    # partition key `WHERE` clause
-    defaults_per_type_family = (
-        ({'Array'},
-         '[]'),
-        ({'DEC', 'Decimal', 'Decimal32', 'Decimal64', 'Decimal128',
-          'DOUBLE', 'FLOAT', 'Float32', 'Float64',
-          'BIGINT', 'INT', 'INTEGER', 'SMALLINT', 'TINYINT',
-          'Int8', 'Int16', 'Int32', 'Int64',
-          'UInt8', 'UInt16', 'UInt32', 'UInt64'
-          'IPv4'},
-         0),
-        ({'BINARY', 'BLOB', 'CHAR', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB',
-          'MEDIUMTEXT', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'VARCHAR',
-          'FixedString', 'String',
-          'IPv6'},
-         "''"),
-        ({'Date', 'DateTime', 'DateTime64', 'TIMESTAMP'},
-         'now()',)
-    )  # type: Tuple[Tuple[Set[str], Union[int, str]], ...]
-    LocalTable = Union[Tuple[str, str], Tuple[()]]
+    LocalTable = Optional[Tuple[str, str]]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -309,7 +289,7 @@ class CheckClusters(Check):
         failed = []
         # If there're no local_tables (the cluster is remote),
         # then we create tuple of empty tuples with the len of tables
-        local_tables = local_tables or ((),) * len(tables)
+        local_tables = local_tables or (None,) * len(tables)
         for t, lt in zip(tables, local_tables):
             logger.debug('Select from Distributed() table `{}`,'
                          ' local table is {}'.format(t, lt))
@@ -324,9 +304,9 @@ class CheckClusters(Check):
     def _optimized_request(self, table: str,
                            local_table: LocalTable) -> str:
         """
-        This method is trying to optimize request by adding 'WHERE' clause
-        with partitioning key. In the best case WHERE won't match anything
-        and SELECT query will finish almost instantly. Here the next steps are done:
+        This method is trying to optimize request by adding 'WHERE' clause with
+        partitioning key. In the best case WHERE won't match anything and the
+        request will finish almost instantly. Here the next steps are done:
             - See if the current host is the part of the checked cluster
             (local_tables is not empty)
             - Get columns in partitioning key
@@ -360,19 +340,43 @@ class CheckClusters(Check):
         if not partition_keys:
             return unoptimized_query
 
-        condition = '{column} = {default}'
-        conditions = [
-            condition.format(column=k['name'], default=default)
-            for k in partition_keys
-            for types, default in self.defaults_per_type_family
-            if k['type'] in types
-        ]
+        cond = '{} = {}'
+        conditions: List[str] = []
+        for k in partition_keys:
+            default = self._get_type_default(k['type'])
+            if default is not None:
+                conditions.append(cond.format(k['name'], default))
+
         if conditions:
             query_format['where'] = 'WHERE ' + ' AND '.join(conditions)
 
         optimized_query = query.format_map(query_format)
         logger.debug('Optimized query is {}'.format(optimized_query))
         return optimized_query
+
+    def _get_type_default(self, type: str) -> Union[int, str, None]:
+        """
+        Here are ClickHouse data types that allow to optimize query by
+        partition key `WHERE` clause
+        """
+        if type in {'Array'}:
+            return '[]'
+        elif type in {'DEC', 'Decimal', 'Decimal32', 'Decimal64', 'Decimal128',
+                      'DOUBLE', 'FLOAT', 'Float32', 'Float64',
+                      'BIGINT', 'INT', 'INTEGER', 'SMALLINT', 'TINYINT',
+                      'Int8', 'Int16', 'Int32', 'Int64',
+                      'UInt8', 'UInt16', 'UInt32', 'UInt64'
+                      'IPv4'}:
+            return 0
+        elif type in {'BINARY', 'BLOB', 'CHAR', 'LONGBLOB', 'LONGTEXT',
+                      'MEDIUMBLOB', 'MEDIUMTEXT', 'TEXT', 'TINYBLOB',
+                      'TINYTEXT', 'VARCHAR', 'IPv6',
+                      'FixedString', 'String'}:
+            return "''"
+        elif type in {'Date', 'DateTime', 'DateTime64', 'TIMESTAMP'}:
+            return 'now()'
+        else:
+            return None
 
 
 class CheckParts(Check):
