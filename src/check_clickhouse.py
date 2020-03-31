@@ -25,7 +25,7 @@ from clickhouse_driver.errors import (  # type: ignore  # missing stubs
     NetworkError, ServerException,
 )
 from pprint import pformat
-from typing import Tuple, List
+from typing import Tuple, List, Union, Set
 
 import logging
 import sys
@@ -200,20 +200,25 @@ class Check(object):
 class CheckClusters(Check):
     # Here are ClickHouse data types that allow to optimize query by
     # partition key `WHERE` clause
-    defaults_per_type_family = {
-        ('Array'): '[]',
-        ('DEC', 'Decimal', 'Decimal32', 'Decimal64', 'Decimal128',
-         'DOUBLE', 'FLOAT', 'Float32', 'Float64',
-         'BIGINT', 'INT', 'INTEGER', 'SMALLINT', 'TINYINT',
-         'Int8', 'Int16', 'Int32', 'Int64',
-         'UInt8', 'UInt16', 'UInt32', 'UInt64'
-         'IPv4'): 0,
-        ('BINARY', 'BLOB', 'CHAR', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB',
-         'MEDIUMTEXT', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'VARCHAR',
-         'FixedString', 'String',
-         'IPv6'): "''",
-        ('Date', 'DateTime', 'DateTime64', 'TIMESTAMP'): 'now()',
-    }
+    defaults_per_type_family = (
+        ({'Array'},
+         '[]'),
+        ({'DEC', 'Decimal', 'Decimal32', 'Decimal64', 'Decimal128',
+          'DOUBLE', 'FLOAT', 'Float32', 'Float64',
+          'BIGINT', 'INT', 'INTEGER', 'SMALLINT', 'TINYINT',
+          'Int8', 'Int16', 'Int32', 'Int64',
+          'UInt8', 'UInt16', 'UInt32', 'UInt64'
+          'IPv4'},
+         0),
+        ({'BINARY', 'BLOB', 'CHAR', 'LONGBLOB', 'LONGTEXT', 'MEDIUMBLOB',
+          'MEDIUMTEXT', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'VARCHAR',
+          'FixedString', 'String',
+          'IPv6'},
+         "''"),
+        ({'Date', 'DateTime', 'DateTime64', 'TIMESTAMP'},
+         'now()',)
+    )  # type: Tuple[Tuple[Set[str], Union[int, str]], ...]
+    LocalTable = Union[Tuple[str, str], Tuple[()]]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -299,12 +304,12 @@ class CheckClusters(Check):
             query = query.format(where_clause='')
             return self.execute_dict(query)
 
-    def _check_tables(self, tables: List[str],
-                      local_tables: List[list]) -> List[str]:
+    def _check_tables(self, tables: Tuple[str, ...],
+                      local_tables: Tuple[LocalTable, ...]) -> List[str]:
         failed = []
         # If there're no local_tables (the cluster is remote),
-        # then we create list of empty lists with the len of tables
-        local_tables = local_tables or [[]] * len(tables)
+        # then we create tuple of empty tuples with the len of tables
+        local_tables = local_tables or ((),) * len(tables)
         for t, lt in zip(tables, local_tables):
             logger.debug('Select from Distributed() table `{}`,'
                          ' local table is {}'.format(t, lt))
@@ -316,7 +321,8 @@ class CheckClusters(Check):
                 failed.append(t)
         return failed
 
-    def _optimized_request(self, table: str, local_table: list) -> str:
+    def _optimized_request(self, table: str,
+                           local_table: LocalTable) -> str:
         """
         This method is trying to optimize request by adding 'WHERE' clause
         with partitioning key. In the best case WHERE won't match anything
@@ -329,13 +335,14 @@ class CheckClusters(Check):
         """
 
         query = r'SELECT 1 FROM {table} {where} LIMIT 1'
-        f_config = {'table': table, 'where': ''}
-        unoptimized_query = query.format_map(f_config)
+        query_format = {'table': table, 'where': ''}
+        unoptimized_query = query.format_map(query_format)
         # Nothing to optimize if local_tables is empty
         if not local_table:
             return unoptimized_query
 
-        p_keys = self.execute_dict(
+        l_db, l_table = local_table
+        partition_keys = self.execute_dict(
             r'''
             SELECT name,
                 splitByChar('(', type)[1] AS type
@@ -344,25 +351,26 @@ class CheckClusters(Check):
                 AND table = %(table)s
                 AND is_in_partition_key
             ''',
-            {'database': local_table[0], 'table': local_table[1]}
+            {'database': l_db, 'table': l_table}
         )
         logger.debug('Partition keys for table {}.{} are: {}'
-                     .format(local_table[0], local_table[1], p_keys))
-        # p_keys could be empty if Distributed() is created above Logs engine
-        if not p_keys:
+                     .format(l_db, l_table, partition_keys))
+        # partition_keys could be empty if Distributed() is created above non
+        # *MergeTree engines, e.g. *Log(), File(), View() etc.
+        if not partition_keys:
             return unoptimized_query
 
         condition = '{column} = {default}'
         conditions = [
             condition.format(column=k['name'], default=default)
-            for k in p_keys
-            for types, default in self.defaults_per_type_family.items()
+            for k in partition_keys
+            for types, default in self.defaults_per_type_family
             if k['type'] in types
         ]
         if conditions:
-            f_config['where'] = 'WHERE ' + ' AND '.join(conditions)
+            query_format['where'] = 'WHERE ' + ' AND '.join(conditions)
 
-        optimized_query = query.format_map(f_config)
+        optimized_query = query.format_map(query_format)
         logger.debug('Optimized query is {}'.format(optimized_query))
         return optimized_query
 
