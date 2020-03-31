@@ -149,7 +149,7 @@ def main():
     status, reason = runner.run()
     code = ExitCodes.get_code(status)
 
-    print('{} | {}'.format(status, reason))
+    print('{} - {}'.format(status, reason))
 
     exit(code)
 
@@ -226,7 +226,7 @@ class Check:
     def get_reason(self, name):
         """Format a reason text with given entity name"""
 
-        return '{}/{}'.format(name, self.key)
+        return '{}/{} {} {}'.format(name, self.key, self.operator, self.value)
 
     @classmethod
     def from_string(cls, pair):
@@ -264,9 +264,9 @@ class Checker:
 
         reasons = []
         for entity in self.entities:
-            check, name, _ = self._execute_checks(entity, self.checks)
+            check, name, value = self._execute_checks(entity, self.checks)
             if check:
-                reasons.append(check.get_reason(name))
+                reasons.append('{} ({})'.format(check.get_reason(name), value))
 
         return ', '.join(reasons) if len(reasons) else ''
 
