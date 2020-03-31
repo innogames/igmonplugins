@@ -228,7 +228,7 @@ class CheckClusters(Check):
         Accepts args with `clusters` attribute and checks every related
         Distributed() table, if it is readable
 
-        If config['clusters'] is an empty list, then checks every presented
+        If config['clusters'] is an empty list it checks every presented
         Distributed() table
         """
         logger.debug('Cluster check, config={}'.format(pformat(config)))
@@ -326,7 +326,7 @@ class CheckClusters(Check):
         """
         This method is trying to optimize request by adding 'WHERE' clause
         with partitioning key. In the best case WHERE won't match anything
-        and SELECT will over almost immediately. Here the next steps are done:
+        and SELECT query will finish almost instantly. Here the next steps are done:
             - See if the current host is the part of the checked cluster
             (local_tables is not empty)
             - Get columns in partitioning key
