@@ -6,7 +6,7 @@
 #
 # Usage examples:
 #
-#   check_clickhouse.py clusters -c cluster_name
+#   check_clickhouse.py clusters
 #   check_clickhouse.py parts
 #   check_clickhouse.py replication
 #
@@ -25,7 +25,7 @@ from clickhouse_driver.errors import (  # type: ignore  # missing stubs
     NetworkError, ServerException,
 )
 from pprint import pformat
-from typing import Tuple, List
+from typing import List, Optional, Tuple, Union
 
 import logging
 import sys
@@ -82,7 +82,7 @@ def main():
         code, message = check(args.__dict__)
         print(message)
         sys.exit(code)
-    except NetworkError as e:
+    except (NetworkError, ServerException) as e:
         check.code.current = Code.CRITICAL
         code, message = check.exit(e.message)
         print(message)
@@ -92,12 +92,14 @@ def main():
 def add_subparser_clusters(subparsers: _SubParsersAction):
     parser_clusters = subparsers.add_parser(
         'clusters', formatter_class=ArgumentDefaultsHelpFormatter,
-        help='checks basic availability of Distributed tables',
+        help='checks basic availability of Distributed() tables',
     )
     parser_clusters.set_defaults(check=CheckClusters)
     parser_clusters.add_argument(
-        '-c', '--clusters', action='append', default=[], required=True,
-        help='cluster names, could be defined multiple times',
+        '-c', '--clusters', action='append', default=[],
+        help='cluster names that MUST be presented on the server. If the '
+        'argument is omitted, then only clusters with Distributed() '
+        'tables are checked. Could be defined multiple times',
     )
 
 
@@ -196,64 +198,42 @@ class Check(object):
 
 
 class CheckClusters(Check):
+    LocalTable = Optional[Tuple[str, str]]
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def __call__(self, config: dict) -> ExitStruct:
         """
-        Accepts args with 'clusters' attribute and checks every related
-        Distributed table, if it is readable
+        Accepts args with `clusters` attribute and checks every related
+        Distributed() table, if it is readable
+
+        If config['clusters'] is an empty list it checks every presented
+        Distributed() table
         """
         logger.debug('Cluster check, config={}'.format(pformat(config)))
         self.check_config(config, {'clusters'})
 
         messages = []  # type: List[str]
         # Request config['clusters'] from ClickHouse
-        clusters = self.execute_dict(
-            r'''
-            SELECT
-                splitByChar('\'', engine_full)[2] AS cluster,
-                groupArray(concat(t.database, '.', t.name)) AS tables
-            FROM system.tables AS t
-            INNER JOIN
-            (
-                SELECT cluster
-                FROM system.clusters
-                WHERE cluster IN %(clusters)s
-                GROUP BY cluster
-            ) AS c USING (cluster)
-            WHERE t.engine = 'Distributed'
-            GROUP BY cluster
-            ''',
-            {'clusters': tuple(config['clusters'])},
-        )
+        clusters = self._get_clusters(config['clusters'])
         logger.debug(
             'Existing clusters on ClickHouse server are: {}'
             .format(pformat(clusters))
         )
 
+        # Check if any of config['clusters'] doesn't have Distributed() tables
         existing = {c['cluster'] for c in clusters}
         missing = set(config['clusters']) - existing
         if missing:
             self.code.current = Code.CRITICAL
             messages.append('Clusters not found on server: {}'.format(missing))
 
-        def check_tables(tables: List[str]) -> List[str]:
-            failed = []
-            for t in tables:
-                logger.debug('Select from distributed table `{}`'.format(t))
-                try:
-                    self.execute('SELECT * FROM {} LIMIT 1'.format(t))
-                except ServerException as e:
-                    logger.warning('Fail to read from `{}`, exception is: {}'
-                                   .format(t, e.message))
-                    failed.append(t)
-            return failed
-
         for cl in clusters:
             logger.debug('Tables for cluster `{cluster}` are {tables}'
                          .format_map(cl))
-            failed_tables = check_tables(cl['tables'])
+            failed_tables = self._check_tables(cl['tables'],
+                                               cl['local_tables'])
             if not failed_tables:
                 continue
             self.code.current = Code.CRITICAL
@@ -262,8 +242,141 @@ class CheckClusters(Check):
                 .format(cl['cluster'], failed_tables)
             )
 
-        messages = messages or ['All clusters are fine: {}'.format(clusters)]
+        summary = [{c['cluster']: list(c['tables'])} for c in clusters]
+        messages = messages or ['All clusters are fine: {}'.format(summary)]
         return self.exit('; '.join(messages))
+
+    def _get_clusters(self, clusters: List[str]) -> List[dict]:
+        """
+        Returns list of dicts with the following keys:
+            - cluster: cluster name
+            - tables: tables belongs to cluster
+            - local_tables: if the checking node belongs to cluster, then this
+                array contains tuples of (database, table) for tables behind
+                the Distributed() tables
+        """
+        query = r'''
+            SELECT
+                splitByChar('\'', t.engine_full)[2] AS cluster,
+                groupArray(concat(t.database, '.', t.name)) AS tables,
+                groupArrayIf([
+                    splitByChar('\'', t.engine_full)[4],
+                    splitByChar('\'', t.engine_full)[6]
+                ], c.local) AS local_tables
+            FROM system.tables AS t
+            INNER JOIN
+            (
+                WITH [hostName(), fqdn()] AS resolves
+                SELECT
+                    cluster,
+                    max(has(resolves, host_name)) AS local
+                FROM system.clusters
+                {where_clause}
+                GROUP BY cluster
+            ) AS c USING (cluster)
+            WHERE t.engine = 'Distributed'
+            GROUP BY cluster
+        '''
+        if clusters:
+            query = query.format(where_clause='WHERE cluster IN %(clusters)s')
+            return self.execute_dict(query, {'clusters': tuple(clusters)})
+        else:
+            query = query.format(where_clause='')
+            return self.execute_dict(query)
+
+    def _check_tables(self, tables: Tuple[str, ...],
+                      local_tables: Tuple[LocalTable, ...]) -> List[str]:
+        failed = []
+        # If there're no local_tables (the cluster is remote),
+        # then we create tuple of empty tuples with the len of tables
+        local_tables = local_tables or (None,) * len(tables)
+        for t, lt in zip(tables, local_tables):
+            logger.debug('Select from Distributed() table `{}`,'
+                         ' local table is {}'.format(t, lt))
+            try:
+                self.execute(self._optimized_request(t, lt))
+            except ServerException as e:
+                logger.warning('Fail to read from `{}`, exception is: {}'
+                               .format(t, e.message))
+                failed.append(t)
+        return failed
+
+    def _optimized_request(self, table: str,
+                           local_table: LocalTable) -> str:
+        """
+        This method is trying to optimize request by adding 'WHERE' clause with
+        partitioning key. In the best case WHERE won't match anything and the
+        request will finish almost instantly. Here the next steps are done:
+            - See if the current host is the part of the checked cluster
+            (local_tables is not empty)
+            - Get columns in partitioning key
+            - Add `WHERE` clause for compatible types, see
+            CheckClusters.defaults_per_type_family dict
+        """
+
+        query = r'SELECT 1 FROM {table} {where} LIMIT 1'
+        query_format = {'table': table, 'where': ''}
+        unoptimized_query = query.format_map(query_format)
+        # Nothing to optimize if local_tables is empty
+        if not local_table:
+            return unoptimized_query
+
+        l_db, l_table = local_table
+        partition_keys = self.execute_dict(
+            r'''
+            SELECT name,
+                splitByChar('(', type)[1] AS type
+            FROM system.columns
+            WHERE database = %(database)s
+                AND table = %(table)s
+                AND is_in_partition_key
+            ''',
+            {'database': l_db, 'table': l_table}
+        )
+        logger.debug('Partition keys for table {}.{} are: {}'
+                     .format(l_db, l_table, partition_keys))
+        # partition_keys could be empty if Distributed() is created above non
+        # *MergeTree engines, e.g. *Log(), File(), View() etc.
+        if not partition_keys:
+            return unoptimized_query
+
+        cond = '{} = {}'
+        conditions: List[str] = []
+        for k in partition_keys:
+            default = self._get_type_default(k['type'])
+            if default is not None:
+                conditions.append(cond.format(k['name'], default))
+
+        if conditions:
+            query_format['where'] = 'WHERE ' + ' AND '.join(conditions)
+
+        optimized_query = query.format_map(query_format)
+        logger.debug('Optimized query is {}'.format(optimized_query))
+        return optimized_query
+
+    def _get_type_default(self, type: str) -> Union[int, str, None]:
+        """
+        Here are ClickHouse data types that allow to optimize query by
+        partition key `WHERE` clause
+        """
+        if type in {'Array'}:
+            return '[]'
+        elif type in {'DEC', 'Decimal', 'Decimal32', 'Decimal64', 'Decimal128',
+                      'DOUBLE', 'FLOAT', 'Float32', 'Float64',
+                      'BIGINT', 'INT', 'INTEGER', 'SMALLINT', 'TINYINT',
+                      'Int8', 'Int16', 'Int32', 'Int64',
+                      'UInt8', 'UInt16', 'UInt32', 'UInt64'
+                      'IPv4'}:
+            return 0
+        elif type in {'BINARY', 'BLOB', 'CHAR', 'LONGBLOB', 'LONGTEXT',
+                      'MEDIUMBLOB', 'MEDIUMTEXT', 'TEXT', 'TINYBLOB',
+                      'TINYTEXT', 'VARCHAR', 'IPv6',
+                      'FixedString', 'String'}:
+            return "''"
+        elif type in {'Date', 'DateTime', 'DateTime64', 'TIMESTAMP'}:
+            return 'now()'
+        else:
+            return None
 
 
 class CheckParts(Check):
