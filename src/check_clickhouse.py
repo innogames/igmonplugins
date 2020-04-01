@@ -341,7 +341,7 @@ class CheckClusters(Check):
             return unoptimized_query
 
         cond = '{} = {}'
-        conditions: List[str] = []
+        conditions = []  # type: List[str]
         for k in partition_keys:
             default = self._get_type_default(k['type'])
             if default is not None:
