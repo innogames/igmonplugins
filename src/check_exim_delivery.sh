@@ -24,19 +24,33 @@
 
 set -euo pipefail
 
-exim_dir="/var/spool/exim4/msglog/"
+log_dir="/var/spool/exim4/msglog/"
+input_dir="/var/spool/exim4/input/"
 max_message=10
+max_age=1200
 
-if ! [ -d $exim_dir ]; then
-    echo "Can not open $exim_dir"
+for dir in "$log_dir" "$input_dir"; do
+    if ! [ -d "$dir" ]; then
+        echo "Can not open $dir"
+        exit 1
+    fi
+done
+
+
+messages=$(find "$log_dir" -maxdepth 1 -type f | wc -l)
+if [ "$messages" -gt "$max_message" ]; then
+    echo "To many messages in queue ($messages > $max_message). See $log_dir"
     exit 1
 fi
 
-messages=$(ls -1 $exim_dir | wc -l)
 
-if [ $messages -gt $max_message ]; then
-    echo "To many messages in queue ($messages > $max_message). See $exim_dir"
-    exit 1
-else
-    echo "OK - exim seems to work properly"
+oldest_message=$(find "$input_dir" -type f -printf '%T@\n' | sort | head -n1)
+if [ "$oldest_message" ]; then
+    oldest_age="$(($(date +%s) - ${oldest_message%.*}))"
+    if [ "$oldest_age" -gt "$max_age" ]; then
+        echo "The oldest_message in the queue older than $max_age seconds: $oldest_age"
+        exit 1
+    fi
 fi
+
+echo "OK - exim seems to work properly"
