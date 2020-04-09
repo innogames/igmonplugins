@@ -58,6 +58,17 @@ Examples:
         --filter='messages > 0'\
         --length 30
 
+    There is also a special keyword "diff" for all places where samples
+    are returned. In contrast to the rate it will then calculate the absolute
+    difference between the latest and oldest sample. In this case there must
+    have been more than 100 ACKs in the last 30 seconds for an OK state.
+    ./check_rabbitmq.py --port 15672 --user guest --password guest\
+        --vhost test --queue '[0-9]'\
+        --warning='message_stats.ack_details.diff <= 100'\
+        --critical='message_stats.ack_details.diff == 0'\
+        --filter='messages > 0'\
+        --length 30
+
     You can also have multiple critical, warning and filter statements.
     Critical and warning states are evaluated one after another, reporting
     always the highest severity found. Filters are treated as AND condition,
@@ -69,9 +80,10 @@ Examples:
         --warning='message_stats.deliver_details.rate <= 100'\
         --critical='message_stats.ack_details.rate == 0'\
         --critical='message_stats.deliver_details.rate == 0'\
-        --filter='messages > 0' --filter='backing_queue_status.mode == lazy'
+        --filter='messages > 0'\
+        --filter='backing_queue_status.mode == lazy'
 
-Copyright (c) 2017 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -91,8 +103,9 @@ Copyright (c) 2017 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import re
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+
 from requests import request, RequestException
 from requests.auth import HTTPBasicAuth
 from requests.utils import quote
@@ -216,10 +229,19 @@ class Check:
         for part in self.key.split('.'):
             part = part.strip()
 
-            if part not in data:
-                return None, None, None, None
+            # We also support a special keyword "diff" that calculates the
+            # actual sample difference.
+            if part == 'diff':
+                if 'samples' not in data:
+                    raise ValueError('No samples are found to calculate diff')
 
-            data = data[part]
+                # Ignore the oldest sample. Check _build_url for the reasoning.
+                samples = data['samples']
+                data = samples[0]['sample'] - samples[-2]['sample']
+            elif part not in data:
+                return None, None, None, None
+            else:
+                data = data[part]
 
         return self.executor(data), self, name, data
 
@@ -364,10 +386,16 @@ class Gateway:
 
         samples = []
         for metric in ['lengths', 'data_rates', 'msg_rates', 'node_stats']:
-            samples.append('{}_age={}'.format(metric, self.length))
-            # We must add 1 to the increment rate to get the correct
-            # amount of samples.
-            samples.append('{}_incr={}'.format(metric, self.length + 1))
+            # To get accurate and un-truncated samples we have to use an
+            # increment half of the age so that we get 2 accurate samples.
+            # There will also be a third, inaccurate and unreliable sample,
+            # possibly because of some truncating by the API.
+            # That is why we need to add this increment to the age again.
+            # We will end up with a total of 4 samples, we drop the oldest one
+            # and only then we can rely on the data.
+            incr = self.length // 2
+            samples.append('{}_age={}'.format(metric, self.length + incr))
+            samples.append('{}_incr={}'.format(metric, incr))
 
         url += '?{}'.format('&'.join(samples))
 
