@@ -232,10 +232,19 @@ class Check:
             # We also support a special keyword "diff" that calculates the
             # actual sample difference.
             if part == 'diff':
+                # Make sure we get what we expect.
                 if 'samples' not in data:
                     raise ValueError('No samples are found to calculate diff')
 
-                # Ignore the oldest sample. Check _build_url for the reasoning.
+                if len(data['samples']) < 3:
+                    raise RabbitMQException(
+                        'Expected at least three samples, got {}'.format(
+                            len(data['samples']),
+                        ),
+                    )
+
+                # We receive three samples but ignore the oldest one.
+                # Check _build_url for the reasoning.
                 samples = data['samples']
                 data = samples[0]['sample'] - samples[-2]['sample']
             elif part not in data:
@@ -386,16 +395,15 @@ class Gateway:
 
         samples = []
         for metric in ['lengths', 'data_rates', 'msg_rates', 'node_stats']:
-            # To get accurate and un-truncated samples we have to use an
-            # increment half of the age so that we get 2 accurate samples.
-            # There will also be a third, inaccurate and unreliable sample,
-            # possibly because of some truncating by the API.
-            # That is why we need to add this increment to the age again.
-            # We will end up with a total of 4 samples, we drop the oldest one
-            # and only then we can rely on the data.
-            incr = self.length // 2
-            samples.append('{}_age={}'.format(metric, self.length + incr))
-            samples.append('{}_incr={}'.format(metric, incr))
+            # When requesting two samples from RabbitMQ (eg. now and
+            # 30 seconds ago), the older sample has an innacurate value,
+            # causing false positives from the check. To get accurate and
+            # un-truncated samples, we use the age as double the time length
+            # being queried, ending up with 3 samples. We drop the oldest one,
+            # since it's innacurate and older than our selected interval.
+            # We can then trust the remaining 2 values.
+            samples.append('{}_age={}'.format(metric, self.length * 2))
+            samples.append('{}_incr={}'.format(metric, self.length))
 
         url += '?{}'.format('&'.join(samples))
 
