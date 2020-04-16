@@ -56,11 +56,15 @@ def parse_arguments():
     parser.add_argument('--modes', type=options, default=DEFAULT_MODES)
     parser.add_argument('--warnings', type=options, help='warning limits')
     parser.add_argument('--criticals', type=options, help='critical limits')
-    parser.add_argument('--tables', type=options, help='show selected tables')
     parser.add_argument('--perf', action='store_true', help='performance data')
     parser.add_argument('--avg', action='store_true', help='show averages')
     parser.add_argument('--max', action='store_true', help='show maximums')
     parser.add_argument('--min', action='store_true', help='show minimums')
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--tables', type=options, help='show selected tables')
+    group.add_argument('--ignore-tables', nargs='*',
+                       help='ignore selected tables')
 
     return parser.parse_args()
 
@@ -93,7 +97,8 @@ def main():
         arguments.perf,
     )
     messages = get_messages(
-        database, arguments.tables, arguments.modes, list(outputs)
+        database, arguments.tables, arguments.ignore_tables, arguments.modes,
+        list(outputs)
     )
     joined_message = join_messages(**messages)
 
@@ -123,10 +128,12 @@ def get_outputs(output_classes, modes, warnings, criticals, perf):
             yield output_class(mode, warning_limit, critical_limit, perf)
 
 
-def get_messages(database, filter_tables, attributes, outputs):
+def get_messages(database, filter_tables, ignore_tables, attributes, outputs):
     """Check all tables for all output instances"""
     for table, values in database.get_table_values(attributes):
-        if filter_tables and not any(t == table for t in filter_tables):
+        if filter_tables and table not in filter_tables:
+            continue
+        elif ignore_tables and table in ignore_tables:
             continue
         for output in outputs:
             attribute = output.attribute
