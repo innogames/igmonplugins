@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """InnoGames Monitoring Plugins - Cron Runtime Check
 
-Copyright (c) 2018 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -24,11 +24,20 @@ Copyright (c) 2018 InnoGames GmbH
 from subprocess import Popen, PIPE, STDOUT
 from argparse import ArgumentParser
 from sys import exit
+from os.path import isfile
 
-# A list of cron names that shall get ignored by this check.
-exclude_list = [
-    'am_stockpile_distribution',
-]
+
+def parse_exclude_file(exclude_file):
+    """Parses the exclude file and and adds given list
+
+    Returns a combined list
+    """
+
+    if not isfile(exclude_file):
+        return []
+
+    with open(exclude_file) as fd:
+        return list(filter(None, [line.rstrip('\n') for line in fd]))
 
 
 def parse_args():
@@ -49,10 +58,16 @@ def parse_args():
         action='store_true',
         help='Increase verbosity',
     )
+    parser.add_argument(
+        '--exclude-file',
+        default='',
+        help='File to get list of cron names to exclude (line separated)',
+    )
+
     return vars(parser.parse_args())
 
 
-def main(verbose=False):
+def main(verbose=False, exclude_file=''):
     """The main program"""
 
     # Dictionary of pids containing th command that is running
@@ -91,6 +106,8 @@ def main(verbose=False):
     cron_child_list = []
     cron_child_time = None
 
+    exclude_list = parse_exclude_file(exclude_file)
+
     for child in cron_childs.split('\n'):
         cron_child_list.append(child)
 
@@ -98,7 +115,7 @@ def main(verbose=False):
         print('Cron Childs: ' + str(cron_child_list))
 
     cron_pid_more_than1 = []
-    ok_flag = warn_flag = 0
+    warn_flag = 0
     for pid in cron_child_list:
         if pid:
             try:
@@ -111,7 +128,7 @@ def main(verbose=False):
                 continue
 
             # check for 1 hour time
-            if int(cron_child_time) > 3600:
+            if int(cron_child_time) >= 3600:
                 # Check if cron name is on ignore list
                 include = True
                 child_pid = execute('pgrep -P ' + pid).strip()
@@ -124,7 +141,7 @@ def main(verbose=False):
                     cron_pid_more_than1.append(pid)
                     warn_flag += 1
             elif int(cron_child_time) < 3600:
-                ok_flag = 1
+                continue
             else:
                 print('UNKNOWN PID execution TIME')
                 exit(int(un_code))
@@ -136,7 +153,7 @@ def main(verbose=False):
         for i in cron_pid_more_than1:
             get_child(i)
         exit(int(warn_code))
-    if ok_flag:
+    else:
         print('No CRON running more than 1 hour')
         exit(int(ok_code))
 
