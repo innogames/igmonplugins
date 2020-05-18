@@ -117,20 +117,18 @@ def parse_args():
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('-H', '--host', default='localhost',
-                        help='rabbitmq host'
-                        )
+                        help='rabbitmq host')
     parser.add_argument('-p', '--port', type=int, default=15672,
-                        help='rabbitmq management port'
-                        )
+                        help='rabbitmq management port')
     parser.add_argument('-u', '--user', default='guest', help='rabbitmq user')
     parser.add_argument('-P', '--password', default='guest',
                         help='rabbitmq password')
     parser.add_argument('-t', '--timeout', type=int, default=3000,
-                        help='timeout in ms for requests'
-                        )
+                        help='timeout in ms for requests')
     parser.add_argument('-l', '--length', type=int, default=300,
-                        help='length of rabbitmq data in seconds'
-                        )
+                        help='length of rabbitmq data in seconds')
+    parser.add_argument('-i', '--incr', type=int, default=30,
+                        help='increment of rabbitmq data in seconds')
 
     parser.add_argument('-v', '--vhost', help='rabbitmq vhost for the check')
     parser.add_argument('-q', '--queue', help='rabbitmq queue for the check')
@@ -317,11 +315,12 @@ class Gateway:
     """RabbitMQ gateway capable of fetching data from the management API"""
 
     def __init__(self, base_url='http://localhost:15672/api', auth=None,
-                 timeout=3000, length=300):
+                 timeout=3000, length=300, incr=30):
         self.base_url = base_url.rstrip('/')
         self.auth = auth
         self.timeout = timeout
         self.length = length
+        self.incr = incr
 
     def get_overview(self):
         """Fetch the overview from RabbitMQ management API"""
@@ -396,14 +395,15 @@ class Gateway:
         samples = []
         for metric in ['lengths', 'data_rates', 'msg_rates', 'node_stats']:
             # When requesting two samples from RabbitMQ (eg. now and
-            # 30 seconds ago), the older sample has an innacurate value,
+            # 30 seconds ago), the older sample has an inaccurate value,
             # causing false positives from the check. To get accurate and
-            # un-truncated samples, we use the age as double the time length
-            # being queried, ending up with 3 samples. We drop the oldest one,
-            # since it's innacurate and older than our selected interval.
-            # We can then trust the remaining 2 values.
-            samples.append('{}_age={}'.format(metric, self.length * 2))
-            samples.append('{}_incr={}'.format(metric, self.length))
+            # un-truncated samples, we add the increment to the length as
+            # being queried, ending up with one additional sample.
+            # We drop the oldest one, since it's inaccurate and older than
+            # our selected interval. We can then trust the remaining values.
+            incr = min(self.length, self.incr)
+            samples.append('{}_age={}'.format(metric, self.length + incr))
+            samples.append('{}_incr={}'.format(metric, incr))
 
         url += '?{}'.format('&'.join(samples))
 
@@ -413,8 +413,8 @@ class Gateway:
 class Runner:
     """Run the whole thing"""
 
-    def __init__(self, host, port, user, password, timeout, length, overview,
-                 vhost, queue, warning, critical, filter):
+    def __init__(self, host, port, user, password, timeout, length, incr,
+                 overview, vhost, queue, warning, critical, filter):
         self.timeout = timeout
         self.overview = overview
         self.vhost = vhost
@@ -427,7 +427,12 @@ class Runner:
 
         base_url = 'http://{}:{}/api'.format(host, port)
         auth = HTTPBasicAuth(user, password)
-        self.gateway = Gateway(base_url=base_url, auth=auth, length=length)
+        self.gateway = Gateway(
+            base_url=base_url,
+            auth=auth,
+            length=length,
+            incr=incr,
+        )
 
     def run(self):
         """Run the checks"""
