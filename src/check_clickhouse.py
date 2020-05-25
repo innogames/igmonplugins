@@ -373,8 +373,14 @@ class CheckClusters(Check):
                       'TINYTEXT', 'VARCHAR', 'IPv6',
                       'FixedString', 'String'}:
             return "''"
-        elif type in {'Date', 'DateTime', 'DateTime64', 'TIMESTAMP'}:
-            return 'now()'
+        elif type in {'Date'}:
+            # By rule of thumb, 1970-01-02 should be less popular, than
+            # 0000-00-00
+            return 'toDate(1)'
+        elif type in {'DateTime', 'DateTime64', 'TIMESTAMP'}:
+            # By rule of thumb, 1970-01-01 00:00:01 should be less popular,
+            # than 0000-00-00 00:00:00
+            return 'toDateTime(1)'
         else:
             return None
 
