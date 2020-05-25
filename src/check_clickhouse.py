@@ -374,12 +374,12 @@ class CheckClusters(Check):
                       'FixedString', 'String'}:
             return "''"
         elif type in {'Date'}:
-            # By rule of thumb, 1970-01-02 should be less popular, than
-            # 0000-00-00
+            # toDate(1) as 1970-01-02 should be less popular
+            # than 0000-00-00 (toDate(0))
             return 'toDate(1)'
         elif type in {'DateTime', 'DateTime64', 'TIMESTAMP'}:
-            # By rule of thumb, 1970-01-01 00:00:01 should be less popular,
-            # than 0000-00-00 00:00:00
+            # toDateTime(1) as 1970-01-01 00:00:01 should be less popular
+            # than 0000-00-00 00:00:00 (toDateTime(0))
             return 'toDateTime(1)'
         else:
             return None
