@@ -84,6 +84,8 @@ def check_birdc_protocols(path):
             ret = check_bgp_protocol(protocol)
         elif protocol['type'] == 'OSPF':
             ret = check_ospf_protocol(protocol)
+        elif protocol['type'] == 'RPKI':
+            ret = check_rpki_protocol(protocol)
         elif protocol['type'] in ['Device', 'Kernel', 'Static', 'Direct']:
             ret = check_other_protocol(protocol)
         else:
@@ -144,6 +146,25 @@ def check_ospf_protocol(protocol):
     if is_ospf_up(protocol):
         return ProtocolStates.up
     elif is_ospf_disabled(protocol):
+        return ProtocolStates.disabled
+    else:
+        return ProtocolStates.down
+
+
+def check_rpki_protocol(protocol):
+    def is_rpki_up(protocol):
+        is_up = protocol['state'] == 'up'
+        is_running = protocol['info'] in ['Established', 'Sync-Running',
+                                          'Sync-Start']
+        return is_up and is_running
+
+    def is_rpki_disabled(protocol):
+        is_down = protocol['state'] == 'down'
+        return is_down
+
+    if is_rpki_up(protocol):
+        return ProtocolStates.up
+    elif is_rpki_disabled(protocol):
         return ProtocolStates.disabled
     else:
         return ProtocolStates.down
