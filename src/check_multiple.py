@@ -36,7 +36,7 @@ message = ''
 subs = {}
 
 for iterate_param in args.iterate_over:
-    subs[iterate_param] = subprocess.Popen(args.origin_command + ' ' + iterate_param , stdout=subprocess.PIPE, shell=True)
+    subs[iterate_param] = subprocess.Popen(args.origin_command + ' ' + iterate_param , stdout=subprocess.PIPE, shell=True, universal_newlines=True)
 
 for iterate_param, process in subs.items():
     out, err = process.communicate()
