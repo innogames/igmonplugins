@@ -177,7 +177,7 @@ def exit(exit_code=None, message=''):
         if not message:
             message = 'Nothing could be checked'
 
-    print(status, message)
+    print('{} - {}'.format(status, message))
     sys.exit(exit_code)
 
 
