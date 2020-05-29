@@ -4,7 +4,7 @@
 This script intended to check user limits on Linux.  It is currently
 only checking the open file limit.
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,19 +27,6 @@ Copyright (c) 2016 InnoGames GmbH
 import argparse
 import os
 import sys
-
-
-class ExitCodes:
-    """Enum for Nagios compatible exit codes
-
-    We are not including a code for unknown in here.  Anything other
-    than those two are considered as unknown.  It is easier to threat
-    unknown as None on Python rather than giving it a number greater
-    than 2, because None is less than all of those.
-    """
-    ok = 0
-    warning = 1
-    critical = 2
 
 
 def main():
@@ -192,6 +179,19 @@ def exit(exit_code=None, message=''):
 
     print(status, message)
     sys.exit(exit_code)
+
+
+class ExitCodes:
+    """Enum for Nagios compatible exit codes
+
+    We are not including a code for unknown in here.  Anything other
+    than those two are considered as unknown.  It is easier to threat
+    unknown as None on Python rather than giving it a number greater
+    than 2, because None is less than all of those.
+    """
+    ok = 0
+    warning = 1
+    critical = 2
 
 
 if __name__ == '__main__':
