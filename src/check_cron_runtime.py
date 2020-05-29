@@ -27,19 +27,6 @@ from sys import exit
 from os.path import isfile
 
 
-def parse_exclude_file(exclude_file):
-    """Parses the exclude file and and adds given list
-
-    Returns a combined list
-    """
-
-    if not isfile(exclude_file):
-        return []
-
-    with open(exclude_file) as fd:
-        return list(filter(None, [line.rstrip('\n') for line in fd]))
-
-
 def parse_args():
     """The argument parser"""
 
@@ -158,27 +145,6 @@ def main(verbose=False, exclude_file=''):
         exit(int(ok_code))
 
 
-def get_ps_aux():
-    pids = {}
-    pid_list = execute("ps ax -o 'pid=' -o 'cmd='")
-    for line in pid_list.split('\n'):
-        if len(line.split(' ')) > 1:
-            the_pid, the_command = line.lstrip().split(' ', 1)
-            pids[the_pid] = the_command
-    return pids
-
-
-def get_child(ppid):
-    childs = execute('pgrep -P ' + ppid)
-    if childs:
-        for child in childs.strip('\n').split():
-            exec_out = execute(
-                    'ps -ef | grep {} | grep -wv grep'.format(child)
-                )
-            print('|' + exec_out)
-            get_child(child)
-
-
 def execute(cmd):
     content = ''
     process = Popen(
@@ -199,6 +165,40 @@ def execute(cmd):
         return True
 
     return content
+
+
+def get_ps_aux():
+    pids = {}
+    pid_list = execute("ps ax -o 'pid=' -o 'cmd='")
+    for line in pid_list.split('\n'):
+        if len(line.split(' ')) > 1:
+            the_pid, the_command = line.lstrip().split(' ', 1)
+            pids[the_pid] = the_command
+    return pids
+
+
+def get_child(ppid):
+    childs = execute('pgrep -P ' + ppid)
+    if childs:
+        for child in childs.strip('\n').split():
+            exec_out = execute(
+                'ps -ef | grep {} | grep -wv grep'.format(child)
+            )
+            print('|' + exec_out)
+            get_child(child)
+
+
+def parse_exclude_file(exclude_file):
+    """Parses the exclude file and and adds given list
+
+    Returns a combined list
+    """
+
+    if not isfile(exclude_file):
+        return []
+
+    with open(exclude_file) as fd:
+        return list(filter(None, [line.rstrip('\n') for line in fd]))
 
 
 if __name__ == '__main__':
