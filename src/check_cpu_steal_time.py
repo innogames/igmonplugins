@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - CPU Steal Time Check
 
 This script checks the steal time of all vCPUs on the regarding domain and
@@ -75,7 +75,7 @@ def get_steal_time():
     """Get the actual steal time of the host"""
 
     output = subprocess.check_output('iostat -c 2 2', shell=True)
-    output = output.split()
+    output = output.decode().split()
     cpu = int(output[5].replace('(', ''))
     steal = float(output[31].replace(',', '.')) * cpu
 
