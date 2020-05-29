@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Linux User Limits Check
 
 This script intended to check user limits on Linux.  It is currently
@@ -63,7 +63,7 @@ def get_state(warning_ratio):
 
     assert 0.0 <= warning_ratio <= 1.0
 
-    state = None    # None is less than everything
+    state = -1  # Used to be None, as in Python2 None is less than everything.
     msg = ''
     total_fds = 0
 
