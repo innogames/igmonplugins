@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Cron Runtime Check
 
 Copyright (c) 2020 InnoGames GmbH
@@ -21,8 +21,8 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from subprocess import Popen, PIPE, STDOUT
 from argparse import ArgumentParser
+from subprocess import STDOUT, check_output, CalledProcessError
 from sys import exit
 from os.path import isfile
 
@@ -146,22 +146,13 @@ def main(verbose=False, exclude_file=''):
 
 
 def execute(cmd):
-    content = ''
-    process = Popen(
-        cmd,
-        shell=True,
-        stdout=PIPE,
-        stderr=STDOUT,
-    )
-    for line in iter(process.stdout.readline, ''):
-        content += line
-    returncode = process.wait()
-    process.stdout.close()
-
-    if returncode > 0:
+    try:
+        output = check_output(cmd, shell=True, stderr=STDOUT)
+    except CalledProcessError:
         return False
+    content = output.decode()
 
-    if content is '':
+    if content == '':
         return True
 
     return content
