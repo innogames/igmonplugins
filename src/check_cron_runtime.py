@@ -180,10 +180,7 @@ def get_child(ppid):
 
 
 def parse_exclude_file(exclude_file):
-    """Parses the exclude file and and adds given list
-
-    Returns a combined list
-    """
+    """Parses the exclude file and returns a combined list"""
 
     if not isfile(exclude_file):
         return []
