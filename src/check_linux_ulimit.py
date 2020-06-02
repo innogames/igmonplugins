@@ -185,9 +185,9 @@ class ExitCodes:
     """Enum for Nagios compatible exit codes
 
     We are not including a code for unknown in here.  Anything other
-    than those two are considered as unknown.  It is easier to threat
-    unknown as None on Python rather than giving it a number greater
-    than 2, because None is less than all of those.
+    than those three are considered as unknown.  It is easier to treat
+    unknown as -1 on Python rather than giving it a number greater
+    than 2, because -1 is less than all of those.
     """
     ok = 0
     warning = 1
