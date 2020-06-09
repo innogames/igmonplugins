@@ -270,20 +270,33 @@ class Database(object):
         extra_position = self.get_column_position('extra')
         for row in rows:
             if 'auto_increment' in row[extra_position]:
-                return row[type_position].split('(', 1)[0]
+                if 'unsigned' in row[type_position]:
+                    return row[type_position].split('(', 1)[0]
+                else:
+                    return str(row[type_position].split('(', 1)[0]) + '_signed'
 
     @staticmethod
     def datatype_max_value(datatype):
         if datatype == 'tinyint':
             return 255
+        if datatype == 'tinyint_signed':
+            return 127
         if datatype == 'smallint':
             return 65535
+        if datatype == 'smallint_signed':
+            return 32767
         if datatype == 'mediumint':
             return 16777215
+        if datatype == 'mediumint_signed':
+            return 8388607
         if datatype == 'int':
             return 4294967295
+        if datatype == 'int_signed':
+            return 2147483647
         if datatype == 'bigint':
             return 18446744073709551615
+        if datatype == 'bigint_signed':
+            return 9223372036854775807
 
 
 class Output(object):
