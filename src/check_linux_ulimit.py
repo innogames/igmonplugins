@@ -55,7 +55,10 @@ def main():
     if os.getuid() != 0:
         raise Exception('I need to be run as root, really')
 
-    exit(*get_state(float(args.warning) / 100.0))
+    state, message = get_state(float(args.warning) / 100.0)
+
+    print_nagios_message(state, message)
+    sys.exit(state)
 
 
 def get_state(warning_ratio):
@@ -158,27 +161,18 @@ def get_proc_ulimit(pid, name):
     return 0
 
 
-def exit(exit_code=None, message=''):
-    """Exit procedure for the check commands"""
-    if exit_code == ExitCodes.ok:
-        status = 'OK'
-    elif exit_code == ExitCodes.warning:
-        status = 'WARNING'
-    elif exit_code == ExitCodes.critical:
-        status = 'CRITICAL'
+def print_nagios_message(code, reason):
+    if code == ExitCodes.ok:
+        state_text = 'OK'
+    elif code == ExitCodes.warning:
+        state_text = 'WARNING'
+    elif code == ExitCodes.critical:
+        state_text = 'CRITICAL'
     else:
-        status = 'UNKNOWN'
-        exit_code = 3
-
-        # People tend to interpret UNKNOWN status in different ways.
-        # We are including a default message to avoid confusion.  When
-        # there are specific problems, errors, the message should be
-        # set.
-        if not message:
-            message = 'Nothing could be checked'
-
-    print('{} - {}'.format(status, message))
-    sys.exit(exit_code)
+        state_text = 'UNKNOWN'
+        if not reason:
+            reason = 'Nothing could be checked'
+    print('{} - {}'.format(state_text, reason))
 
 
 class ExitCodes:
