@@ -57,8 +57,7 @@ def main():
 
     state, message = get_nagios_state(float(args.warning) / 100.0)
 
-    print_nagios_message(state, message)
-    sys.exit(state)
+    print_and_exit(state, message)
 
 
 def get_nagios_state(warning_ratio):
@@ -164,7 +163,7 @@ def get_proc_ulimit(pid, name):
     return 0
 
 
-def print_nagios_message(code, reason):
+def print_and_exit(code, reason):
     if code == ExitCodes.ok:
         state_text = 'OK'
     elif code == ExitCodes.warning:
@@ -175,7 +174,9 @@ def print_nagios_message(code, reason):
         state_text = 'UNKNOWN'
         if not reason:
             reason = 'Nothing could be checked'
+
     print('{} - {}'.format(state_text, reason))
+    sys.exit(code)
 
 
 class ExitCodes:
