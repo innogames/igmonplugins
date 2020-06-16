@@ -55,13 +55,13 @@ def main():
     if os.getuid() != 0:
         raise Exception('I need to be run as root, really')
 
-    state, message = get_state(float(args.warning) / 100.0)
+    state, message = get_nagios_state(float(args.warning) / 100.0)
 
     print_nagios_message(state, message)
     sys.exit(state)
 
 
-def get_state(warning_ratio):
+def get_nagios_state(warning_ratio):
     """The main logic of the check"""
 
     assert 0.0 <= warning_ratio <= 1.0
@@ -106,6 +106,9 @@ def get_state(warning_ratio):
             )
 
     msg += '{0} total FDs'.format(total_fds)
+
+    if state == -1:
+        state = 3
 
     return state, msg
 
