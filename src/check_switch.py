@@ -205,6 +205,10 @@ def get_snmp_table(snmp, OID):
             raise SwitchException('Unable to get SNMP value: {}'.
                                   format(errorIndication))
         index = int(str(varBind[0][0][-1:]))
+        if index in ret:
+            # Once the table is done one more row is returned with the same
+            # index and a value of "No more variable...in this MIB View"
+            continue
         ret[index] = convert_snmp_type(varBind)
 
     return ret
