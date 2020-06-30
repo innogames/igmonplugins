@@ -1,10 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Linux User Limits Check
 
 This script intended to check user limits on Linux.  It is currently
 only checking the open file limit.
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,19 +27,6 @@ Copyright (c) 2016 InnoGames GmbH
 import argparse
 import os
 import sys
-
-
-class ExitCodes:
-    """Enum for Nagios compatible exit codes
-
-    We are not including a code for unknown in here.  Anything other
-    than those two are considered as unknown.  It is easier to threat
-    unknown as None on Python rather than giving it a number greater
-    than 2, because None is less than all of those.
-    """
-    ok = 0
-    warning = 1
-    critical = 2
 
 
 def main():
@@ -68,15 +55,17 @@ def main():
     if os.getuid() != 0:
         raise Exception('I need to be run as root, really')
 
-    exit(*get_state(float(args.warning) / 100.0))
+    state, message = get_nagios_state(float(args.warning) / 100.0)
+
+    print_and_exit(state, message)
 
 
-def get_state(warning_ratio):
+def get_nagios_state(warning_ratio):
     """The main logic of the check"""
 
     assert 0.0 <= warning_ratio <= 1.0
 
-    state = None    # None is less than everything
+    state = -1  # Used to be None, as in Python2 None is less than everything.
     msg = ''
     total_fds = 0
 
@@ -116,6 +105,9 @@ def get_state(warning_ratio):
             )
 
     msg += '{0} total FDs'.format(total_fds)
+
+    if state == -1:
+        state = 3
 
     return state, msg
 
@@ -171,27 +163,33 @@ def get_proc_ulimit(pid, name):
     return 0
 
 
-def exit(exit_code=None, message=''):
-    """Exit procedure for the check commands"""
-    if exit_code == ExitCodes.ok:
-        status = 'OK'
-    elif exit_code == ExitCodes.warning:
-        status = 'WARNING'
-    elif exit_code == ExitCodes.critical:
-        status = 'CRITICAL'
+def print_and_exit(code, reason):
+    if code == ExitCodes.ok:
+        state_text = 'OK'
+    elif code == ExitCodes.warning:
+        state_text = 'WARNING'
+    elif code == ExitCodes.critical:
+        state_text = 'CRITICAL'
     else:
-        status = 'UNKNOWN'
-        exit_code = 3
+        state_text = 'UNKNOWN'
+        if not reason:
+            reason = 'Nothing could be checked'
 
-        # People tend to interpret UNKNOWN status in different ways.
-        # We are including a default message to avoid confusion.  When
-        # there are specific problems, errors, the message should be
-        # set.
-        if not message:
-            message = 'Nothing could be checked'
+    print('{} - {}'.format(state_text, reason))
+    sys.exit(code)
 
-    print(status, message)
-    sys.exit(exit_code)
+
+class ExitCodes:
+    """Enum for Nagios compatible exit codes
+
+    We are not including a code for unknown in here.  Anything other
+    than those three are considered as unknown.  It is easier to treat
+    unknown as -1 on Python rather than giving it a number greater
+    than 2, because -1 is less than all of those.
+    """
+    ok = 0
+    warning = 1
+    critical = 2
 
 
 if __name__ == '__main__':

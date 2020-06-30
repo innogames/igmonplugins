@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - CPU Steal Time Check
 
 This script checks the steal time of all vCPUs on the regarding domain and
@@ -6,7 +6,7 @@ raises a warning or critical state if a reasonable threshold is reached.
 Values for the warning and critical thresholds can be specified using
 parameters.
 
-Copyright (c) 2017 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,23 @@ Copyright (c) 2017 InnoGames GmbH
 from argparse import ArgumentParser
 import subprocess
 from sys import exit
+
+
+def get_parser():
+    """Get argument parser -> ArgumentParser"""
+
+    parser = ArgumentParser()
+
+    parser.add_argument(
+        '--warning', '-w', help='warning threshold for steal time',
+        default=50
+    )
+    parser.add_argument(
+        '--critical', '-c', help='critical threshold for steal time',
+        default=75
+    )
+
+    return parser
 
 
 def main():
@@ -54,28 +71,11 @@ def main():
     exit(code)
 
 
-def get_parser():
-    """Get argument parser -> ArgumentParser"""
-
-    parser = ArgumentParser()
-
-    parser.add_argument(
-        '--warning', '-w', help='warning threshold for steal time',
-        default=50
-    )
-    parser.add_argument(
-        '--critical', '-c', help='critical threshold for steal time',
-        default=75
-    )
-
-    return parser
-
-
 def get_steal_time():
     """Get the actual steal time of the host"""
 
     output = subprocess.check_output('iostat -c 2 2', shell=True)
-    output = output.split()
+    output = output.decode().split()
     cpu = int(output[5].replace('(', ''))
     steal = float(output[31].replace(',', '.')) * cpu
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Cron Runtime Check
 
 Copyright (c) 2020 InnoGames GmbH
@@ -21,23 +21,10 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from subprocess import Popen, PIPE, STDOUT
 from argparse import ArgumentParser
+from subprocess import STDOUT, check_output, CalledProcessError
 from sys import exit
 from os.path import isfile
-
-
-def parse_exclude_file(exclude_file):
-    """Parses the exclude file and and adds given list
-
-    Returns a combined list
-    """
-
-    if not isfile(exclude_file):
-        return []
-
-    with open(exclude_file) as fd:
-        return list(filter(None, [line.rstrip('\n') for line in fd]))
 
 
 def parse_args():
@@ -158,6 +145,19 @@ def main(verbose=False, exclude_file=''):
         exit(int(ok_code))
 
 
+def execute(cmd):
+    try:
+        output = check_output(cmd, shell=True, stderr=STDOUT)
+    except CalledProcessError:
+        return False
+    content = output.decode()
+
+    if content == '':
+        return True
+
+    return content
+
+
 def get_ps_aux():
     pids = {}
     pid_list = execute("ps ax -o 'pid=' -o 'cmd='")
@@ -173,32 +173,20 @@ def get_child(ppid):
     if childs:
         for child in childs.strip('\n').split():
             exec_out = execute(
-                    'ps -ef | grep {} | grep -wv grep'.format(child)
-                )
+                'ps -ef | grep {} | grep -wv grep'.format(child)
+            )
             print('|' + exec_out)
             get_child(child)
 
 
-def execute(cmd):
-    content = ''
-    process = Popen(
-        cmd,
-        shell=True,
-        stdout=PIPE,
-        stderr=STDOUT,
-    )
-    for line in iter(process.stdout.readline, ''):
-        content += line
-    returncode = process.wait()
-    process.stdout.close()
+def parse_exclude_file(exclude_file):
+    """Parses the exclude file and returns a combined list"""
 
-    if returncode > 0:
-        return False
+    if not isfile(exclude_file):
+        return []
 
-    if content is '':
-        return True
-
-    return content
+    with open(exclude_file) as fd:
+        return list(filter(None, [line.rstrip('\n') for line in fd]))
 
 
 if __name__ == '__main__':
