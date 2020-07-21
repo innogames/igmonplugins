@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - PgBouncer Requests Check
 
 This script checks the requests per second on the connection pooler of
@@ -7,7 +7,7 @@ a reasonable threshold is reached.  Values for the database to be monitored,
 the used port of pgbouncer and the warning and critical thresholds can be
 specified using parameters.
 
-Copyright (c) 2018 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -93,7 +93,7 @@ def get_pgbouncer_requests(port, dbname):
     output = subprocess.check_output(
             'psql -p {} pgbouncer -Ac "show stats;"'.format(port), shell=True)
 
-    rows = output.split('\n')
+    rows = output.decode().split('\n')
     header = rows.pop(0).split('|')
 
     # Fields changed across version 1.7.x to > 1.8.x so lets use header column
