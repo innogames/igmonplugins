@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - RabbitMQ Check
 
 This is a fully customizable Python Nagios check for RabbitMQ.

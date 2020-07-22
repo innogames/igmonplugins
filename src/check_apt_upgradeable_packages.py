@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - APT Check for Upgradeable Packages
 
 This is a Nagios script which checks if package upgrades are available
 It will exit with 1 (warning) if any upgradeable packages are found.
 An ignore file can be provided to exclude packages from being checked.
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

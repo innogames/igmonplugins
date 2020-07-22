@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - MySQL "processlist" Check
 
 This scripts executes SHOW PROCESSLIST and optionally SHOW ENGINE INNODB
@@ -46,7 +46,7 @@ and critical reporting.  Here are some examples:
 --warning='in transaction at prepared'
     Emit warning for a prepared transaction
 
-Copyright (c) 2017 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal

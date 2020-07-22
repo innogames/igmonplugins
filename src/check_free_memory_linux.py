@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Linux mem free check
 
 This script will read /proc/meminfo and calculate the sum of:

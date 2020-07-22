@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - JSON Check
 
 This Python Nagios check can validate and compare arbitrary JSON.
@@ -38,7 +38,7 @@ Examples:
         --warning='$.value ~= .* has problems$'\
         --critical='$.value ~= .* is down$'
 
-Copyright (c) 2018 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
