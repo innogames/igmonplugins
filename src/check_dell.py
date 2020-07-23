@@ -30,7 +30,6 @@ import traceback
 
 from subprocess import check_output
 
-
 racadm_commands = {
     'sel':           'getsel -o',
     'active_errors': 'getactiveerrors',
@@ -109,8 +108,12 @@ def check_hardware(host, user, password, command):
                         False,
                     )
                 if (
-                    res[0].find('Unable to connect to RAC at specified IP address') != -1 or
-                    res[0].find('Unable to login to RAC using the specified address') != -1
+                    res[0].find(
+                        'Unable to connect to RAC at specified IP address'
+                    ) != -1
+                    or res[0].find(
+                        'Unable to login to RAC using the specified address'
+                    ) != -1
                 ):
                     return (
                         NagiosCodes.warning,
@@ -198,8 +201,8 @@ def check_getactiveerrors(msgs):
 
     error = {}
     for msg in msgs:
-        msg = map(str.strip, msg.split('='))
-        if len(msg) !=2:
+        msg = list(map(str.strip, msg.split('=')))
+        if len(msg) != 2:
             continue
 
         # Each active error takes multiple lines. Accumulate them in a hash
@@ -225,7 +228,7 @@ def check_getactiveerrors(msgs):
         exit_code = NagiosCodes.critical
         output = 'CRITICAL: CMC reports the following errors:\n' + output
 
-    return(exit_code, output)
+    return (exit_code, output)
 
 
 def check_fans(res):
@@ -328,7 +331,7 @@ def check_ipmi_sel(res):
         if linestr.find('SEL has no entries') != -1:
             continue
         if line[4].lower().find('critical') != -1 or \
-           line[4].lower().find('to non-recoverable') != -1:
+            line[4].lower().find('to non-recoverable') != -1:
             head = ' '.join(line[1:])
         # Reverse order
         msgs.insert(0, ' '.join(line[1:]))
@@ -338,8 +341,8 @@ def check_ipmi_sel(res):
     multiline = '\n'.join(msgs)[:2048]
 
     if len(msgs):
-        return(NagiosCodes.warning, 'WARNING: %s\n\n%s' % (head, multiline))
-    return(NagiosCodes.ok, 'OK: SEL is empty')
+        return (NagiosCodes.warning, 'WARNING: %s\n\n%s' % (head, multiline))
+    return (NagiosCodes.ok, 'OK: SEL is empty')
 
 
 def check_ipmi_sensors(res):
@@ -374,7 +377,7 @@ def idrac_command(host, user, password, command):
 
     for line in res.splitlines():
         line = line.strip()
-        if ( 
+        if (
             'Certificate is invalid' in line or
             'Use -S option for racadm' in line or
             line == ''
@@ -413,7 +416,7 @@ def ipmi_command(host, user, password, command):
 
     ret = []
     for line in res.splitlines():
-        line = map(str.strip, line.split('|'))
+        line = list(map(str.strip, line.split('|')))
         ret.append(line)
 
     return ret
