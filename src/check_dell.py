@@ -201,7 +201,7 @@ def check_getactiveerrors(msgs):
 
     error = {}
     for msg in msgs:
-        msg = map(str.strip, msg.split('='))
+        msg = list(map(str.strip, msg.split('=')))
         if len(msg) != 2:
             continue
 
@@ -416,7 +416,7 @@ def ipmi_command(host, user, password, command):
 
     ret = []
     for line in res.splitlines():
-        line = map(str.strip, line.split('|'))
+        line = list(map(str.strip, line.split('|')))
         ret.append(line)
 
     return ret
