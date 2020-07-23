@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Bitbucket Private Repository Check
 
 This is a Nagios script which checks, if there are any private repositories
@@ -10,7 +10,7 @@ The script will exit with:
  - 0 (OK) if there are no private (none fork) repositories
  - 1 (WARNING) if there are private (none fork) repositories
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

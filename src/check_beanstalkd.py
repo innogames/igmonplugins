@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Beanstalkd Check
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -33,7 +33,8 @@ def parse_args():
     parser.add_argument(
         '--host',
         default='localhost',
-        help='The hostname',)
+        help='The hostname',
+    )
     parser.add_argument(
         '--port',
         default=11300,
@@ -69,7 +70,7 @@ def main(checks, **kwargs):
     """The main program
     """
 
-    status, output = run(Check(c) for c in checks, **kwargs)
+    status, output = run((Check(c) for c in checks), **kwargs)
 
     print(status + ' ' + output)
 
@@ -95,7 +96,7 @@ def run(checks, **kwargs):
     except socket.error as error:
         return 'CRITICAL', 'Error connecting to beanstalkd: ' + str(error)
 
-    lines = response.splitlines()[2:-1]
+    lines = response.decode().splitlines()[2:-1]
     if len(lines) <= 3:
         return 'CRITICAL', "Couldn't get stats from beanstalkd: " + lines[0]
 
@@ -150,7 +151,7 @@ def read_stats(host, port, timeout):
     try:
         conn.settimeout(timeout)
         conn.connect((host, port))
-        conn.send('stats\r\n')
+        conn.send('stats\r\n'.encode())
         return conn.recv(4096)
     finally:
         conn.close()

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Redis Cluster Check
 
 This script checks the status of redis cluster which consists of at least
@@ -10,7 +10,7 @@ but degraded.
 It raises a warning state if the cluster is degraded but still working.
 A critical state represents a broken cluster.
 
-Copyright (c) 2017 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -120,7 +120,7 @@ def _get_cluster_status(port, password):
     try:
         role = subprocess.check_output(
             'redis-cli -p {0} -a {1} cluster nodes'.format(
-                port, password), shell=True).split()
+                port, password), shell=True).decode().split()
         state_index = [i for i, s in enumerate(role) if 'myself' in s][0]
         role_state = role[state_index].replace('myself,', '')
         role_addr = role[state_index - 1]
@@ -128,7 +128,7 @@ def _get_cluster_status(port, password):
         cluster_state = subprocess.check_output(
             'redis-cli -p {0} -a {1} cluster info'.format(
                 port, password), shell=True).split()[0]
-        cluster_state = cluster_state.split(':')[1]
+        cluster_state = cluster_state.decode().split(':')[1]
     except subprocess.CalledProcessError:
         role_addr = 'unknown'
         role_state = 'unknown'

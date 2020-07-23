@@ -1,10 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 InnoGames Monitoring Plugins - NSCA Sender
 
 This is a helper script to run send results of a check via NSCA.
 
-Copyright (c) 2017 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -69,7 +69,7 @@ def main(command, hostname, service, target, prefix):
     process = subprocess.Popen(
         ' '.join(command), stdout=subprocess.PIPE, shell=True
     )
-    output = prefix + (process.communicate()[0][:4096] or 'NO OUTPUT')
+    output = prefix + (process.communicate()[0].decode()[:4096] or 'NO OUTPUT')
     result = '\t'.join((hostname, service, str(process.returncode), output))
 
     if target:
@@ -79,7 +79,7 @@ def main(command, hostname, service, target, prefix):
                 stdin=subprocess.PIPE,
                 env={"PATH": "$PATH:/usr/sbin"},
             )
-            send_process.communicate(result)
+            send_process.communicate(result.encode())
     else:
         print(result)
 

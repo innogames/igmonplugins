@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 InnoGames Monitoring Plugins - MySQL Replication Delay Check
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -25,21 +25,47 @@ Copyright (c) 2016 InnoGames GmbH
 from mysql.connector import connect
 import optparse
 
+ERR = {'CRITICAL': 2, 'WARNING': 1, 'OK': 0}
 
-parser = optparse.OptionParser()
-parser.add_option('-w', '--warning', help='Warning limit of seconds behind master', dest='WARN_SEC_BEHIND_MASTER', action='store', type='int', default=60)
-parser.add_option('-c', '--critical', help='Critical limit of seconds behind master', dest='CRIT_SEC_BEHIND_MASTER', action='store', type='int', default=120)
-parser.add_option('-n', '--name', help='Name of slave to check (for multi-source replication)', action='store')
-parser.add_option('-u', '--user', help='Name of user for mysql connection', action='store')
-parser.add_option('-p', '--password', help='Password of user for mysql connection', action='store')
-parser.add_option('--unix-socket', default='/var/run/mysqld/mysqld.sock')
-(opts, args) = parser.parse_args()
 
-ERR={'CRITICAL':2, 'WARNING':1, 'OK':0}
+def parse_args():
+    parser = optparse.OptionParser()
+    parser.add_option(
+        '-w', '--warning',
+        help='Warning limit of seconds behind master',
+        dest='WARN_SEC_BEHIND_MASTER', action='store',
+        type='int', default=60
+    )
+    parser.add_option(
+        '-c', '--critical',
+        help='Critical limit of seconds behind master',
+        dest='CRIT_SEC_BEHIND_MASTER', action='store',
+        type='int', default=120
+    )
+    parser.add_option(
+        '-n', '--name',
+        help='Name of slave to check (for multi-source '
+             'replication)',
+        action='store'
+    )
+    parser.add_option(
+        '-u', '--user', help='Name of user for mysql connection',
+        action='store'
+    )
+    parser.add_option(
+        '-p', '--password',
+        help='Password of user for mysql connection',
+        action='store'
+    )
+    parser.add_option('--unix-socket', default='/var/run/mysqld/mysqld.sock')
+    (opts, args) = parser.parse_args()
+    return opts, args
 
-def get_server_status():
+
+def get_server_status(opts):
     if opts.user:
-        db = connect(user=opts.user, passwd=opts.password, unix_socket=opts.unix_socket)
+        db = connect(user=opts.user, passwd=opts.password,
+                     unix_socket=opts.unix_socket)
     else:
         db = connect(unix_socket=opts.unix_socket)
     cur = db.cursor()
@@ -52,18 +78,29 @@ def get_server_status():
     db.close()
     return res[0]
 
-def check_server():
+
+def check_server(opts):
     try:
-        s = get_server_status()
+        s = get_server_status(opts)
     except Exception as e:
         return ['CRITICAL', str(e.args)]
-    msg = "SLAVE IO Running: " + s['Slave_IO_Running'] + ", SLAVE SQL Running: " + s['Slave_SQL_Running'] + ", " + str(s['Seconds_Behind_Master']) + " secs behind Master"
-    if s['Slave_IO_Running'] != "Yes" or s['Slave_SQL_Running'] != "Yes" or s['Seconds_Behind_Master'] > opts.CRIT_SEC_BEHIND_MASTER:
-        return['CRITICAL', msg]
+    msg = "SLAVE IO Running: " + s['Slave_IO_Running']
+    msg += ", SLAVE SQL Running: " + s['Slave_SQL_Running']
+    msg += ", " + str(s['Seconds_Behind_Master']) + " secs behind Master"
+    if s['Slave_IO_Running'] != "Yes" or s['Slave_SQL_Running'] != "Yes" \
+            or s['Seconds_Behind_Master'] > opts.CRIT_SEC_BEHIND_MASTER:
+        return ['CRITICAL', msg]
     if s['Seconds_Behind_Master'] > opts.WARN_SEC_BEHIND_MASTER:
-        return['WARNING', msg]
-    return['OK', msg]
+        return ['WARNING', msg]
+    return ['OK', msg]
 
-status = check_server()
-print(": ".join(status))
-exit(ERR[status[0]])
+
+def main():
+    opts, args = parse_args()
+    status = check_server(opts)
+    print(": ".join(status))
+    exit(ERR[status[0]])
+
+
+if __name__ == '__main__':
+    main()

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - APT Package Source Check
 
 This is a Nagios script which checks, if packages are installed which
@@ -8,7 +8,7 @@ exit with 1 (warning) if packages without source repository are found.
 An ignore file can be created to exclude packages that are installed
 and, not available anymore.
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

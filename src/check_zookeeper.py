@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Zookeeper Cluster Check
 
 It requires ZooKeeper 3.4.0 or greater.  The script needs the 'mntr' 4letter

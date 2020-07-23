@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Atlassian Expiring Licenses Check
 
 This is a Nagios script which checks, if there are any plugin licenses
@@ -12,7 +12,7 @@ The script will exit with:
  - 2 (CRITICAL)   if there are soon expiring licenses _after_ that optional
                   given time
 
-Copyright (c) 2016 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
