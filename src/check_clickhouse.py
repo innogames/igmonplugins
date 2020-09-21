@@ -538,7 +538,8 @@ class CheckReplication(Check):
                 continue
 
             t_messages = [
-                '{}={} (max < {})'.format(c, t[c], config[c]) for c in checks
+                '{}={} (max < {})'.format(c, t[c], config[c])
+                for c in sorted(checks)
                 if config[c] <= t[c]
             ]
             if not t_messages:
