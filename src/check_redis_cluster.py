@@ -2,12 +2,9 @@
 """InnoGames Monitoring Plugins - Redis Cluster Check
 
 This script checks the status of redis cluster which consists of at least
-6 instances (3 master + 3 slaves).  The status can be fully functional
-but degraded.
+6 instances (3 master + 3 slaves).
 
-=> administrative intervention required
-
-It raises a warning state if the cluster is degraded but still working.
+A warning state represents a degraded cluster if one of three nodes is down.
 A critical state represents a broken cluster.
 
 Copyright (c) 2020 InnoGames GmbH
@@ -35,28 +32,23 @@ import subprocess
 from argparse import ArgumentParser
 from sys import exit
 
-
 def main():
     """Main entrypoint for script"""
 
     args = get_parser().parse_args()
 
-    master_addr, master_state, cluster_state_master = _get_cluster_status(
+    master_addr, master_state, cluster_state_master, failed_master = _get_cluster_status(
         args.master_port, args.password)
-    slave_addr, slave_state, cluster_state_slave = _get_cluster_status(
+    slave_addr, slave_state, cluster_state_slave, failed_slave = _get_cluster_status(
         args.slave_port, args.password)
-
     if master_state != 'unknown' and slave_state != 'unknown':
         if cluster_state_master != 'ok' and cluster_state_slave != 'ok':
             print('CRITICAL - cluster is broken')
             code = 2
-        elif master_state != 'master' or slave_state != 'slave':
+        elif len(failed_master + failed_slave) > 0:
             print('WARNING - cluster status is degraded')
-            if master_state != 'master':
-                print('{} got demoted to slave'.format(master_addr))
-                code = 1
-            if slave_state != 'slave':
-                print('{} got promoted to master'.format(slave_addr))
+            for host in failed_master + failed_slave:
+                print('{} is in a failed state'.format(host))
                 code = 1
         else:
             print('OK - cluster status is OK')
@@ -122,6 +114,7 @@ def _get_cluster_status(port, password):
             'redis-cli -p {0} -a {1} cluster nodes'.format(
                 port, password), shell=True).decode().split()
         state_index = [i for i, s in enumerate(role) if 'myself' in s][0]
+        failed_hosts = [role[i-1] for i, s in enumerate(role) if 'fail' in s and str(port) in role[i-1]]
         role_state = role[state_index].replace('myself,', '')
         role_addr = role[state_index - 1]
 
@@ -133,8 +126,9 @@ def _get_cluster_status(port, password):
         role_addr = 'unknown'
         role_state = 'unknown'
         cluster_state = 'unknown'
+        failed_hosts = 'unknown'
 
-    return role_addr, role_state, cluster_state
+    return role_addr, role_state, cluster_state, failed_hosts
 
 
 if __name__ == '__main__':
