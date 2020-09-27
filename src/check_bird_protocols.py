@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""InnoGames Monitoring Plugins - BIRD BGP Protocols Health Check
+"""InnoGames Monitoring Plugins - BIRD Protocols Health Check
 
 This is a Nagios script which queries BIRD to check if all protocols
 are up and established/running.
@@ -33,7 +33,7 @@ from subprocess import check_output, STDOUT, CalledProcessError
 
 def parse_args():
     parser = ArgumentParser(
-        description='Check if all BIRD BGP protocols are up and established'
+        description='Check if all BIRD protocols are up and established'
     )
     parser.add_argument('path', help='Path to the birdc/birdc6 binary')
 
@@ -70,7 +70,7 @@ def check_birdc_protocols(path):
     protocols_parsed = parse_birdc_output(output.decode())
 
     if not protocols_parsed:
-        return (ExitCodes.critical, 'Could not find any BGP protocol entries')
+        return (ExitCodes.critical, 'Could not find any protocol entries')
 
     result = {
         ProtocolStates.up: [],
