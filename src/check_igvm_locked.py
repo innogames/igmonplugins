@@ -2,7 +2,7 @@
 """InnoGames Monitoring Plugins - IGVM locked Check
 This script checks if a vm or hypervisor is igvm_locked
 if so the check will go to the state warning never critical.
-Copyright (c) 2019 InnoGames GmbH
+Copyright (c) 2020 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,7 @@ import argparse
 import logging
 
 from adminapi.dataset import Query
-from adminapi.dataset.filters import Any, Not
+from adminapi.filters import Any, Not
 from datetime import datetime, timedelta, timezone
 from subprocess import Popen, DEVNULL, PIPE
 
