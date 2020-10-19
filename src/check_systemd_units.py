@@ -200,11 +200,12 @@ class SystemdUnit:
         else:
             if self.unit_properties.ActiveState != 'active':
                 return (
-                    self._warn_level, 'the service is inactive'
+                    self._crit_level, 'the service is inactive'
                 )
             if self.unit_properties.SubState == 'exited':
+                # Non one-shot services should not exit
                 return (
-                    self._warn_level, 'the service is exited'
+                    self._crit_level, 'the service is exited'
                 )
 
         return (Codes.OK, '')
