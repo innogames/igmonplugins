@@ -161,6 +161,13 @@ class SystemdUnit:
             # services silently without raising a warning which requires no
             # manual action.
             return (Codes.OK, '')
+        if (
+            hasattr(self.unit_properties, 'ConditionResult') and
+            not self.unit_properties.ConditionResult
+        ):
+            # systemd on Debian Buster contains a lot of services in inactive
+            # state by "Condition*" parameters, it's fine to ignore them
+            return (Codes.OK, '')
 
         # Most probably, oneshot is related to some timer
         if self.type_properties.Type == 'oneshot':
