@@ -33,6 +33,7 @@ Copyright (c) 2020 InnoGames GmbH
 
 import logging
 from argparse import ArgumentParser
+from contextlib import ExitStack
 from datetime import datetime
 from sys import exit
 from time import time
@@ -482,4 +483,7 @@ def gen_output(results):
 
 
 if __name__ == '__main__':
-    main()
+    with ExitStack() as stack:
+        # Manager must unsubscribe from DBus when it finishes the work
+        stack.callback(systemd_manager.unsubscribe)
+        main()
