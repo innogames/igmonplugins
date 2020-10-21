@@ -211,7 +211,7 @@ class SystemdUnit:
                     self._crit_level, 'the service is inactive'
                 )
             if self.unit_properties.SubState == 'exited':
-                # Non one-shot services should not exit
+                # Non oneshot services should not exit
                 return (
                     self._crit_level, 'the service is exited'
                 )
