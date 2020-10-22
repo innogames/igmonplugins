@@ -33,6 +33,7 @@ Copyright (c) 2020 InnoGames GmbH
 
 import logging
 from argparse import ArgumentParser
+from contextlib import ExitStack
 from datetime import datetime
 from sys import exit
 from time import time
@@ -160,6 +161,13 @@ class SystemdUnit:
             # services silently without raising a warning which requires no
             # manual action.
             return (Codes.OK, '')
+        if (
+            hasattr(self.unit_properties, 'ConditionResult') and
+            not self.unit_properties.ConditionResult
+        ):
+            # systemd on Debian Buster contains a lot of services in inactive
+            # state by "Condition*" parameters, it's fine to ignore them
+            return (Codes.OK, '')
 
         # Most probably, oneshot is related to some timer
         if self.type_properties.Type == 'oneshot':
@@ -200,11 +208,12 @@ class SystemdUnit:
         else:
             if self.unit_properties.ActiveState != 'active':
                 return (
-                    self._warn_level, 'the service is inactive'
+                    self._crit_level, 'the service is inactive'
                 )
             if self.unit_properties.SubState == 'exited':
+                # Non oneshot services should not exit
                 return (
-                    self._warn_level, 'the service is exited'
+                    self._crit_level, 'the service is exited'
                 )
 
         return (Codes.OK, '')
@@ -481,4 +490,7 @@ def gen_output(results):
 
 
 if __name__ == '__main__':
-    main()
+    with ExitStack() as stack:
+        # Manager must unsubscribe from DBus when it finishes the work
+        stack.callback(systemd_manager.unsubscribe)
+        main()
