@@ -35,6 +35,7 @@ import logging
 from argparse import ArgumentParser
 from contextlib import ExitStack
 from datetime import datetime
+from fnmatch import fnmatch
 from sys import exit
 from time import time
 
@@ -104,10 +105,8 @@ class SystemdUnit:
 
     def match(self, pattern):
         name = str(self)
-        if pattern.endswith('@*') and '@' in name:
-            return pattern[:-len('@*')] == name.split('@', 1)[0]
         logger.debug('Pattern is {}, name is {}'.format(pattern, name))
-        return pattern == name
+        return fnmatch(name, pattern)
 
     def check(self, timer_warn, timer_crit, critical=True, timer=False):
         """
