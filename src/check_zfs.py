@@ -35,17 +35,31 @@ def main():
     )
 
     parser.add_argument(
-        '--fragmentation',
-        help="thresholds for fragmentation of zpool",
-        metavar=('warning', 'critical'),
-        type=int, nargs=2, default=[30, 50],
+        '--fragmentation-warning',
+        help="warning threshold for fragmentation of zpool",
+        metavar='percentage',
+        type=int, default=30,
     )
 
     parser.add_argument(
-        '--capacity',
-        help="thresholds for space utilization of zpool",
-        metavar=('warning', 'critical'),
-        type=int, nargs=2, default=[70, 90],
+        '--fragmentation-critical',
+        help="critical threshold for fragmentation of zpool",\
+        metavar='percentage',
+        type=int, default=50,
+    )
+
+    parser.add_argument(
+        '--capacity-warning',
+        help="twarning hreshold for space utilization of zpool",
+        metavar='percentage',
+        type=int, default=70,
+    )
+
+    parser.add_argument(
+        '--capacity-critical',
+        help="critical threshold for space utilization of zpool",
+        metavar='percentage',
+        type=int, default=90,
     )
 
     args = parser.parse_args()
@@ -106,14 +120,14 @@ def parse_zpool(line, args):
 
     if (
         health != 'ONLINE' or
-        frag > args.fragmentation[0] or
-        cap > args.capacity[0]
+        frag > args.fragmentation_warning or
+        cap > args.capacity_warning
     ):
         ret_code = ExitCodes.warning
 
     if (
-        frag > args.fragmentation[1] or
-        cap > args.capacity[1]
+        frag > args.fragmentation_critical or
+        cap > args.capacity_critical
     ):
         ret_code = ExitCodes.critical
 
