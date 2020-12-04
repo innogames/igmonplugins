@@ -193,7 +193,7 @@ def parse_birdc_output(output):
     lines = lines[2:]
 
     tokenized_lines = [
-        [field.strip() for field in line.split(None, 5)]
+        [field.strip() for field in line.split(None, 6)]
         for line in lines
     ]
     protocols_dicts = [
@@ -204,17 +204,34 @@ def parse_birdc_output(output):
 
 
 def build_dict(line):
-    # The next line ensures that we always have 6 elements in the line,
-    # as the tokenization of protocols that are disabled yield only 5 elements.
-    line += [None] * (6 - len(line))
-    return {
+    # The next line ensures that we always have 7 elements in the line,
+    # as the tokenization of protocols that are disabled yield only 6 elements.
+    line += [None] * (7 - len(line))
+
+    structure = {
         'name': line[0],
         'type': line[1],
         'table': line[2],
         'state': line[3],
-        'since': line[4],
-        'info': line[5],
     }
+
+    # BIRD has a few date formats. One is ISO short dates another is ISO long
+    # dates. When using ISO short, BIRD will output HH:MM:SS in the since field
+    # for times smaller than 24 hours and then switch to 2020-01-01 after.
+    # For ISO long it will always output 2020-08-31 20:40:51.
+    # With the if below, we can differentiate between the two date formats as
+    # when using ISO short, we end up with the protocol info in field 5
+    # instead of the time.
+    # The protocol info is empty sometimes, hence the check for line[5] being
+    # not null.
+    if line[5] and ':' in line[5]:
+        structure['since'] = '{} {}'.format(line[4], line[5])
+        structure['info'] = line[6]
+    else:
+        structure['since'] = line[4]
+        structure['info'] = line[5]
+
+    return structure
 
 
 def format_nagios_message(code, reason):
