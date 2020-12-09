@@ -21,6 +21,7 @@ from urllib.error import (
     HTTPError,
     URLError,
 )
+from socket import timeout
 
 
 class ExitCodes:
@@ -74,7 +75,7 @@ def check_urls(url_list, codes_list):
     unreachable_urls = []
     for url in url_list:
         try:
-            request = urlopen(url)
+            request = urlopen(url, timeout=10)
             code = request.status
             if codes_list is None:
                 accepted_codes = ['1', '2', '3']
@@ -89,7 +90,7 @@ def check_urls(url_list, codes_list):
                         request.status,
                     )
                 })
-        except (URLError, HTTPError) as e:
+        except (URLError, HTTPError, timeout) as e:
             unreachable_urls.append({'url': url, 'error': str(e)})
 
     return unreachable_urls
