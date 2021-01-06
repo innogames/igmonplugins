@@ -22,9 +22,11 @@ Copyright (c) 2021 InnoGames GmbH
 # THE SOFTWARE.
 
 import re
+import socket
 from sys import exit
 
 import libvirt
+from adminapi.dataset import Query
 from libvirt import openReadOnly, libvirtError
 
 reason_names = {
@@ -101,6 +103,70 @@ reason_names = {
 
 
 def main():
+    domains = query_libvirt_domains()
+    vms = query_serveradmin_vms()
+
+    code, reason = check(domains, vms)
+    print_nagios_message(code, reason)
+    print_domains(domains)
+    exit(code)
+
+
+def check(domains, vms):
+    # We do a couple of different checks:
+    #  - Check if same object ID is defined twice in libvirt
+    #  - Check if there are VMs defined in libvirt that are not associated to
+    #  this hypervisor in Serveradmin
+    #  - Check if there are VMs associated to this HV in Serveradmin but not
+    #  defined in libvirt
+    #  - Check if there are VMs in libvirt in a non-running state
+
+    parsed_domains = parse_libvirt_domains(domains)
+
+    vm_object_ids = set([vm['object_id'] for vm in vms])
+    domain_object_ids = set([domain['object_id'] for domain in parsed_domains])
+
+    #  - Check if same object ID is defined twice in libvirt
+    if len(domain_object_ids) != len(parsed_domains):
+        # TODO: Implement logic properly
+        print('Duplicated domain defined')
+
+    #  - Check if there are VMs defined in libvirt that are not associated to
+    #  this hypervisor in Serveradmin
+    if len(domain_object_ids - vm_object_ids) > 0:
+        # TODO: Implement logic properly
+        print('Running VM not associated to the hypervisor in serveradmin')
+
+    #  - Check if there are VMs associated to this HV in Serveradmin but not
+    #  defined in libvirt
+    if len(vm_object_ids - domain_object_ids) > 0:
+        # TODO: implement logic properly
+        print('VM associated in serveradmin not running on this HV')
+
+    #  - Check if there are VMs in libvirt in a non-running state
+    inactive_domains = [d for d in domains if not d.isActive()]
+    if inactive_domains:
+        return ExitCodes.warning, 'Found non-running domains: {0}'.format(
+            ', '.join(d.name() for d in inactive_domains)
+        )
+    return ExitCodes.ok, 'All defined domains are running'
+
+
+def query_serveradmin_vms():
+    hostname = socket.gethostname()
+
+    vms = Query(
+        {'servertype': 'vm', 'hypervisor': hostname},
+        ['hostname', 'state']
+    )
+    # This is a trick to get pure dicts out of the serveradmin data, since
+    # we don't need to edit the queried objects.
+    vms = [vm.copy() for vm in vms]
+
+    return vms
+
+
+def query_libvirt_domains():
     try:
         conn = openReadOnly(None)
     except libvirtError as error:
@@ -110,31 +176,37 @@ def main():
         )
         exit(ExitCodes.warning)
 
-    domains = conn.listAllDomains()
-    code, reason = check(domains)
-    print_nagios_message(code, reason)
-    print_domains(domains)
-    exit(code)
+    libvirt_domains = conn.listAllDomains()
+
+    return libvirt_domains
 
 
-def check(domains):
-    inactive_domains = [d for d in domains if not d.isActive()]
-    if inactive_domains:
-        return ExitCodes.warning, 'Found non-running domains: {0}'.format(
-            ', '.join(d.name() for d in inactive_domains)
-        )
-    return ExitCodes.ok, 'All defined domains are running'
+def parse_libvirt_domains(domains):
+    parsed_domains = []
 
+    for d in domains:
+        state, reason = d.state()
 
-def fetch_hv_vms():
-    return
+        m = re.match(r'(?P<object_id>\d+)?_?(?P<hostname>[\w\.\d-]+)',
+                     d.name())
+        hostname = m.group('hostname')
+        object_id = m.group('object_id')
+
+        parsed_domains.append({
+            'object_id': int(object_id),
+            'hostname': hostname,
+            'domain_name': d.name(),
+            'state': reason_names.get(state, {}).get(reason, "unknown")
+        })
+
+    return parsed_domains
 
 
 def print_domains(domains):
     for d in domains:
         state, reason = d.state()
-        m = re.match(r'(\d+_)?(?P<vmname>[\w\.\d-]+)', d.name())
-        name = m.group('vmname')
+        m = re.match(r'(?P<object_id>\d+_)?(?P<hostname>[\w\.\d-]+)', d.name())
+        name = m.group('hostname')
         print("{0} - {1}".format(
             name, reason_names.get(state, "unknown").get(reason, "unknown")
         ))
