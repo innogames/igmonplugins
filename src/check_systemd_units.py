@@ -31,28 +31,38 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import dbus
 import logging
+import time
+
 from argparse import ArgumentParser
 from contextlib import ExitStack
 from datetime import datetime
 from fnmatch import fnmatch
 from sys import exit
-from time import time
-
-from systemd_dbus.exceptions import SystemdError
-from systemd_dbus.manager import Manager
-from systemd_dbus.service import Service
-from systemd_dbus.timer import Timer
+#from time import time
 
 logging.basicConfig(
     format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-now = time()
+now = time.time()
 
-systemd_manager = Manager()
+bus = dbus.SystemBus()
 
+systemd = bus.get_object(
+    'org.freedesktop.systemd1',
+    '/org/freedesktop/systemd1'
+)
+
+systemd_manager = dbus.Interface(
+    systemd,
+    'org.freedesktop.systemd1.Manager'
+)
+
+unit_properties_time = 0
+type_properties_time = 0
 
 class Codes(object):
     OK = 0
@@ -61,18 +71,100 @@ class Codes(object):
     UNKNOWN = 3
 
 
+class UnitProperty(object):
+    def __str__(self):
+        return str(vars(self))
+
 class SystemdUnit:
     """
     Systemd unit
 
-    This class implements wraper around systemd_dbus.unit.Unit with supporting
-    of every unit type
+    This class implements basic properties of a Systemd unit as received via dbus
     """
 
     def __init__(self, unit):
-        self.__unit_properties = unit.properties
-        self.unit_type = unit.properties.Id.rsplit('.', 1)[-1]
-        self.__dbus_path = unit._Unit__proxy.__dbus_object_path__
+        global unit_properties_time
+        global type_properties_time
+
+        logger.debug(unit)
+        self.unit_type = unit[0].rsplit('.', 1)[-1]
+
+        self.__unit_proxy = bus.get_object(
+            'org.freedesktop.systemd1',
+            unit[6]
+        )
+
+        self.__unit_interface = dbus.Interface(
+            self.__unit_proxy,
+            'org.freedesktop.systemd1.Unit',
+        )
+
+        self.__properties_interface = dbus.Interface(
+            self.__unit_proxy,
+            'org.freedesktop.DBus.Properties',
+        )
+
+        if self.unit_type in ['service', 'timer']:
+
+            properties_time_1 = time.perf_counter()
+
+            unit_properties = self.__properties_interface.GetAll(
+                self.__unit_interface.dbus_interface,
+            )
+            properties_time_2 = time.perf_counter()
+
+            unit_properties_time += properties_time_2 - properties_time_1
+
+        #else:
+        unit_properties = {
+            'Id': unit[0],
+            'LoadState': unit[2],
+            'ActiveState': unit[3],
+            'SubState': unit[4],
+        }
+
+        tmp_properties = UnitProperty()
+        for k, v in unit_properties.items():
+            setattr(tmp_properties, k, v)
+        setattr(self, '__unit_properties', tmp_properties)
+
+        #logger.debug(f'#### unit properties 1: {self.__unit_properties}')
+        logger.debug(f'#### unit properties 2: {self.unit_properties}')
+
+        unit_type_interface = None
+        if self.unit_type == 'service':
+            unit_type_interface = 'org.freedesktop.systemd1.Service'
+        if self.unit_type == 'timer':
+            unit_type_interface = 'org.freedesktop.systemd1.Timer'
+
+        if unit_type_interface:
+
+            self.__unit_type_interface = dbus.Interface(
+                self.__unit_proxy,
+                unit_type_interface,
+            )
+
+            #self.__unit_type_properties_interface = dbus.Interface(
+            #    self.__unit_proxy,
+            #    'org.freedesktop.DBus.Properties'
+            #)
+
+            properties_time_1 = time.perf_counter()
+            unit_type_properties = self.__properties_interface.GetAll(
+                self.__unit_type_interface.dbus_interface,
+            )
+            properties_time_2 = time.perf_counter()
+            type_properties_time += properties_time_2 - properties_time_1
+
+            tmp_properties = UnitProperty()
+            for k, v in unit_type_properties.items():
+                setattr(tmp_properties, k, v)
+            setattr(self, '__type_properties', tmp_properties)
+
+            #logger.debug(f'#### unit type properties 1: {self.__type_properties}')
+            logger.debug(f'#### unit type properties 2: {self.type_properties}')
+        #print()
+
         logger.debug('Unit type is: {}'.format(self.unit_type))
 
     def __str__(self):
@@ -86,7 +178,7 @@ class SystemdUnit:
         '''
         Returns properties from unit interface
         '''
-        return self.__unit_properties
+        return getattr(self, '__unit_properties')
 
     @property
     def type_properties(self):
@@ -94,14 +186,9 @@ class SystemdUnit:
         Returns properties from type specific interface
         '''
         if hasattr(self, '__type_properties'):
-            return self.__type_properties
-        if self.unit_type == 'service':
-            cls = Service
-        elif self.unit_type == 'timer':
-            cls = Timer
-
-        self.__type_properties = cls(self.__dbus_path).properties
-        return self.__type_properties
+            logger.debug('yes type properties')
+            return getattr(self, '__type_properties')
+        logger.debug('no type properties')
 
     def match(self, pattern):
         name = str(self)
@@ -169,7 +256,7 @@ class SystemdUnit:
             return (Codes.OK, '')
 
         # Most probably, oneshot is related to some timer
-        if self.type_properties.Type == 'oneshot':
+        if self.unit_type == 'oneshot':
             # See the man 5 systemd.service for ExecMainStatus and
             # SuccessExitStatus
             # All currently running services have ExecMainStatus=0
@@ -224,8 +311,10 @@ class SystemdUnit:
         # This might check the service unit twice. We need to do that as we
         # would not check timer service unit at all if the user didn't
         # explicitly ask for them via arguments.
+        logger.debug(f'Checking type property unit 1 {self.type_properties.Unit}')
+        logger.debug(f'Checking type property unit 2 {systemd_manager.GetUnit(self.type_properties.Unit)}')
         service_unit = SystemdUnit(
-            systemd_manager.get_unit(self.type_properties.Unit)
+            systemd_manager.GetUnit(self.type_properties.Unit)
         )
 
         long_not_running = self._check_intervals(
@@ -407,12 +496,15 @@ def main():
     logger.info('Initial arguments are: {}'.format(args))
 
     try:
-        units = systemd_manager.list_units()
+        units = systemd_manager.ListUnits()
     except SystemdError as error:
         print('UNKNOWN: ' + str(error))
         exit_code = 3
     else:
-        results = process([SystemdUnit(u) for u in units], args)
+        units = [SystemdUnit(u) for u in units]
+        logger.info(f'Unit properties time: {unit_properties_time:.1f}s')
+        logger.info(f'Type properties time: {type_properties_time:.1f}s')
+        results = process(units, args)
         logger.info(
             'criticals are: {}\nwarnings are: {}'
             .format(results[2], results[1])
@@ -489,7 +581,4 @@ def gen_output(results):
 
 
 if __name__ == '__main__':
-    with ExitStack() as stack:
-        # Manager must unsubscribe from DBus when it finishes the work
-        stack.callback(systemd_manager.unsubscribe)
-        main()
+    main()
