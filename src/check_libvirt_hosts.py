@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Libvirt Hosts Check
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2021 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -21,26 +21,26 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import re
 from sys import exit
 
-from libvirt import openReadOnly, libvirtError
 import libvirt
-import re
+from libvirt import openReadOnly, libvirtError
 
 reason_names = {
     libvirt.VIR_DOMAIN_RUNNING: {
-        libvirt.VIR_DOMAIN_RUNNING_UNKNOWN:       "VIR_DOMAIN_RUNNING_UNKNOWN",
+        libvirt.VIR_DOMAIN_RUNNING_UNKNOWN: "VIR_DOMAIN_RUNNING_UNKNOWN",
         libvirt.VIR_DOMAIN_RUNNING_BOOTED: "VIR_DOMAIN_RUNNING_BOOTED",
         libvirt.VIR_DOMAIN_RUNNING_MIGRATED: "VIR_DOMAIN_RUNNING_MIGRATED",
         libvirt.VIR_DOMAIN_RUNNING_RESTORED: "VIR_DOMAIN_RUNNING_RESTORED",
         libvirt.VIR_DOMAIN_RUNNING_FROM_SNAPSHOT:
-        "VIR_DOMAIN_RUNNING_FROM_SNAPSHOT",
+            "VIR_DOMAIN_RUNNING_FROM_SNAPSHOT",
         libvirt.VIR_DOMAIN_RUNNING_UNPAUSED:
-        "VIR_DOMAIN_RUNNING_UNPAUSED",
+            "VIR_DOMAIN_RUNNING_UNPAUSED",
         libvirt.VIR_DOMAIN_RUNNING_MIGRATION_CANCELED:
-        "VIR_DOMAIN_RUNNING_MIGRATION_CANCELED",
+            "VIR_DOMAIN_RUNNING_MIGRATION_CANCELED",
         libvirt.VIR_DOMAIN_RUNNING_SAVE_CANCELED:
-        "VIR_DOMAIN_RUNNING_SAVE_CANCELED",
+            "VIR_DOMAIN_RUNNING_SAVE_CANCELED",
         libvirt.VIR_DOMAIN_RUNNING_WAKEUP: "VIR_DOMAIN_RUNNING_WAKEUP",
         libvirt.VIR_DOMAIN_RUNNING_CRASHED: "VIR_DOMAIN_RUNNING_CRASHED",
         libvirt.VIR_DOMAIN_RUNNING_POSTCOPY: "VIR_DOMAIN_RUNNING_POSTCOPY",
@@ -59,15 +59,15 @@ reason_names = {
         libvirt.VIR_DOMAIN_PAUSED_IOERROR: "VIR_DOMAIN_PAUSED_IOERROR",
         libvirt.VIR_DOMAIN_PAUSED_WATCHDOG: "VIR_DOMAIN_PAUSED_WATCHDOG",
         libvirt.VIR_DOMAIN_PAUSED_FROM_SNAPSHOT:
-        "VIR_DOMAIN_PAUSED_FROM_SNAPSHOT",
+            "VIR_DOMAIN_PAUSED_FROM_SNAPSHOT",
         libvirt.VIR_DOMAIN_PAUSED_SHUTTING_DOWN:
-        "VIR_DOMAIN_PAUSED_SHUTTING_DOWN",
+            "VIR_DOMAIN_PAUSED_SHUTTING_DOWN",
         libvirt.VIR_DOMAIN_PAUSED_SNAPSHOT: "VIR_DOMAIN_PAUSED_SNAPSHOT",
         libvirt.VIR_DOMAIN_PAUSED_CRASHED: "VIR_DOMAIN_PAUSED_CRASHED",
         libvirt.VIR_DOMAIN_PAUSED_STARTING_UP: "VIR_DOMAIN_PAUSED_STARTING_UP",
         libvirt.VIR_DOMAIN_PAUSED_POSTCOPY: "VIR_DOMAIN_PAUSED_POSTCOPY",
         libvirt.VIR_DOMAIN_PAUSED_POSTCOPY_FAILED:
-        "VIR_DOMAIN_PAUSED_POSTCOPY_FAILED",
+            "VIR_DOMAIN_PAUSED_POSTCOPY_FAILED",
         14: "VIR_DOMAIN_PAUSED_LAST",
     },
     libvirt.VIR_DOMAIN_SHUTDOWN: {
@@ -84,7 +84,7 @@ reason_names = {
         libvirt.VIR_DOMAIN_SHUTOFF_SAVED: "VIR_DOMAIN_SHUTOFF_SAVED",
         libvirt.VIR_DOMAIN_SHUTOFF_FAILED: "VIR_DOMAIN_SHUTOFF_FAILED",
         libvirt.VIR_DOMAIN_SHUTOFF_FROM_SNAPSHOT:
-        "VIR_DOMAIN_SHUTOFF_FROM_SNAPSHOT",
+            "VIR_DOMAIN_SHUTOFF_FROM_SNAPSHOT",
         8: "VIR_DOMAIN_SHUTOFF_DAEMON",
         9: "VIR_DOMAIN_SHUTOFF_LAST"
     },
@@ -100,11 +100,44 @@ reason_names = {
 }
 
 
-class ExitCodes:
-    ok = 0
-    warning = 1
-    critical = 2
-    unknown = 3
+def main():
+    try:
+        conn = openReadOnly(None)
+    except libvirtError as error:
+        print_nagios_message(
+            ExitCodes.warning,
+            'Could not connect to libvirt: {0}'.format(str(error))
+        )
+        exit(ExitCodes.warning)
+
+    domains = conn.listAllDomains()
+    code, reason = check(domains)
+    print_nagios_message(code, reason)
+    print_domains(domains)
+    exit(code)
+
+
+def check(domains):
+    inactive_domains = [d for d in domains if not d.isActive()]
+    if inactive_domains:
+        return ExitCodes.warning, 'Found non-running domains: {0}'.format(
+            ', '.join(d.name() for d in inactive_domains)
+        )
+    return ExitCodes.ok, 'All defined domains are running'
+
+
+def fetch_hv_vms():
+    return
+
+
+def print_domains(domains):
+    for d in domains:
+        state, reason = d.state()
+        m = re.match(r'(\d+_)?(?P<vmname>[\w\.\d-]+)', d.name())
+        name = m.group('vmname')
+        print("{0} - {1}".format(
+            name, reason_names.get(state, "unknown").get(reason, "unknown")
+        ))
 
 
 def print_nagios_message(code, reason):
@@ -119,39 +152,11 @@ def print_nagios_message(code, reason):
     print("{0} - {1}".format(state_text, reason))
 
 
-def print_domains(domains):
-    for d in domains:
-        state, reason = d.state()
-        m = re.match(r'(\d+_)?(?P<vmname>[\w\.\d-]+)', d.name())
-        name = m.group('vmname')
-        print("{0} - {1}".format(name, reason_names.get(state, "unknown")
-              .get(reason, "unknown")))
-
-
-def check(domains):
-    inactive_domains = [d for d in domains if not d.isActive()]
-    if inactive_domains:
-        return ExitCodes.warning, 'Found non-running domains: {0}'.format(
-            ', '.join(d.name() for d in inactive_domains)
-            )
-    return ExitCodes.ok, 'All defined domains are running'
-
-
-def main():
-    try:
-        conn = openReadOnly(None)
-    except libvirtError as error:
-        print_nagios_message(ExitCodes.warning,
-                             'Could not connect to libvirt: {0}'
-                             .format(str(error))
-                             )
-        exit(ExitCodes.warning)
-
-    domains = conn.listAllDomains()
-    code, reason = check(domains)
-    print_nagios_message(code, reason)
-    print_domains(domains)
-    exit(code)
+class ExitCodes:
+    ok = 0
+    warning = 1
+    critical = 2
+    unknown = 3
 
 
 if __name__ == '__main__':
