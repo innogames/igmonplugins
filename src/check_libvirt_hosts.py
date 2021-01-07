@@ -103,65 +103,96 @@ reason_names = {
 
 
 def main():
-    domains = query_libvirt_domains()
+    domains = parse_libvirt_domains(query_libvirt_domains())
     vms = query_serveradmin_vms()
 
     code, reason = check(domains, vms)
     print_nagios_message(code, reason)
-    print_domains(domains)
     exit(code)
 
 
 def check(domains, vms):
+    exit_code = ExitCodes.ok
+    exit_message = []
+
     # We do a couple of different checks:
-    #  - Check if same object ID is defined twice in libvirt
+    #  - Check if retired VMs are still running on the hypervisor
     #  - Check if there are VMs defined in libvirt that are not associated to
     #  this hypervisor in Serveradmin
     #  - Check if there are VMs associated to this HV in Serveradmin but not
     #  defined in libvirt
     #  - Check if there are VMs in libvirt in a non-running state
 
-    parsed_domains = parse_libvirt_domains(domains)
-
-    vm_object_ids = set([vm['object_id'] for vm in vms])
-    domain_object_ids = set([domain['object_id'] for domain in parsed_domains])
-
-    #  - Check if same object ID is defined twice in libvirt
-    if len(domain_object_ids) != len(parsed_domains):
-        # TODO: Implement logic properly
-        print('Duplicated domain defined')
-
-    #  - Check if there are VMs defined in libvirt that are not associated to
-    #  this hypervisor in Serveradmin
-    if len(domain_object_ids - vm_object_ids) > 0:
-        # TODO: Implement logic properly
-        print('Running VM not associated to the hypervisor in serveradmin')
-
-    #  - Check if there are VMs associated to this HV in Serveradmin but not
-    #  defined in libvirt
-    if len(vm_object_ids - domain_object_ids) > 0:
-        # TODO: implement logic properly
-        print('VM associated in serveradmin not running on this HV')
-
-    #  - Check if there are VMs in libvirt in a non-running state
-    inactive_domains = [d for d in domains if not d.isActive()]
-    if inactive_domains:
-        return ExitCodes.warning, 'Found non-running domains: {0}'.format(
-            ', '.join(d.name() for d in inactive_domains)
+    #  - Check if retired VMs are still running on the hypervisor
+    retired_vms = set(
+        vm['hostname'] for vm in vms.values() if vm['state'] == 'retired'
+    )
+    if len(retired_vms) > 0:
+        exit_code = max(exit_code, ExitCodes.critical)
+        exit_message.append(
+            'HV contains retired VMs still running: {}'.format(
+                ', '.join(retired_vms)
+            )
         )
-    return ExitCodes.ok, 'All defined domains are running'
+
+    vm_object_ids = set(vms.keys())
+    domain_object_ids = set(domains.keys())
+
+    #  - Check if there are VMs defined in libvirt that are not associated to
+    #  this hypervisor in Serveradmin
+    not_in_serveradmin = domain_object_ids - vm_object_ids
+    if len(not_in_serveradmin) > 0:
+        hostnames = [domains[id]['hostname'] for id in not_in_serveradmin]
+        exit_code = max(exit_code, ExitCodes.critical)
+        exit_message.append(
+            'The following domains do not belong to this HV in Serveradmin: '
+            '{}'.format(', '.join(hostnames))
+        )
+
+    #  - Check if there are VMs associated to this HV in Serveradmin but not
+    #  defined in libvirt
+    not_in_libvirt = vm_object_ids - domain_object_ids
+    if len(not_in_libvirt) > 0:
+        hostnames = [vms[id]['hostname'] for id in not_in_libvirt]
+        exit_code = max(exit_code, ExitCodes.warning)
+        exit_message.append(
+            'The following VMs are assigned in Serveradmin but missing in '
+            'libvirt: {}'.format(', '.join(hostnames))
+        )
+
+    #  - Check if there are VMs in libvirt in a non-running state
+    inactive_domains = set(
+        d['hostname'] for d in domains.values() if not d['is_active'])
+    if len(inactive_domains) > 0:
+        exit_code = max(exit_code, ExitCodes.warning)
+        exit_message.append(
+            'Found non-running domains: {}'.format(', '.join(inactive_domains))
+        )
+
+    # If none of the conditions are met, the exit code is still OK,
+    # so we produce the OK message
+    if exit_code == ExitCodes.ok:
+        exit_message.append('All domains are running')
+
+    return exit_code, exit_message
 
 
 def query_serveradmin_vms():
+    """Query Serveradmin for the VMs associated to this Hypervisor
+
+    This function will return a dictionary where the keys are
+    <objectid>_<hostname>, just like our libvirt domains and the values are
+    another dictionary which holds the DatasetObject data.
+    """
     hostname = socket.gethostname()
 
     vms = Query(
         {'servertype': 'vm', 'hypervisor': hostname},
-        ['hostname', 'state']
+        ['hostname', 'state', 'object_id']
     )
     # This is a trick to get pure dicts out of the serveradmin data, since
     # we don't need to edit the queried objects.
-    vms = [vm.copy() for vm in vms]
+    vms = {f"{vm['object_id']}_{vm['hostname']}": vm.copy() for vm in vms}
 
     return vms
 
@@ -170,9 +201,10 @@ def query_libvirt_domains():
     try:
         conn = openReadOnly(None)
     except libvirtError as error:
+        # TODO: raise the exception and catch it in the calling function
         print_nagios_message(
             ExitCodes.warning,
-            'Could not connect to libvirt: {0}'.format(str(error))
+            ['Could not connect to libvirt: {0}'.format(str(error))]
         )
         exit(ExitCodes.warning)
 
@@ -182,34 +214,29 @@ def query_libvirt_domains():
 
 
 def parse_libvirt_domains(domains):
-    parsed_domains = []
+    parsed_domains = {}
 
     for d in domains:
         state, reason = d.state()
 
-        m = re.match(r'(?P<object_id>\d+)?_?(?P<hostname>[\w\.\d-]+)',
-                     d.name())
+        m = re.match(
+            r'(?P<object_id>\d+)?_?(?P<hostname>[\w\.\d-]+)',
+            d.name()
+        )
         hostname = m.group('hostname')
         object_id = m.group('object_id')
 
-        parsed_domains.append({
-            'object_id': int(object_id),
-            'hostname': hostname,
-            'domain_name': d.name(),
-            'state': reason_names.get(state, {}).get(reason, "unknown")
-        })
+        parsed_domains.setdefault(
+            d.name(),
+            {
+                'object_id': int(object_id),
+                'hostname': hostname,
+                'state': reason_names.get(state, {}).get(reason, "unknown"),
+                'is_active': d.isActive(),
+            }
+        )
 
     return parsed_domains
-
-
-def print_domains(domains):
-    for d in domains:
-        state, reason = d.state()
-        m = re.match(r'(?P<object_id>\d+_)?(?P<hostname>[\w\.\d-]+)', d.name())
-        name = m.group('hostname')
-        print("{0} - {1}".format(
-            name, reason_names.get(state, "unknown").get(reason, "unknown")
-        ))
 
 
 def print_nagios_message(code, reason):
@@ -221,7 +248,9 @@ def print_nagios_message(code, reason):
         state_text = 'CRITICAL'
     else:
         state_text = 'UNKNOWN'
-    print("{0} - {1}".format(state_text, reason))
+    print("{0} - {1}".format(state_text, reason.pop(0)))
+    for line in reason:
+        print(line)
 
 
 class ExitCodes:
