@@ -103,7 +103,15 @@ reason_names = {
 
 
 def main():
-    domains = parse_libvirt_domains(query_libvirt_domains())
+    try:
+        domains = parse_libvirt_domains(query_libvirt_domains())
+    except libvirtError as error:
+        print_nagios_message(
+            ExitCodes.warning,
+            ['Could not connect to libvirt: {0}'.format(str(error))]
+        )
+        exit(ExitCodes.warning)
+
     vms = query_serveradmin_vms()
 
     code, reason = check(domains, vms)
@@ -201,12 +209,7 @@ def query_libvirt_domains():
     try:
         conn = openReadOnly(None)
     except libvirtError as error:
-        # TODO: raise the exception and catch it in the calling function
-        print_nagios_message(
-            ExitCodes.warning,
-            ['Could not connect to libvirt: {0}'.format(str(error))]
-        )
-        exit(ExitCodes.warning)
+        raise
 
     libvirt_domains = conn.listAllDomains()
 
