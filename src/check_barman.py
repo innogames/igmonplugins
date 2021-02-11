@@ -44,7 +44,6 @@ def parse_args():
 
 def main(args):
     with Popen(
-        '/usr/bin/sudo -u barman '
         '/usr/bin/barman check --nagios {}'.format(args.host),
         shell=True,
         stderr=STDOUT,
