@@ -65,7 +65,7 @@ def main():
     )
     command = [
         args.exe,
-        '--ignore-variables=wsrep_sst_auth',
+        '--ignore-variables=wsrep_sst_auth,read_only',
         '--report-width=140',
         conn_str,
     ]
