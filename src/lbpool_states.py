@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Load Balancing Pools' States Check
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2021 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,13 +21,10 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import json, subprocess, re, tempfile
 from argparse import ArgumentParser
-import imp, json, subprocess, re, tempfile
-from os.path import exists
 from datetime import datetime
 from os import rename, chmod
-
-nagios_service = 'lbpool_states'
 
 
 def main():
@@ -43,6 +40,11 @@ def main():
         return
 
     args = args_parse()
+
+    if args.hwlb_group:
+        nagios_service = 'lbpool_states_' + args.hwlb_group
+    else:
+        nagios_service = 'lbpool_states'
 
     pfctl_output, err = subprocess.Popen(['sudo', 'pfctl', '-vsr'],
                                          stdout=subprocess.PIPE,
@@ -81,7 +83,7 @@ def main():
             lb_params['pf_name'] in states_dict and
             lb_params['vlan'] == int(vlan)
             )
-        }
+    }
 
     if not args.nsca_srv:
         separator = "\n"
@@ -103,7 +105,7 @@ def main():
                 lbname: lb_params
                 for lbname, lb_params in lbpools.items()
                 if lb_params['carp_master'] and lb_params.pop('carp_master')
-                }
+            }
         }
     }
 
@@ -138,6 +140,11 @@ def args_parse():
     )
 
     parser.add_argument(
+        '-g', dest='hwlb_group',
+        help='HWLB Group to send results to',
+    )
+
+    parser.add_argument(
         '-w', '--warning', dest='warning', type=int, default=70,
         help='Warning threshold in percentage, default 70'
     )
@@ -151,7 +158,6 @@ def args_parse():
 
 
 def check_carps():
-
     configs = ['/var/run/iglb/carp_state.json', '/etc/iglb/networks.json']
 
     with open(configs[0]) as carp_statejson, \
@@ -160,7 +166,7 @@ def check_carps():
         network = json.load(networkjson)
         carps = {
             vn['vlan_tag']: {
-                    'carp_master': v['carp_master']
+                'carp_master': v['carp_master']
             }
             for k, v in carp_state.items()
             for kn, vn in network['internal_networks'].items()
@@ -171,7 +177,6 @@ def check_carps():
 
 
 def get_lbpools():
-
     config = '/etc/iglb/lbpools.json'
 
     with open(config) as jsonfile:
@@ -198,22 +203,22 @@ def check_states(lbpools, states_dict, default_state_limit, nagios_service,
 
             if cur_states >= critical:
                 local_exit_code = 2
-                statuses += 'Used states are above {}% of states ' \
-                            'limit | States limit: {}, Current states: {}'.format(
-                    crit, state_limit, cur_states)
+                statuses += ('Used states are above {}% of states '
+                             'limit | States limit: {}, Current states: {'
+                             '}').format(crit, state_limit, cur_states)
             elif cur_states >= warning:
                 local_exit_code = 1
-                statuses += 'Number of states are above {}% of states ' \
-                            'limit | States limit: {}, Current states: {}'.format(
-                    warn, state_limit, cur_states)
+                statuses += ('Number of states are above {}% of states '
+                             'limit | States limit: {}, Current states: {'
+                             '}').format(warn, state_limit, cur_states)
 
             if exit_code < local_exit_code:
                 exit_code = local_exit_code
 
             if exit_code == 0:
-                statuses = 'Used states are below the thresholds | ' \
-                           'States limit: {}, Current states: {}'.format(
-                    state_limit, cur_states)
+                statuses = ('Used states are below the thresholds | '
+                            'States limit: {}, Current states: {}'
+                            ).format(state_limit, cur_states)
 
             msg += ('{}\t{}\t{}\t{}{}').format(lbname, nagios_service,
                                                exit_code,
