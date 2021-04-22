@@ -51,6 +51,11 @@ def parse_args():
         '--passwd',
         help='MySQL password (default: %(default)s)'
     )
+    parser.add_argument(
+        '--ignore_vars',
+        default='wsrep_sst_auth',
+        help='Varaibles that don\'t get checked (default: %(default)s)'
+    )
     parser.add_argument('conf_files', nargs='+')
 
     return parser.parse_args()
@@ -65,7 +70,7 @@ def main():
     )
     command = [
         args.exe,
-        '--ignore-variables=wsrep_sst_auth',
+        '--ignore-variables={}'.format(args.ignore_vars),
         '--report-width=140',
         conn_str,
     ]
