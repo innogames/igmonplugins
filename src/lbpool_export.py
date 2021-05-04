@@ -67,11 +67,15 @@ def main():
         error = False
         for server in args.redis_servers:
             try:
-                send_to_redis(
+                result = send_to_redis(
                     server, args.redis_password,
                     results, args.hwlb_group
                 )
-                print(f'Results successfully sent to {server}')
+                if result:
+                    print(f'Results successfully sent to {server}')
+                else:
+                    print(f'Errors while sending results to {server}')
+                    error = True
             except redis.exceptions.ConnectionError as e:
                 print(str(e))
                 error = True
@@ -124,6 +128,7 @@ def send_to_redis(redis_server, redis_password, results, hwlb_group):
         socket_connect_timeout=5,
         socket_timeout=5,
     )
+    pipe = r.pipeline()
 
     for result in results:
         if hwlb_group:
@@ -136,7 +141,13 @@ def send_to_redis(redis_server, redis_password, results, hwlb_group):
         # If the HWLB stops sending data, the entries in Redis will
         # expired after this amount of time. On monitoring side,
         # we raise flags if no data is found for a given LBPool.
-        r.set(redis_key, json.dumps(result), ex=180)
+
+        pipe.set(redis_key, json.dumps(result), ex=180)
+
+    # pipe.execute() returns an array with booleans for each command that
+    # was queued in the pipeline.
+    # We return a convoluted result that says if all succeeded or not.
+    return all(pipe.execute())
 
 
 def get_object_output(hostname, pool_data, hwlb_group, in_testtool=False):
