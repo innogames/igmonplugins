@@ -2,7 +2,7 @@
 """InnoGames Monitoring Plugins - Check if an index exists with the
 provided prefix
 
-Copyright (c) 2019 InnoGames GmbH
+Copyright (c) 2021 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -24,8 +24,10 @@ Copyright (c) 2019 InnoGames GmbH
 
 import sys
 from argparse import ArgumentParser, RawTextHelpFormatter
+from datetime import datetime
 from elasticsearch import Elasticsearch
 from ssl import create_default_context
+
 
 def parse_args():
     parser = ArgumentParser(
@@ -52,6 +54,13 @@ def parse_args():
     parser.add_argument(
         '--root_ca', help='CA file matching the servers certificate'
     )
+    parser.add_argument(
+        '--daily', action='store_true', help='Check if an index exists for datetime.now()'
+    )
+
+    parser.add_argument(
+        '--date-format', default='%Y.%m.%d', help='Timeformat to use for --daily'
+    )
 
     return parser.parse_args()
 
@@ -65,16 +74,19 @@ def main():
 
     if args.user and args.password:
         connect_params['http_auth'] = (args.user, args.password)
-
+    
+    index = args.index
+    if args.daily:
+        index = index + "-" + datetime.now().strftime(args.date_format)
     es = Elasticsearch([args.host], **connect_params)
 
     # suppress print output from es function
     sys.stderr = None
-    if not es.indices.exists(args.index + '*', allow_no_indices=False):
-        print('Index not found in cluster: {}'.format(args.index))
+    if not es.indices.exists(index, allow_no_indices=False):
+        print('Index not found in cluster: {}'.format(index))
         sys.exit(1)
 
-    print('Index {} found'.format(args.index))
+    print('Index {} found'.format(index))
 
 if __name__ == '__main__':
     main()
