@@ -172,6 +172,13 @@ class Check(object):
         """
         Wrapper to execute ClickHouse SQL
         """
+        if len(args) == 1:
+            logger.info('Execute query: {}'.format(args[0]))
+        elif len(args) >= 2:
+            logger.info('Execute query: {}'.format(
+                self.conn.substitute_params(args[0], args[1])
+            ))
+
         return self.conn.execute(*args, **kwargs)
 
     def execute_dict(self, *args, **kwargs) -> List[dict]:
