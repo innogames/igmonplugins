@@ -68,7 +68,7 @@ CPU_OIDS = {
 }
 
 PORT_SKIPS = {
-    'procurve': re.compile('^(DEFAULT_VLAN|(VLAN|Trk|lo)[0-9]+)$'),
+    'procurve': re.compile('^(DEFAULT_VLAN|(VLAN|Trk|lo|oobm)[0-9]+)$'),
     'powerconnect': re.compile('^(CPU|(Vl|Po)[0-9]+)$'),
     'force10_mxl': re.compile(
         '^(NULL 0|ManagementEthernet [0-9]+/[0-9]+|(Vlan|Port-channel) [0-9]+)$'
