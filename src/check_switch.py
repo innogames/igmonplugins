@@ -65,6 +65,7 @@ CPU_OIDS = {
     'extreme': '.1.3.6.1.4.1.1916.1.32.1.2.0',
     # 1-minute average for the 1st cpu of stack because we don't stack them.
     'force10_mxl': '1.3.6.1.4.1.6027.3.26.1.4.4.1.4.2.1.1',
+    'cumulus': '1.3.6.1.4.1.2021.11.11.0',
 }
 
 PORT_SKIPS = {
@@ -73,6 +74,7 @@ PORT_SKIPS = {
     'force10_mxl': re.compile(
         '^(NULL 0|ManagementEthernet [0-9]+/[0-9]+|(Vlan|Port-channel) [0-9]+)$'
     ),
+    'cumulus': re.compile('^(bridge|mgmt|lo)$'),
 }
 
 
@@ -231,10 +233,14 @@ def get_switch_model(snmp):
         return 'powerconnect'
     elif 'ProCurve' in model:
         return 'procurve'
+    elif 'Aruba' in model:
+        return 'procurve'
     elif 'ExtremeXOS' in model:
         return 'extreme'
     elif 'Dell Networking OS' in model:
         return 'force10_mxl'
+    elif 'Cumulus-Linux' in model:
+        return 'cumulus'
 
     raise SwitchException('Unknown switch model')
 
@@ -366,6 +372,10 @@ def check_cpu(snmp, model, args):
         cpu_usage = int(m.group(1))
     else:
         cpu_usage = int(cpu_usage)
+
+    if model == 'cumulus':
+        # The value is percent idle
+        cpu_usage = 100 - cpu_usage
 
     outmsg = 'CPU usage is {}%'.format(cpu_usage)
 
