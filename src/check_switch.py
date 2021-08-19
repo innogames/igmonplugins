@@ -74,7 +74,7 @@ PORT_SKIPS = {
     'force10_mxl': re.compile(
         '^(NULL 0|ManagementEthernet [0-9]+/[0-9]+|(Vlan|Port-channel) [0-9]+)$'
     ),
-    'cumulus': re.compile('^(bridge|mgmt|lo|eth)$'),
+    'cumulus': re.compile('^(vrrp|vlan)'),
 }
 
 
@@ -281,6 +281,7 @@ def check_ports(snmp, model, args):
 
         # Skip unconfigured ports on Cumulus.
         # By default alias is identical to name: swpXX
+        # This also automatically skips management interfaces, VRFs.
         if (
             model == 'cumulus' and
             port_names[port_index] == port_aliases[port_index]
