@@ -79,6 +79,8 @@ def main():
 
     for line in lines:
         match = p.search(f'{line}')
+        if not match:
+            continue
         value = match.group('value')
         if value is not None:
             values.add(value)
