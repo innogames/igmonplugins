@@ -71,7 +71,7 @@ CPU_OIDS = {
 PORT_REGEXP = {
     'cisco_ios': re.compile('^(?P<port>(Fa|Gi|Tu)[0-9/]+)$'),
     'cumulus': re.compile('^(?P<port>swp[0-9]+)$'),
-    'extreme': re.compile('(?P<port>^[0-9]:[0-9]+)$'),
+    'extreme': re.compile('^(?P<port>[0-9]:[0-9]+)$'),
     'force10_mxl': re.compile('^(TenGigabitEthernet|fortyGigE) (?P<port>[0-9]+/[0-9]+)$'),
     'netiron_mlx': re.compile('^(?P<port>ethernet[0-9]+/[0-9]+)$'),
     'powerconnect': re.compile('^(?P<port>(Gi|Te|Po|Trk)[0-9/]+)$'),
@@ -246,17 +246,17 @@ def get_switch_model(snmp):
     raise SwitchException('Unknown switch model')
 
 
-def standarize_portname(port_name, model):
+def standardize_portname(port_name, model):
     """ Return a Graphite-compatible port name or None if name
         can't be translated
     """
     r = PORT_REGEXP[model].match(port_name)
-    if r:
-        g =  r.groupdict()['port']
-        if g:
-            return g.replace('/', '_').replace(':', '_')
-
-    return None
+    if not r:
+        return None
+    g = r.group('port')
+    if not g:
+        return None
+    return g.replace('/', '_').replace(':', '_')
 
 
 def check_ports(snmp, model, args):
@@ -283,17 +283,8 @@ def check_ports(snmp, model, args):
 
     for port_index in sorted(port_indexes):
 
-        port_name = standarize_portname(port_names[port_index], model)
+        port_name = standardize_portname(port_names[port_index], model)
         if not port_name:
-            continue
-
-        # Skip unconfigured ports on Cumulus.
-        # By default alias is identical to name: swpXX
-        # This also automatically skips management interfaces, VRFs.
-        if (
-            model == 'cumulus' and
-            port_names[port_index] == port_aliases[port_index]
-        ):
             continue
 
         local_exit = 1
@@ -323,7 +314,11 @@ def check_ports(snmp, model, args):
 
         # Port is enabled
         elif port_admin_states[port_index] == 1:
-            if not port_aliases[port_index]:
+            if (
+                not port_aliases[port_index] or (
+                    model == 'cumulus' and
+                    port_names[port_index] == port_aliases[port_index]
+            )):
                 if port_oper_states[port_index] == 1:
                     local_exit = 2
                     msg = 'CRITICAL: Unnamed port is up.'
@@ -347,7 +342,11 @@ def check_ports(snmp, model, args):
 
         # Port is disabled
         elif port_admin_states[port_index] == 2:
-            if not port_aliases[port_index]:
+            if (
+                not port_aliases[port_index] or (
+                    model == 'cumulus' and
+                    port_names[port_index] == port_aliases[port_index]
+            )):
                 if port_oper_states[port_index] == 2:
                     local_exit = 0
                     msg = 'OK: Port unnamed, disabled and down.'
