@@ -68,13 +68,14 @@ CPU_OIDS = {
     'cumulus': '1.3.6.1.4.1.2021.11.11.0',
 }
 
-PORT_SKIPS = {
-    'procurve': re.compile('^(DEFAULT_VLAN|(VLAN|Trk|lo|oobm)[0-9]+)$'),
-    'powerconnect': re.compile('^(CPU|(Vl|Po)[0-9]+)$'),
-    'force10_mxl': re.compile(
-        '^(NULL 0|ManagementEthernet [0-9]+/[0-9]+|(Vlan|Port-channel) [0-9]+)$'
-    ),
-    'cumulus': re.compile('^(vrrp|vlan)'),
+PORT_REGEXP = {
+    'cisco_ios': re.compile('^(?P<port>(Fa|Gi|Tu)[0-9/]+)$'),
+    'cumulus': re.compile('^(?P<port>swp[0-9]+)$'),
+    'extreme': re.compile('(?P<port>^[0-9]:[0-9]+)$'),
+    'force10_mxl': re.compile('^(TenGigabitEthernet|fortyGigE) (?P<port>[0-9]+/[0-9]+)$'),
+    'netiron_mlx': re.compile('^(?P<port>ethernet[0-9]+/[0-9]+)$'),
+    'powerconnect': re.compile('^(?P<port>(Gi|Te|Po|Trk)[0-9/]+)$'),
+    'procurve': re.compile('^(?P<port>(Trk)?[0-9]+)$'),
 }
 
 
@@ -245,6 +246,19 @@ def get_switch_model(snmp):
     raise SwitchException('Unknown switch model')
 
 
+def standarize_portname(port_name, model):
+    """ Return a Graphite-compatible port name or None if name
+        can't be translated
+    """
+    r = PORT_REGEXP[model].match(port_name)
+    if r:
+        g =  r.groupdict()['port']
+        if g:
+            return g.replace('/', '_').replace(':', '_')
+
+    return None
+
+
 def check_ports(snmp, model, args):
     """ Check if ports have links established and if they have description """
 
@@ -269,15 +283,9 @@ def check_ports(snmp, model, args):
 
     for port_index in sorted(port_indexes):
 
-        # Filter out VLANs, CPU ports and LAGGs
-
-        if model == 'extreme':
-            if port_index >= 1000000:
-                continue
-
-        elif model in PORT_SKIPS.keys():
-            if PORT_SKIPS[model].match(port_names[port_index]):
-                continue
+        port_name = standarize_portname(port_names[port_index], model)
+        if not port_name:
+            continue
 
         # Skip unconfigured ports on Cumulus.
         # By default alias is identical to name: swpXX
@@ -379,12 +387,11 @@ def check_cpu(snmp, model, args):
         #     5 Secs ( 18.74%)    60 Secs ( 17.84%)   300 Secs ( 18.12%)
         m = re.search('60 Secs \( *([0-9]+)[0-9\.]*%\)', cpu_usage)
         cpu_usage = int(m.group(1))
-    else:
-        cpu_usage = int(cpu_usage)
-
-    if model == 'cumulus':
+    elif model == 'cumulus':
         # The value is percent idle
         cpu_usage = 100 - cpu_usage
+    else:
+        cpu_usage = int(cpu_usage)
 
     outmsg = 'CPU usage is {}%'.format(cpu_usage)
 
