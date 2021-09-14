@@ -32,24 +32,28 @@ import subprocess
 from argparse import ArgumentParser
 from sys import exit
 
+
 def main():
     """Main entrypoint for script"""
 
     args = get_parser().parse_args()
 
-    master_addr, master_state, cluster_state_master, failed_master = _get_cluster_status(
-        args.master_port, args.password)
-    slave_addr, slave_state, cluster_state_slave, failed_slave = _get_cluster_status(
-        args.slave_port, args.password)
+    master_addr, master_state, cluster_state_master, failed_master = (
+        _get_cluster_status(rgs.master_port, args.password)
+    )
+    slave_addr, slave_state, cluster_state_slave, failed_slave = (
+        _get_cluster_status(args.slave_port, args.password)
+    )
     if master_state != 'unknown' and slave_state != 'unknown':
+        failed_hosts = failed_master + failed_slave
         if cluster_state_master != 'ok' and cluster_state_slave != 'ok':
             print('CRITICAL - cluster is broken')
             code = 2
-        elif len(failed_master + failed_slave) > 0:
+        elif failed_hosts:
             print('WARNING - cluster status is degraded')
-            for host in failed_master + failed_slave:
+            code = 1
+            for host in failed_hosts:
                 print('{} is in a failed state'.format(host))
-                code = 1
         else:
             print('OK - cluster status is OK')
             print('{} - {}'.format(master_addr, master_state))
@@ -109,14 +113,34 @@ def _get_cluster_status(port, password):
     The status of the local instances will be checked
     """
 
+    """The output from redis-cli cluser nodes has the following format:
+    6 lines where each line is a space seperated list with the following data:
+        <hex_string>                           (hash of the node)
+        <ip>:7001@17001                        (ip:port@remote port)
+        slave,fail                             (myself,)?(master|slave)(,fail)?
+        <hex_string>                           (remote node hash)
+        <number>                               (performance data)
+        <number>                               (performance data)
+        <number>                               (number of connected clients)
+        connected                              (fixed string)
+
+    The string ",fail" is optional. It will only exists on failed hosts
+    """
+    port_string = str(port)
     try:
         role = subprocess.check_output(
             'redis-cli -p {0} -a {1} cluster nodes'.format(
                 port, password), shell=True).decode().split()
+        # Find keyword myself in the output
         state_index = [i for i, s in enumerate(role) if 'myself' in s][0]
-        failed_hosts = [role[i-1] for i, s in enumerate(role) if 'fail' in s and str(port) in role[i-1]]
+        # Remove "myself," from the string. It will be either master or slave
         role_state = role[state_index].replace('myself,', '')
+        # Get ip:port information which is one to the left of mysql, string
         role_addr = role[state_index - 1]
+        # Get ip:port of the node that uses the current port and
+        # is in status "fail".
+        failed_hosts = [role[i-1] for i, s in enumerate(role)
+                        if 'fail' in s and port_string in role[i-1]]
 
         cluster_state = subprocess.check_output(
             'redis-cli -p {0} -a {1} cluster info'.format(
