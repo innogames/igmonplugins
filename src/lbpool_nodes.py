@@ -98,7 +98,6 @@ def evaluate_state(data):
             continue
 
         exit_code = ExitCodes.ok
-        optimal_nodes = len(pool_v['nodes'])
 
         # We want to keep "None" text as it is nicer than 0 for human
         # perception.
@@ -108,7 +107,18 @@ def evaluate_state(data):
         max_nodes = pool_v['max_nodes']
         if max_nodes == 0:
             max_nodes = None
+
         alive_nodes = pool_v['alive_nodes']
+        total_nodes = len(pool_v['nodes'])
+
+        # If we have max_nodes defined, the optimal amount of nodes is
+        # max_nodes.
+        # When max_nodes is not defined, the optimal amount of nodes is all
+        # nodes.
+        if max_nodes:
+            optimal_nodes = max_nodes
+        else:
+            optimal_nodes = total_nodes
 
         if pool_v['health_checks']:
             if pool_v['in_testtool']:
@@ -131,7 +141,7 @@ def evaluate_state(data):
                     exit_code = ExitCodes.unknown
 
                 local_output = (
-                    f'{hwlb_group}: {alive_nodes} of {optimal_nodes} '
+                    f'{hwlb_group}: {alive_nodes} of {total_nodes} '
                     f'alive (min: {min_nodes}, max: {max_nodes})'
                 )
                 local_output += get_nodes_output(pool_v['nodes'].items())
