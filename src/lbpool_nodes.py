@@ -66,9 +66,9 @@ def main():
         if exit_code != ExitCodes.ok and i != ExitCodes.ok:
             exit_code = get_worse_exit_code(exit_code, i)
         elif exit_code != ExitCodes.ok and i == ExitCodes.ok:
-            exit_code = 0
+            exit_code = ExitCodes.ok
 
-    if exit_code == 0:
+    if exit_code == ExitCodes.ok:
         outputs.insert(0, 'LBPool is healthy')
     else:
         outputs.insert(0, 'LBPool is unhealthy')
@@ -112,16 +112,23 @@ def evaluate_state(data):
 
         if pool_v['health_checks']:
             if pool_v['in_testtool']:
+                # All nodes are down
                 if alive_nodes == 0:
                     exit_code = ExitCodes.critical
+                # Less than min_nodes are alive
+                elif min_nodes is not None and (alive_nodes < min_nodes):
+                    exit_code = ExitCodes.critical
+                # More than max_nodes are alive
                 elif max_nodes is not None and (alive_nodes > max_nodes):
                     exit_code = ExitCodes.warning
+                # All nodes are alive
                 elif alive_nodes == optimal_nodes:
                     exit_code = ExitCodes.ok
+                # More than min_nodes are alive, but not all of them
                 elif min_nodes is not None and (alive_nodes >= min_nodes):
-                    exit_code = ExitCodes.ok
-                else:
                     exit_code = ExitCodes.warning
+                else:
+                    exit_code = ExitCodes.unknown
 
                 local_output = (
                     f'{hwlb_group}: {alive_nodes} of {optimal_nodes} '
