@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Puppetd Check
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2021 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -127,7 +127,7 @@ def get_filenames():
     puppet_disabled_file = '/var/lib/nagios3/.nopuppetd'
     if platform.system() == 'Linux':
         return puppet_disabled_file, '/var/tmp/puppet_lastupdate'
-    elif platform.system() == 'FreeBSD':
+    if platform.system() == 'FreeBSD':
         return puppet_disabled_file, '/var/puppet/lastupdate'
 
     raise CheckException(
@@ -137,6 +137,11 @@ def get_filenames():
 
 
 def check(args, puppet_disabled_file, puppet_state_file):
+    # First check if the system is recently booted
+    seconds_since_boot = int(time.monotonic())
+    if seconds_since_boot < DEFAULT_WARNING_THRESHOLD:
+        return ExitCodes.ok, seconds_since_boot
+
     print_debug(args, "Open file {0}".format(puppet_state_file))
     try:
         with open(puppet_state_file, 'r') as fd:
