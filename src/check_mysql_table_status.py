@@ -248,7 +248,9 @@ class Database(object):
 
     def get_table_values(self, attributes):
         """Iterate tables with selected attributes"""
-        for schema in self.select_one('SHOW SCHEMAS'):
+        for schema in self.select_one(
+            "SHOW SCHEMAS where `Database` != 'information_schema'"
+        ):
             rows = self.select(
                 'SHOW TABLE STATUS IN `{}` WHERE Engine IS NOT NULL'
                 .format(schema)
