@@ -16,7 +16,7 @@
 #
 
 from argparse import ArgumentParser
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from urllib.error import (
     HTTPError,
     URLError,
@@ -39,6 +39,10 @@ def parse_args():
     parser.add_argument(
         '--code', dest='codes_list', type=int, action='append',
         default=None
+    )
+    parser.add_argument(
+        '--http_method', dest='http_method', type=str,
+        default='HEAD'
     )
 
     return parser.parse_args()
@@ -71,11 +75,11 @@ def print_nagios_message(code, output):
     print('{} - {}'.format(state_text, output))
 
 
-def check_urls(url_list, codes_list):
+def check_urls(url_list, codes_list, http_method):
     unreachable_urls = []
     for url in url_list:
         try:
-            request = urlopen(url, timeout=10)
+            request = urlopen(Request(url, method=http_method), timeout=10)
             code = request.status
             if codes_list is None:
                 accepted_codes = ['1', '2', '3']
@@ -98,7 +102,8 @@ def check_urls(url_list, codes_list):
 
 def main():
     args = parse_args()
-    unreachable_urls = check_urls(args.url_list, args.codes_list)
+    unreachable_urls = check_urls(
+        args.url_list, args.codes_list, args.http_method)
     exit_code, message = build_plugin_output(unreachable_urls)
 
     print_nagios_message(exit_code, message)
