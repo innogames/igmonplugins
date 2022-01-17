@@ -43,15 +43,17 @@ def main(args):
 
     meminfo_huge_pages = meminfo['HugePages_Total']
 
-    if int(meminfo_huge_pages) < args.value:
+    if int(meminfo_huge_pages) < args.min_value:
         exit_status = 1
         output = (
-            'WARNING - HugePages_Total is {meminfo_huge_pages} (<{args.value})'
+            f'WARNING - HugePages_Total is {meminfo_huge_pages} '
+            f'(<{args.min_value})'
         )
     else:
         exit_status = 0
         output = (
-            f'OK - HugePages_Total is {meminfo_huge_pages} (>={args.value})'
+            f'OK - HugePages_Total is {meminfo_huge_pages} '
+            f'(>={args.min_value})'
         )
 
     print(output)
