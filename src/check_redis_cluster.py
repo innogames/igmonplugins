@@ -50,6 +50,12 @@ def main():
             for host in failed_master + failed_slave:
                 print('{} is in a failed state'.format(host))
                 code = 1
+        # Report if a node has the same role twice. This is not important for
+        # the functionality of the cluster, but the load on the double master
+        # is increased and we would like to make this visible in Nagios
+        elif master_state == slave_state:
+            print(f'WARNING - node has two {master_state} roles')
+            code = 1
         else:
             print('OK - cluster status is OK')
             print('{} - {}'.format(master_addr, master_state))
