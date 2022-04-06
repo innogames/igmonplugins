@@ -135,9 +135,9 @@ def get_teams(api, organization, bearer):
     """Return a list of all teams in the account"""
     teams = []
     headers = {'Authorization': f'Bearer  {bearer}'}
-    r = requests.get('{}/0/organizations/{}/teams/'.format(
+    res = requests.get('{}/0/organizations/{}/teams/'.format(
         api, organization), headers=headers)
-    teams = r.json()
+    teams = res.json()
     return(teams)
 
 
@@ -145,9 +145,9 @@ def get_dsns_from_project(api, organization, project, bearer):
     """Retun a list of DSNs for the project"""
     dsns = []
     headers = {'Authorization': f'Bearer {bearer}'}
-    r = requests.get('{}/0/projects/{}/{}/keys/'.format(
+    res = requests.get('{}/0/projects/{}/{}/keys/'.format(
         api, organization, project), headers=headers)
-    dsns = r.json()
+    dsns = res.json()
 
     return(dsns)
 
