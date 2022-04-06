@@ -65,7 +65,7 @@ def main():
     args = args_parse()
     teams = get_teams(args.api, args.organization, args.bearer)
 
-    '''Filter teams if provided via arguments'''
+    # Filter teams if provided via arguments
     if args.teams:
         filtered_teams = []
         for team in teams:
@@ -73,11 +73,11 @@ def main():
                 filtered_teams.append(team)
         teams = filtered_teams
 
-    '''Set exit code and global event counter'''
+    # Set exit code and global event counter
     exit = 0
     events = 0
 
-    '''Iterate over teams, their projects and sum up their keys' rates'''
+    # Iterate over teams, their projects and sum up their keys' rates
     for team in teams:
         for project in team['projects']:
             team['summed_events'] = 0
@@ -102,7 +102,7 @@ def main():
                         team['name'], project['name'], dsn['name'],
                         dsn['rateLimit']))
 
-            '''Check if this team is over the team limit'''
+            # Check if this team is over the team limit
             if args.perteamlimit and not team['summed_events']:
                 exit = 1
                 print('WARNING: Unlimited events configured for team: {}'
@@ -114,7 +114,7 @@ def main():
                       .format(team['summed_events'], args.perteamlimit,
                               team['name']))
 
-    '''Check if global limit is reached'''
+    # Check if global limit is reached
     if args.globallimit and not events:
         exit = -1
         print('WARNING: Unlimited events configured in total')
