@@ -29,13 +29,14 @@ from argparse import ArgumentParser
 import requests
 import sys
 
+
 def args_parse():
     """Argument parser, usage helper
 
     Returns the parsed arguments in a dictionary.
     """
 
-    p=ArgumentParser()
+    p = ArgumentParser()
     p.add_argument('-a', '--api-url', default='https://sentry.io/api',
                    dest='api', help='The sentry API to use')
     p.add_argument('-b', '--bearer', required=True,
@@ -57,6 +58,7 @@ def args_parse():
                    help='Print detailed stats')
 
     return(p.parse_args())
+
 
 def main():
 
@@ -131,18 +133,17 @@ def main():
     sys.exit(exit)
 
 
-def get_teams(api, organization, bearer):
+def get_teams(api: str, organization: str, bearer: str) -> dict:
     """Return a list of all teams in the account"""
-    teams = []
     headers = {'Authorization': f'Bearer  {bearer}'}
     res = requests.get('{}/0/organizations/{}/teams/'.format(
         api, organization), headers=headers)
     return(res.json())
 
 
-def get_dsns_from_project(api, organization, project, bearer):
+def get_dsns_from_project(api: str, organization: str, project: str,
+                          bearer: str) -> dict:
     """Retun a list of DSNs for the project"""
-    dsns = []
     headers = {'Authorization': f'Bearer {bearer}'}
     res = requests.get('{}/0/projects/{}/{}/keys/'.format(
         api, organization, project), headers=headers)
