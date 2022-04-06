@@ -88,8 +88,9 @@ def main():
                 args.api, args.organization, project['slug'], args.bearer)
             for dsn in dsns:
                 if dsn['rateLimit']:
-                    global_summed_events += int(dsn['rateLimit']['count'] *
-                            60 / (dsn['rateLimit']['window']))
+                    global_summed_events += \
+                        int(dsn['rateLimit']['count'] * 60 /
+                            (dsn['rateLimit']['window']))
                     team['summed_events'] += int(
                                 dsn['rateLimit']['count'] * 60 /
                                 (dsn['rateLimit']['window']))
@@ -108,7 +109,7 @@ def main():
                 print('WARNING: Unlimited events configured for team: {}'
                       .format(team['name']))
             elif (args.perteamlimit and team['summed_events'] >
-            args.perteamlimit):
+                  args.perteamlimit):
                 exit = 1
                 print('WARNING: {} are configure of {} allowed for team: {}'
                       .format(team['summed_events'], args.perteamlimit,
@@ -123,7 +124,8 @@ def main():
         print('WARNING: {} of {} events are configured in total'.format(
             global_summed_events, args.globallimit))
     elif exit == 0 and args.globallimit:
-        print('OK: {} events are configured in total'.format(global_summed_events))
+        print('OK: {} events are configured in total'.format(
+              global_summed_events))
     elif exit == 1 and args.globallimit:
         print('{} events are configured in total'.format(global_summed_events))
     else:
