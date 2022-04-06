@@ -75,27 +75,27 @@ def main():
 
     # Set exit code and global event counter
     exit = 0
-    events = 0
+    global_summed_events = 0
+    global_unlimited_events = False
 
     # Iterate over teams, their projects and sum up their keys' rates
     for team in teams:
         for project in team['projects']:
             team['summed_events'] = 0
+            team['unlimited_events'] = False
 
             dsns = get_dsns_from_project(
                 args.api, args.organization, project['slug'], args.bearer)
             for dsn in dsns:
                 if dsn['rateLimit']:
-                    if type(events) is int:
-                        events += int(dsn['rateLimit']['count'] * 60 /
-                                      (dsn['rateLimit']['window']))
-                    if type(team['summed_events']) is int:
-                        team['summed_events'] += int(
+                    global_summed_events += int(dsn['rateLimit']['count'] *
+                            60 / (dsn['rateLimit']['window']))
+                    team['summed_events'] += int(
                                 dsn['rateLimit']['count'] * 60 /
                                 (dsn['rateLimit']['window']))
                 else:
-                    events = None
-                    team['summed_events'] = None
+                    team['unlimited_events'] = True
+                    global_unlimited_events = True
 
                 if args.verbose:
                     print('Team: {}, Project: {}, Key: {}, Limit: {}'.format(
@@ -103,32 +103,32 @@ def main():
                         dsn['rateLimit']))
 
             # Check if this team is over the team limit
-            if args.perteamlimit and not team['summed_events']:
+            if args.perteamlimit and team['unlimited_events']:
                 exit = 1
                 print('WARNING: Unlimited events configured for team: {}'
                       .format(team['name']))
-            elif args.perteamlimit and team['summed_events'] and \
-                    team['summed_events'] > args.perteamlimit:
+            elif (args.perteamlimit and team['summed_events'] >
+            args.perteamlimit):
                 exit = 1
                 print('WARNING: {} are configure of {} allowed for team: {}'
                       .format(team['summed_events'], args.perteamlimit,
                               team['name']))
 
     # Check if global limit is reached
-    if args.globallimit and not events:
+    if args.globallimit and global_unlimited_events:
         exit = 1
         print('WARNING: Unlimited events configured in total')
-    elif args.globallimit and events > args.globallimit:
+    elif global_summed_events > args.globallimit:
         exit = 1
         print('WARNING: {} of {} events are configured in total'.format(
-            events, args.globallimit))
-    elif events and exit == 0:
-        print('OK: {} events are configured in total'.format(events))
-    elif not args.globallimit:
-        print('OK: no global event limit')
+            global_summed_events, args.globallimit))
+    elif exit == 0 and args.globallimit:
+        print('OK: {} events are configured in total'.format(global_summed_events))
+    elif exit == 1 and args.globallimit:
+        print('{} events are configured in total'.format(global_summed_events))
     else:
         exit = 3
-        print('UKNOWN Contidion this shoud not happen')
+        print('UKNOWN: This shoud not happen')
 
     sys.exit(exit)
 
