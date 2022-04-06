@@ -57,7 +57,7 @@ def args_parse():
     p.add_argument('-v', '--verbose', action='store_true',
                    help='Print detailed stats')
 
-    return(p.parse_args())
+    return p.parse_args()
 
 
 def main():
@@ -138,16 +138,16 @@ def get_teams(api: str, organization: str, bearer: str) -> dict:
     headers = {'Authorization': f'Bearer  {bearer}'}
     res = requests.get('{}/0/organizations/{}/teams/'.format(
         api, organization), headers=headers)
-    return(res.json())
+    return res.json()
 
 
 def get_dsns_from_project(api: str, organization: str, project: str,
                           bearer: str) -> dict:
-    """Retun a list of DSNs for the project"""
+    """Return a list of DSNs for the passed project"""
     headers = {'Authorization': f'Bearer {bearer}'}
     res = requests.get('{}/0/projects/{}/{}/keys/'.format(
         api, organization, project), headers=headers)
-    return(res.json())
+    return res.json()
 
 
 if __name__ == '__main__':
