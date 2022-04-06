@@ -104,7 +104,7 @@ def main():
                 exit = 1
                 print('WARNING: {} are configure of {} allowed for team: {}'
                       .format(team['summed_events'], args.perteamlimit,
-                    team['name']))
+                              team['name']))
 
     '''Check if global limit is reached'''
     if args.globallimit and not events:
