@@ -4,7 +4,7 @@
 This is a Nagios script which queries BIRD to check if all protocols
 are up and established/running.
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2022 InnoGames GmbH
 """
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -86,7 +86,9 @@ def check_birdc_protocols(path):
             ret = check_ospf_protocol(protocol)
         elif protocol['type'] == 'RPKI':
             ret = check_rpki_protocol(protocol)
-        elif protocol['type'] in ['Device', 'Kernel', 'Static', 'Direct']:
+        elif protocol['type'] in {
+            'Device', 'Direct', 'Kernel', 'Pipe', 'Static'
+        }:
             ret = check_other_protocol(protocol)
         else:
             ret = ProtocolStates.unknown
@@ -108,7 +110,7 @@ def check_birdc_protocols(path):
     elif result[ProtocolStates.unknown]:
         return (
             ExitCodes.unknown,
-            'Unknown protocols are seen: {}'
+            'Unknown protocol types are seen: {}'
             .format(', '.join(result[ProtocolStates.unknown]))
         )
     else:
