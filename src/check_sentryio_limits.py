@@ -116,7 +116,7 @@ def main():
 
     # Check if global limit is reached
     if args.globallimit and not events:
-        exit = -1
+        exit = 1
         print('WARNING: Unlimited events configured in total')
     elif args.globallimit and events > args.globallimit:
         exit = 1
