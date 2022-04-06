@@ -1,4 +1,29 @@
 #!/usr/bin/env python3
+"""InnoGames Monitoring Plugins - sentry.io event limit check
+
+The script will exit with:
+ - 0 (OK) All the limits provided to this check are kept
+ - 1 (WARNING) Limits are either set to high or not at all
+
+Copyright (c) 2022 InnoGames GmbH
+"""
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 from argparse import ArgumentParser
 import requests
@@ -6,52 +31,33 @@ import sys
 
 
 p = ArgumentParser()
-p.add_argument('-b', '--bearer', type=str, required=True, dest='bearer',
+p.add_argument('-a', '--api-url', default='https://sentry.io/api', dest='api',
+               help='The sentry API to use')
+p.add_argument('-b', '--bearer', required=True,
                help='A sentry api token with at least read permissions')
-p.add_argument('-o', '--organization', type=str, required=True,
-               dest='organization', help='The organization slug for the\
-               sentry.io organization to be queried')
-p.add_argument('-t', '--team', type=str, action='append', dest='teams',
-               help='Only check this team, can be added repeatetly')
-p.add_argument('-g', '--globallimt', type=int, dest='globallimit',
-               help='If the total amount if events per minute is higher \
-               than this limit the script will exit with a warning and \
-               a the exit code 1, for nrpe compatibility')
-p.add_argument('-p', '--perteamlimit', type=int, dest='perteamlimit',
-               help='If any teams\' projects\' keys summed up limits is \
-               higher than this, or not set the script will exit with a \
-               warning and the exit code 1')
-p.add_argument('-v', '--verbose', action='store_true', dest='verbose',
+p.add_argument('-o', '--organization', required=True,
+               help='The organization slug for the sentry.io organization'
+               'to be queried')
+p.add_argument('-t', '--teams', action='append', dest='teams',
+               help='Only check this team, can be added repeatedly')
+p.add_argument('-g', '--global-limit', type=int, dest='globallimit',
+               help='If the total amount if events per minute is higher '
+               'than this limit the script will exit with a warning and '
+               'the exit code 1, for nrpe compatibility')
+p.add_argument('-p', '--per-team-limit', type=int, dest='perteamlimit',
+               help="If any teams' projects' keys summed up limits is "
+               "higher than this, or not set the script will exit with a "
+               "warning and the exit code 1")
+p.add_argument('-v', '--verbose', action='store_true',
                help='Print detailed stats')
 args = p.parse_args()
 
 
-def get_teams(organization, bearer):
-    '''Return a list of all teams in the account'''
-    teams = []
-    headers = {'Authorization': 'Bearer  {}'.format(bearer)}
-    r = requests.get('https://sentry.io/api/0/organizations/{}/teams/'.format(
-        organization), headers=headers)
-    teams = r.json()
-    return(teams)
-
-
-def get_dsns_from_project(organization, project, bearer):
-    '''Retun a list of DSNs for the project'''
-    dsns = []
-    headers = {'Authorization': 'Bearer {}'.format(bearer)}
-    r = requests.get('https://sentry.io/api/0/projects/{}/{}/keys/'.format(
-        organization, project), headers=headers)
-    dsns = r.json()
-
-    return(dsns)
-
-
 def main():
 
-    teams = get_teams(args.organization, args.bearer)
+    teams = get_teams(args.api, args.organization, args.bearer)
 
-    '''Filter teams if list is provided'''
+    '''Filter teams if provided via arguments'''
     if args.teams:
         filtered_teams = []
         for team in teams:
@@ -69,7 +75,7 @@ def main():
             team['summed_events'] = 0
 
             dsns = get_dsns_from_project(
-                args.organization, project['slug'], args.bearer)
+                args.api, args.organization, project['slug'], args.bearer)
             for dsn in dsns:
                 if dsn['rateLimit']:
                     if type(events) is int:
@@ -91,19 +97,19 @@ def main():
             '''Check if this team is over the team limit'''
             if args.perteamlimit and not team['summed_events']:
                 exit = 1
-                print('WARNING: unlimited events configured for team: {}\
-                    '.format(team['name']))
+                print('WARNING: Unlimited events configured for team: {}'
+                      .format(team['name']))
             elif args.perteamlimit and team['summed_events'] and \
                     team['summed_events'] > args.perteamlimit:
                 exit = 1
-                print('WARNING: {} are configure of {} allowed for team: {}\
-                    '.format(team['summed_events'], args.perteamlimit,
+                print('WARNING: {} are configure of {} allowed for team: {}'
+                      .format(team['summed_events'], args.perteamlimit,
                     team['name']))
 
     '''Check if global limit is reached'''
     if args.globallimit and not events:
         exit = -1
-        print('WARNING: unlimited events configured in total')
+        print('WARNING: Unlimited events configured in total')
     elif args.globallimit and events > args.globallimit:
         exit = 1
         print('WARNING: {} of {} events are configured in total'.format(
@@ -117,6 +123,27 @@ def main():
         print('UKNOWN Contidion this shoud not happen')
 
     sys.exit(exit)
+
+
+def get_teams(api, organization, bearer):
+    """Return a list of all teams in the account"""
+    teams = []
+    headers = {'Authorization': f'Bearer  {bearer}'}
+    r = requests.get('{}/0/organizations/{}/teams/'.format(
+        api, organization), headers=headers)
+    teams = r.json()
+    return(teams)
+
+
+def get_dsns_from_project(api, organization, project, bearer):
+    """Retun a list of DSNs for the project"""
+    dsns = []
+    headers = {'Authorization': f'Bearer {bearer}'}
+    r = requests.get('{}/0/projects/{}/{}/keys/'.format(
+        api, organization, project), headers=headers)
+    dsns = r.json()
+
+    return(dsns)
 
 
 if __name__ == '__main__':
