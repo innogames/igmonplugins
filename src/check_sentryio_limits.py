@@ -137,8 +137,7 @@ def get_teams(api, organization, bearer):
     headers = {'Authorization': f'Bearer  {bearer}'}
     res = requests.get('{}/0/organizations/{}/teams/'.format(
         api, organization), headers=headers)
-    teams = res.json()
-    return(teams)
+    return(res.json())
 
 
 def get_dsns_from_project(api, organization, project, bearer):
@@ -147,9 +146,7 @@ def get_dsns_from_project(api, organization, project, bearer):
     headers = {'Authorization': f'Bearer {bearer}'}
     res = requests.get('{}/0/projects/{}/{}/keys/'.format(
         api, organization, project), headers=headers)
-    dsns = res.json()
-
-    return(dsns)
+    return(res.json())
 
 
 if __name__ == '__main__':
