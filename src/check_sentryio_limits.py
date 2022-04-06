@@ -29,32 +29,38 @@ from argparse import ArgumentParser
 import requests
 import sys
 
+def args_parse():
+    """Argument parser, usage helper
 
-p = ArgumentParser()
-p.add_argument('-a', '--api-url', default='https://sentry.io/api', dest='api',
-               help='The sentry API to use')
-p.add_argument('-b', '--bearer', required=True,
-               help='A sentry api token with at least read permissions')
-p.add_argument('-o', '--organization', required=True,
-               help='The organization slug for the sentry.io organization'
-               'to be queried')
-p.add_argument('-t', '--teams', action='append', dest='teams',
-               help='Only check this team, can be added repeatedly')
-p.add_argument('-g', '--global-limit', type=int, dest='globallimit',
-               help='If the total amount if events per minute is higher '
-               'than this limit the script will exit with a warning and '
-               'the exit code 1, for nrpe compatibility')
-p.add_argument('-p', '--per-team-limit', type=int, dest='perteamlimit',
-               help="If any teams' projects' keys summed up limits is "
-               "higher than this, or not set the script will exit with a "
-               "warning and the exit code 1")
-p.add_argument('-v', '--verbose', action='store_true',
-               help='Print detailed stats')
-args = p.parse_args()
+    Returns the parsed arguments in a dictionary.
+    """
 
+    p=ArgumentParser()
+    p.add_argument('-a', '--api-url', default='https://sentry.io/api',
+                   dest='api', help='The sentry API to use')
+    p.add_argument('-b', '--bearer', required=True,
+                   help='A sentry api token with at least read permissions')
+    p.add_argument('-o', '--organization', required=True,
+                   help='The organization slug for the sentry.io organization'
+                   'to be queried')
+    p.add_argument('-t', '--teams', action='append', dest='teams',
+                   help='Only check this team, can be added repeatedly')
+    p.add_argument('-g', '--global-limit', type=int, dest='globallimit',
+                   help='If the total amount if events per minute is higher '
+                   'than this limit the script will exit with a warning and '
+                   'the exit code 1, for nrpe compatibility')
+    p.add_argument('-p', '--per-team-limit', type=int, dest='perteamlimit',
+                   help="If any teams' projects' keys summed up limits is "
+                   "higher than this, or not set the script will exit with a "
+                   "warning and the exit code 1")
+    p.add_argument('-v', '--verbose', action='store_true',
+                   help='Print detailed stats')
+
+    return(p.parse_args())
 
 def main():
 
+    args = args_parse()
     teams = get_teams(args.api, args.organization, args.bearer)
 
     '''Filter teams if provided via arguments'''
