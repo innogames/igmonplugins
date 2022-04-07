@@ -44,7 +44,7 @@ def args_parse():
                    help='The organization slug for the sentry.io organization'
                    'to be queried')
     p.add_argument('-l', '--organization-limit', type=int,
-                   help='If the total amount of events per minute is higher '
+                   help='If the total amount of events per day is higher '
                    'than this limit the script will exit with a warning and '
                    'the exit code 1, for nrpe compatibility')
     p.add_argument('-t', '--teams', action='append', dest='teams',
@@ -86,13 +86,13 @@ def main():
                 print(f"  Key: \"{dsn['name']}\",", end=" ")
 
             if dsn['rateLimit']:
-                # Calculate events per minute and add them to the counters
-                epm = int((dsn['rateLimit']['count'] * 60 /
+                # Calculate events per day and add them to the counters
+                epm = int((dsn['rateLimit']['count'] * 14400 /
                            dsn['rateLimit']['window']))
                 organization['summed_events'] += epm
                 team['summed_events'] += epm
                 if args.verbose:
-                    print(f'limited to {epm} events per mintue')
+                    print(f'limited to {epm} events per day')
             else:
                 # Set unlimtied events if no limt is given
                 team['unlimited_events'] = True
