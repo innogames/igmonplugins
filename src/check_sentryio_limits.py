@@ -79,7 +79,7 @@ def main():
     for team in teams:
 
         if args.verbose:
-            print(f"\nTeam \"{team['name']}\", checking for projects")
+            print(f"\nTeam \"{team['slug']}\", checking for projects")
 
         # Initiate team wide event counters
         team['summed_events'] = 0
@@ -89,7 +89,7 @@ def main():
         for project in team['projects']:
 
             if args.verbose:
-                print(f" Project \"{project['name']}\", checking for keys")
+                print(f" Project \"{project['slug']}\", checking for keys")
 
             # Fetch all keys on the project
             dsns = get_dsns_from_project(
@@ -125,12 +125,12 @@ def main():
             if team['unlimited_events']:
                 exit = 1
                 print('WARNING: Unlimited events configured for team: {}'
-                      .format(team['name']))
+                      .format(team['slug']))
             elif team['summed_events'] > args.perteamlimit:
                 exit = 1
                 print('WARNING: {} are configure of {} allowed for team: {}'
                       .format(team['summed_events'], args.perteamlimit,
-                              team['name']))
+                              team['slug']))
 
     # Check if organization wide limit is reached
     if args.organizationlimit:
