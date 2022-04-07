@@ -44,18 +44,17 @@ def args_parse():
                    help='The organization slug for the sentry.io organization'
                    'to be queried')
     p.add_argument('-l', '--organization-limit', type=int,
-                   dest='organizationlimit', help='If the total amount of '
-                   'events per minute is higher than this limit the script '
-                   'will exit with a warning and the exit code 1, for nrpe '
-                   'compatibility')
+                   help='If the total amount of events per minute is higher '
+                   'than this limit the script will exit with a warning and '
+                   'the exit code 1, for nrpe compatibility')
     p.add_argument('-t', '--teams', action='append', dest='teams',
                    help='Only check this team, can be added repeatedly')
-    p.add_argument('-p', '--per-team-limit', type=int, dest='perteamlimit',
+    p.add_argument('-p', '--per-team-limit', type=int,
                    help="If any teams' projects' keys summed up limits is "
                    "higher than this, or not set the script will exit with a "
                    "warning and the exit code 1")
     p.add_argument('-a', '--api-url', default='https://sentry.io/api',
-                   dest='api', help='The sentry API to use')
+                   help='The sentry API to use')
     p.add_argument('-v', '--verbose', action='store_true',
                    help='Print detailed stats')
 
@@ -65,7 +64,7 @@ def args_parse():
 def main():
 
     args = args_parse()
-    teams = get_teams(args.api, args.organization, args.bearer)
+    teams = get_teams(args.api_url, args.organization, args.bearer)
 
     # Filter teams to the ones provided via arguments
     if args.teams:
@@ -101,7 +100,6 @@ def main():
                 if args.verbose:
                     print('with unlimited events')
 
-
     # Iterate over teams and their projects to sum up their keys' rates
     for team in teams:
 
@@ -120,7 +118,7 @@ def main():
 
             # Fetch all keys on the project
             dsns = get_dsns_from_project(
-                args.api, args.organization, project['slug'], args.bearer)
+                args.api_url, args.organization, project['slug'], args.bearer)
 
             # Fetch rateLimits for each key and add them to the totals
             traverse_dsns(dsns, team)
@@ -129,29 +127,29 @@ def main():
         print("")
 
     # Check if any team is over the team limit
-    if args.perteamlimit:
+    if args.per_team_limit:
         for team in teams:
             if team['unlimited_events']:
                 exit = 1
                 print('WARNING: Unlimited events configured for team: {}'
                       .format(team['slug']))
-            elif team['summed_events'] > args.perteamlimit:
+            elif team['summed_events'] > args.per_team_limit:
                 exit = 1
                 print('WARNING: {} are configure of {} allowed for team: {}'
-                      .format(team['summed_events'], args.perteamlimit,
+                      .format(team['summed_events'], args.per_team_limit,
                               team['slug']))
 
     # Check if organization wide limit is reached
-    if args.organizationlimit:
+    if args.organization_limit:
         # If any key is unlimited
         if organization['unlimited_events']:
             exit = 1
             print('WARNING: Unlimited events configured in total')
         # If the organizaion wide limit is hit
-        elif organization['summed_events'] > args.organizationlimit:
+        elif organization['summed_events'] > args.organization_limit:
             exit = 1
             print('WARNING: {} of {} events are configured in total'.format(
-                  organization['summed_events'], args.organizationlimit))
+                  organization['summed_events'], args.organization_limit))
         # If team limit is hit but organization limit is not
         elif exit == 1:
             print('{} events are configured in total'.format(
