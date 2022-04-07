@@ -26,13 +26,14 @@ Copyright (c) 2022 InnoGames GmbH
 # THE SOFTWARE.
 
 from argparse import ArgumentParser
+from typing import List
 import requests
 import sys
 
 
 def args_parse():
-    """Argument parser, usage helper
-
+    """
+    Argument parser, usage helper
     Returns the parsed arguments in a dictionary.
     """
 
@@ -75,6 +76,32 @@ def main():
     exit = 0
     organization = {'summed_events': 0, 'unlimited_events': False}
 
+    def traverse_dsns(dsns: List[dict], team: dict) -> None:
+        """
+        Iterate over DSNs and update the team and organization
+        counters and unlimited states
+        """
+        for dsn in dsns:
+
+            if args.verbose:
+                print(f"  Key: \"{dsn['name']}\",", end=" ")
+
+            if dsn['rateLimit']:
+                # Calculate events per minute and add them to the counters
+                epm = int((dsn['rateLimit']['count'] * 60 /
+                           dsn['rateLimit']['window']))
+                organization['summed_events'] += epm
+                team['summed_events'] += epm
+                if args.verbose:
+                    print(f'limited to {epm} events per mintue')
+            else:
+                # Set unlimtied events if no limt is given
+                team['unlimited_events'] = True
+                organization['unlimited_events'] = True
+                if args.verbose:
+                    print('with unlimited events')
+
+
     # Iterate over teams and their projects to sum up their keys' rates
     for team in teams:
 
@@ -96,25 +123,7 @@ def main():
                 args.api, args.organization, project['slug'], args.bearer)
 
             # Fetch rateLimits for each key and add them to the totals
-            for dsn in dsns:
-
-                if args.verbose:
-                    print(f"  Key: \"{dsn['name']}\",", end=" ")
-
-                if dsn['rateLimit']:
-                    # Calculate events per minute and add them to the counters
-                    epm = int((dsn['rateLimit']['count'] * 60 /
-                               dsn['rateLimit']['window']))
-                    organization['summed_events'] += epm
-                    team['summed_events'] += epm
-                    if args.verbose:
-                        print(f'limited to {epm} events per mintue')
-                else:
-                    # Set unlimtied events if no limt is given
-                    team['unlimited_events'] = True
-                    organization['unlimited_events'] = True
-                    if args.verbose:
-                        print('with unlimited events')
+            traverse_dsns(dsns, team)
 
     if args.verbose:
         print("")
