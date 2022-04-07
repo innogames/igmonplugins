@@ -71,64 +71,87 @@ def main():
         teams = list(filter(lambda t: t['slug'] in args.teams or t['name']
                      in args.teams, teams))
 
-    # Set exit code and organnization wide event counter
+    # Initiate exit code and organnization wide event counter
     exit = 0
     organization = {'summed_events': 0, 'unlimited_events': False}
 
-    # Iterate over teams, their projects and sum up their keys' rates
+    # Iterate over teams and their projects to sum up their keys' rates
     for team in teams:
-        for project in team['projects']:
-            team['summed_events'] = 0
-            team['unlimited_events'] = False
 
+        if args.verbose:
+            print(f"\nTeam \"{team['name']}\", checking for projects")
+
+        # Initiate team wide event counters
+        team['summed_events'] = 0
+        team['unlimited_events'] = False
+
+        # Iterate over all projects of a team to find the limits of all dsns
+        for project in team['projects']:
+
+            if args.verbose:
+                print(f" Project \"{project['name']}\", checking for keys")
+
+            # Fetch all keys on the project
             dsns = get_dsns_from_project(
                 args.api, args.organization, project['slug'], args.bearer)
+
+            # Fetch rateLimits for each key and add them to the totals
             for dsn in dsns:
-                if dsn['rateLimit']:
-                    organization['summed_events'] += \
-                        int(dsn['rateLimit']['count'] * 60 /
-                            (dsn['rateLimit']['window']))
-                    team['summed_events'] += int(
-                                dsn['rateLimit']['count'] * 60 /
-                                (dsn['rateLimit']['window']))
-                else:
-                    team['unlimited_events'] = True
-                    organization['unlimited_events'] = True
 
                 if args.verbose:
-                    print('Team: {}, Project: {}, Key: {}, Limit: {}'.format(
-                        team['name'], project['name'], dsn['name'],
-                        dsn['rateLimit']))
+                    print(f"  Key: \"{dsn['name']}\",", end=" ")
 
-            # Check if this team is over the team limit
-            if args.perteamlimit and team['unlimited_events']:
+                if dsn['rateLimit']:
+                    # Calculate events per minute and add them to the counters
+                    epm = int((dsn['rateLimit']['count'] * 60 /
+                               dsn['rateLimit']['window']))
+                    organization['summed_events'] += epm
+                    team['summed_events'] += epm
+                    if args.verbose:
+                        print(f'limited to {epm} events per mintue')
+                else:
+                    # Set unlimtied events if no limt is given
+                    team['unlimited_events'] = True
+                    organization['unlimited_events'] = True
+                    if args.verbose:
+                        print('with unlimited events')
+
+    if args.verbose:
+        print("")
+
+    # Check if any team is over the team limit
+    if args.perteamlimit:
+        for team in teams:
+            if team['unlimited_events']:
                 exit = 1
                 print('WARNING: Unlimited events configured for team: {}'
                       .format(team['name']))
-            elif (args.perteamlimit and team['summed_events'] >
-                  args.perteamlimit):
+            elif team['summed_events'] > args.perteamlimit:
                 exit = 1
                 print('WARNING: {} are configure of {} allowed for team: {}'
                       .format(team['summed_events'], args.perteamlimit,
                               team['name']))
 
-    # Check if organization wiede limit is reached
-    if args.organizationlimit and organization['unlimited_events']:
-        exit = 1
-        print('WARNING: Unlimited events configured in total')
-    elif organization['summed_events'] > args.organizationlimit:
-        exit = 1
-        print('WARNING: {} of {} events are configured in total'.format(
-            organization['summed_events'], args.organizationlimit))
-    elif exit == 0 and args.organizationlimit:
+    # Check if organization wide limit is reached
+    if args.organizationlimit:
+        # If any key is unlimited
+        if organization['unlimited_events']:
+            exit = 1
+            print('WARNING: Unlimited events configured in total')
+        # If the organizaion wide limit is hit
+        elif organization['summed_events'] > args.organizationlimit:
+            exit = 1
+            print('WARNING: {} of {} events are configured in total'.format(
+                  organization['summed_events'], args.organizationlimit))
+        # If team limit is hit but organization limit is not
+        elif exit == 1:
+            print('{} events are configured in total'.format(
+                  organization['summed_events']))
+
+    # If neither team nor organization limit is hit
+    elif exit == 0:
         print('OK: {} events are configured in total'.format(
-              organization['summed_events']))
-    elif exit == 1 and args.organizationlimit:
-        print('{} events are configured in total'.format(
-              organization['summed_events']))
-    else:
-        exit = 3
-        print('UKNOWN: This shoud not happen')
+               organization['summed_events']))
 
     sys.exit(exit)
 
