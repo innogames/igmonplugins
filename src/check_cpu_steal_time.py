@@ -6,7 +6,7 @@ raises a warning or critical state if a reasonable threshold is reached.
 Values for the warning and critical thresholds can be specified using
 parameters.
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2022 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -37,12 +37,16 @@ def get_parser():
     parser = ArgumentParser()
 
     parser.add_argument(
-        '--warning', '-w', help='warning threshold for steal time',
-        default=50
+        '--warning', '-w',
+        help='warning threshold for steal time, int or float',
+        default=50,
+        type=float,
     )
     parser.add_argument(
-        '--critical', '-c', help='critical threshold for steal time',
-        default=75
+        '--critical', '-c',
+        help='critical threshold for steal time, int or float',
+        default=75,
+        type=float,
     )
 
     return parser
