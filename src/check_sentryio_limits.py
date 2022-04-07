@@ -65,13 +65,10 @@ def main():
     args = args_parse()
     teams = get_teams(args.api, args.organization, args.bearer)
 
-    # Filter teams if provided via arguments
+    # Filter teams to the ones provided via arguments
     if args.teams:
-        filtered_teams = []
-        for team in teams:
-            if team['slug'] in args.teams or team['name'] in args.teams:
-                filtered_teams.append(team)
-        teams = filtered_teams
+        teams = list(filter(lambda t: t['slug'] in args.teams or t['name']
+                     in args.teams, teams))
 
     # Set exit code and global event counter
     exit = 0
