@@ -46,10 +46,11 @@ def args_parse():
                    'to be queried')
     p.add_argument('-t', '--teams', action='append', dest='teams',
                    help='Only check this team, can be added repeatedly')
-    p.add_argument('-g', '--global-limit', type=int, dest='globallimit',
-                   help='If the total amount if events per minute is higher '
-                   'than this limit the script will exit with a warning and '
-                   'the exit code 1, for nrpe compatibility')
+    p.add_argument('-l', '--organization-limit', type=int,
+                   dest='organizationlimit', help='If the total amount of '
+                   'events per minute is higher than this limit the script '
+                   'will exit with a warning and the exit code 1, for nrpe '
+                   'compatibility')
     p.add_argument('-p', '--per-team-limit', type=int, dest='perteamlimit',
                    help="If any teams' projects' keys summed up limits is "
                    "higher than this, or not set the script will exit with a "
@@ -70,10 +71,9 @@ def main():
         teams = list(filter(lambda t: t['slug'] in args.teams or t['name']
                      in args.teams, teams))
 
-    # Set exit code and global event counter
+    # Set exit code and organnization wide event counter
     exit = 0
-    global_summed_events = 0
-    global_unlimited_events = False
+    organization = {'summed_events': 0, 'unlimited_events': False}
 
     # Iterate over teams, their projects and sum up their keys' rates
     for team in teams:
@@ -85,7 +85,7 @@ def main():
                 args.api, args.organization, project['slug'], args.bearer)
             for dsn in dsns:
                 if dsn['rateLimit']:
-                    global_summed_events += \
+                    organization['summed_events'] += \
                         int(dsn['rateLimit']['count'] * 60 /
                             (dsn['rateLimit']['window']))
                     team['summed_events'] += int(
@@ -93,7 +93,7 @@ def main():
                                 (dsn['rateLimit']['window']))
                 else:
                     team['unlimited_events'] = True
-                    global_unlimited_events = True
+                    organization['unlimited_events'] = True
 
                 if args.verbose:
                     print('Team: {}, Project: {}, Key: {}, Limit: {}'.format(
@@ -112,19 +112,20 @@ def main():
                       .format(team['summed_events'], args.perteamlimit,
                               team['name']))
 
-    # Check if global limit is reached
-    if args.globallimit and global_unlimited_events:
+    # Check if organization wiede limit is reached
+    if args.organizationlimit and organization['unlimited_events']:
         exit = 1
         print('WARNING: Unlimited events configured in total')
-    elif global_summed_events > args.globallimit:
+    elif organization['summed_events'] > args.organizationlimit:
         exit = 1
         print('WARNING: {} of {} events are configured in total'.format(
-            global_summed_events, args.globallimit))
-    elif exit == 0 and args.globallimit:
+            organization['summed_events'], args.organizationlimit))
+    elif exit == 0 and args.organizationlimit:
         print('OK: {} events are configured in total'.format(
-              global_summed_events))
-    elif exit == 1 and args.globallimit:
-        print('{} events are configured in total'.format(global_summed_events))
+              organization['summed_events']))
+    elif exit == 1 and args.organizationlimit:
+        print('{} events are configured in total'.format(
+              organization['summed_events']))
     else:
         exit = 3
         print('UKNOWN: This shoud not happen')
@@ -132,20 +133,20 @@ def main():
     sys.exit(exit)
 
 
-def get_teams(api: str, organization: str, bearer: str) -> dict:
+def get_teams(api: str, organization_slug: str, bearer: str) -> dict:
     """Return a list of all teams in the account"""
     headers = {'Authorization': f'Bearer  {bearer}'}
     res = requests.get('{}/0/organizations/{}/teams/'.format(
-        api, organization), headers=headers)
+        api, organization_slug), headers=headers)
     return res.json()
 
 
-def get_dsns_from_project(api: str, organization: str, project: str,
+def get_dsns_from_project(api: str, organization_slug: str, project: str,
                           bearer: str) -> dict:
     """Return a list of DSNs for the passed project"""
     headers = {'Authorization': f'Bearer {bearer}'}
     res = requests.get('{}/0/projects/{}/{}/keys/'.format(
-        api, organization, project), headers=headers)
+        api, organization_slug, project), headers=headers)
     return res.json()
 
 
