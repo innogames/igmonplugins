@@ -117,6 +117,7 @@ def main():
                 print(f" Project \"{project['slug']}\", checking for keys")
 
             # Fetch all keys on the project
+            # @TODO use concurrent requests to scale out for tons of projects
             dsns = get_dsns_from_project(
                 args.api_url, args.organization, project['slug'], args.bearer)
 
