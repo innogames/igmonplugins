@@ -6,7 +6,7 @@ This script checks the following on the switches:
 * CPU usage
 * Port state
 
-Copyright (c) 2017 InnoGames GmbH
+Copyright (c) 2022 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -26,7 +26,11 @@ Copyright (c) 2017 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import datetime
+import re
+import sys
 from argparse import ArgumentParser
+
 from pysnmp.entity.rfc3413.oneliner.cmdgen import (
     CommandGenerator,
     CommunityData,
@@ -37,8 +41,6 @@ from pysnmp.entity.rfc3413.oneliner.cmdgen import (
     usmHMACSHAAuthProtocol,
 )
 from pysnmp.proto.rfc1902 import Integer, Counter32, Counter64
-import re
-import sys
 
 # Predefine some variables, it makes this program run a bit faster.
 cmd_gen = CommandGenerator()
@@ -52,6 +54,10 @@ OIDS = {
     'switch_model': '.1.3.6.1.2.1.1.1.0',
     'port_name': '.1.3.6.1.2.1.31.1.1.1.1',
     'port_state': '1.3.6.1.2.1.2.2.1.8',
+    'port_last_change': '1.3.6.1.2.1.2.2.1.9',
+    'snmp_engine_time': '1.3.6.1.6.3.10.2.1.3.0',
+    'snmp_engine_boots': '1.3.6.1.6.3.10.2.1.2',
+    'system_uptime': '1.3.6.1.2.1.1.3.0',
 }
 
 LAGG_OIDS = {
@@ -251,6 +257,13 @@ def check_ports(snmp, model, args):
     port_indexes = get_snmp_table(snmp, OIDS['if_index'])
     port_oper_states = get_snmp_table(snmp, OIDS['if_oper_status'])
     port_admin_states = get_snmp_table(snmp, OIDS['if_admin_status'])
+    port_last_changes = get_snmp_table(snmp, OIDS['port_last_change'])
+    system_uptime = get_snmp_value(snmp, OIDS['system_uptime'])
+    snmp_engine_time = get_snmp_value(snmp, OIDS['snmp_engine_time'])
+    snmp_boots = get_snmp_value(snmp, '1.3.6.1.6.3.10.2.1.2.0')
+    print(snmp_boots)
+    exit()
+    fixed_uptime = calculate_uptime(system_uptime, snmp_engine_time)
 
     port_names = get_snmp_table(snmp, OIDS['if_name'])
     port_aliases = get_snmp_table(snmp, OIDS['if_alias'])
@@ -315,6 +328,10 @@ def check_ports(snmp, model, args):
 
         # Port is enabled
         elif port_admin_states[port_index] == 1:
+            changed_recently = check_last_change(
+                fixed_uptime,
+                port_last_changes[port_index]
+            )
             if not port_aliases[port_index]:
                 if port_oper_states[port_index] == 1:
                     local_exit = 2
@@ -395,6 +412,25 @@ def check_cpu(snmp, model, args):
         return 1, outmsg
 
     return 0, outmsg
+
+
+def check_last_change(uptime, last_change):
+    if last_change < uptime:
+        print()
+    print(uptime)
+    print(last_change)
+    print((int(uptime) - int(last_change)) / 100)
+    return False
+
+
+def calculate_uptime(system_uptime, snmp_engine_time):
+    dev_uptime_wrapped = int(snmp_engine_time * 100 / 2 ** 32)
+    if dev_uptime_wrapped > 0:
+        fixed_uptime = system_uptime + dev_uptime_wrapped * 2 ** 32
+    else:
+        fixed_uptime = system_uptime
+
+    return int(fixed_uptime)
 
 
 if __name__ == '__main__':
