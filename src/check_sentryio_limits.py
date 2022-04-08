@@ -139,7 +139,7 @@ def main():
                       .format(team['slug']))
             elif team['summed_events'] > args.per_team_limit:
                 exit = 1
-                print('WARNING: {} are configure, but {} allowed for team: {}'
+                print('WARNING: {} are configured, but {} allowed for team: {}'
                       .format(team['summed_events'], args.per_team_limit,
                               team['slug']))
 
