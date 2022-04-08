@@ -47,7 +47,7 @@ def args_parse():
                    help='If the total amount of events per day is higher '
                    'than this limit the script will exit with a warning and '
                    'the exit code 1, for nrpe compatibility')
-    p.add_argument('-t', '--teams', action='append', dest='teams',
+    p.add_argument('-t', '--teams', action='append',
                    help='Only check this team, can be added repeatedly')
     p.add_argument('-p', '--per-team-limit', type=int,
                    help="If any teams' projects' keys summed up limits is "
@@ -68,8 +68,10 @@ def main():
 
     # Filter teams to the ones provided via arguments
     if args.teams:
-        teams = list(filter(lambda t: t['slug'] in args.teams or t['name']
-                     in args.teams, teams))
+        teams = list(filter(
+            lambda t: t['slug'] in args.teams or t['name'] in args.teams,
+            teams
+        ))
 
     # Initiate exit code and organnization wide event counter
     exit = 0
@@ -118,7 +120,7 @@ def main():
                 print(f" Project \"{project['slug']}\", checking for keys")
 
             # Fetch all keys on the project
-            # @TODO use concurrent requests to scale out for tons of projects
+            # TODO use concurrent requests to scale out for tons of projects
             dsns = get_dsns_from_project(
                 args.api_url, args.organization, project['slug'], args.bearer)
 
