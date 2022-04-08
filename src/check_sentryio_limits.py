@@ -31,7 +31,7 @@ import requests
 import sys
 
 
-def args_parse():
+def parse_args():
     """
     Argument parser, usage helper
     Returns the parsed arguments in a dictionary.
@@ -63,7 +63,7 @@ def args_parse():
 
 def main():
 
-    args = args_parse()
+    args = parse_args()
     teams = get_teams(args.api_url, args.organization, args.bearer)
 
     # Filter teams to the ones provided via arguments
@@ -73,7 +73,7 @@ def main():
             teams
         ))
 
-    # Initiate exit code and organnization wide event counter
+    # Initiate exit code and organization wide event counter
     exit = 0
     organization = {'summed_events': 0, 'unlimited_events': False}
 
@@ -85,7 +85,7 @@ def main():
         for dsn in dsns:
 
             if args.verbose:
-                print(f"  Key: \"{dsn['name']}\",", end=" ")
+                print(f'  Key: "{dsn["name"]}",', end=' ')
 
             if dsn['rateLimit']:
                 # Calculate events per day and add them to the counters
@@ -135,13 +135,13 @@ def main():
         for team in teams:
             if team['unlimited_events']:
                 exit = 1
-                print('WARNING: Unlimited events configured for team: {}'
-                      .format(team['slug']))
+                print("WARNING: Unlimited events configured for team: "
+                      f"{team['slug']}")
             elif team['summed_events'] > args.per_team_limit:
                 exit = 1
-                print('WARNING: {} are configure, but {} allowed for team: {}'
-                      .format(team['summed_events'], args.per_team_limit,
-                              team['slug']))
+                print(f"WARNING: team['summed_events'] are configure, "
+                      f"but {args.per_team_limit} allowed for team: "
+                      f"{team['slug']}"
 
     # Check if organization wide limit is reached
     if args.organization_limit:
