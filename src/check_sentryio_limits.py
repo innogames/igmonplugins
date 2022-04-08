@@ -47,7 +47,7 @@ def parse_args():
                    help='If the total amount of events per day is higher '
                    'than this limit the script will exit with a warning and '
                    'the exit code 1, for nrpe compatibility')
-    p.add_argument('-t', '--teams', action='append',
+    p.add_argument('-t', '--teams', action='append', dest='teams',
                    help='Only check this team, can be added repeatedly')
     p.add_argument('-p', '--per-team-limit', type=int,
                    help="If any teams' projects' keys summed up limits is "
@@ -139,9 +139,9 @@ def main():
                       f"{team['slug']}")
             elif team['summed_events'] > args.per_team_limit:
                 exit = 1
-                print(f"WARNING: team['summed_events'] are configure, "
-                      f"but {args.per_team_limit} allowed for team: "
-                      f"{team['slug']}"
+                print(f"WARNING: {team['summed_events']} events are "
+                      f"configured, but {args.per_team_limit} allowed "
+                      f"for team: {team['slug']}")
 
     # Check if organization wide limit is reached
     if args.organization_limit:
@@ -152,18 +152,18 @@ def main():
         # If the organizaion wide limit is hit
         elif organization['summed_events'] > args.organization_limit:
             exit = 1
-            print('WARNING: {} events are configured, but {} allowed in total'
-                  .format(organization['summed_events'],
-                          args.organization_limit))
+            print(f"WARNING: {organization['summed_events']} events are "
+                  f"configured, but {args.organization_limit} allowed in "
+                  "total")
         # If team limit is hit but organization limit is not
         elif exit == 1:
-            print('{} events are configured in total'.format(
-                  organization['summed_events']))
+            print(f"{organization['summed_events']} events are configured "
+                  "in total")
 
     # If neither team nor organization limit is hit
     elif exit == 0:
-        print('OK: {} events are configured in total'.format(
-               organization['summed_events']))
+        print(f"OK: {organization['summed_events']} "
+              "events are configured in total")
 
     sys.exit(exit)
 
@@ -171,8 +171,9 @@ def main():
 def get_teams(api: str, organization_slug: str, bearer: str) -> dict:
     """Return a list of all teams in the account"""
     headers = {'Authorization': f'Bearer  {bearer}'}
-    res = requests.get('{}/0/organizations/{}/teams/'.format(
-        api, organization_slug), headers=headers)
+    res = requests.get(
+            f'{api}/0/organizations/{organization_slug}/teams/',
+            headers=headers)
     return res.json()
 
 
@@ -180,8 +181,9 @@ def get_dsns_from_project(api: str, organization_slug: str, project: str,
                           bearer: str) -> dict:
     """Return a list of DSNs for the passed project"""
     headers = {'Authorization': f'Bearer {bearer}'}
-    res = requests.get('{}/0/projects/{}/{}/keys/'.format(
-        api, organization_slug, project), headers=headers)
+    res = requests.get(
+            f'{api}/0/projects/{organization_slug}/{project}/keys/',
+            headers=headers)
     return res.json()
 
 
