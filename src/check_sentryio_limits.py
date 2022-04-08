@@ -152,7 +152,7 @@ def main():
         # If the organizaion wide limit is hit
         elif organization['summed_events'] > args.organization_limit:
             exit = 1
-            print('WARNING: {} events are configured, but {} allowd in total'
+            print('WARNING: {} events are configured, but {} allowed in total'
                   .format(organization['summed_events'],
                           args.organization_limit))
         # If team limit is hit but organization limit is not
