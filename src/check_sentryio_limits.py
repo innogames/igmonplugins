@@ -87,12 +87,13 @@ def main():
 
             if dsn['rateLimit']:
                 # Calculate events per day and add them to the counters
-                epm = int((dsn['rateLimit']['count'] * 14400 /
-                           dsn['rateLimit']['window']))
-                organization['summed_events'] += epm
-                team['summed_events'] += epm
+                rate_count = dsn['rateLimit']['count']
+                rate_window = dsn['rateLimit']['window']
+                rate_daily = int(rate_count * 14400 / rate_window)
+                organization['summed_events'] += rate_daily
+                team['summed_events'] += rate_daily
                 if args.verbose:
-                    print(f'limited to {epm} events per day')
+                    print(f'limited to {rate_daily} events per day')
             else:
                 # Set unlimtied events if no limt is given
                 team['unlimited_events'] = True
@@ -136,7 +137,7 @@ def main():
                       .format(team['slug']))
             elif team['summed_events'] > args.per_team_limit:
                 exit = 1
-                print('WARNING: {} are configure of {} allowed for team: {}'
+                print('WARNING: {} are configure, but {} allowed for team: {}'
                       .format(team['summed_events'], args.per_team_limit,
                               team['slug']))
 
@@ -149,8 +150,9 @@ def main():
         # If the organizaion wide limit is hit
         elif organization['summed_events'] > args.organization_limit:
             exit = 1
-            print('WARNING: {} of {} events are configured in total'.format(
-                  organization['summed_events'], args.organization_limit))
+            print('WARNING: {} events are configured, but {} allowd in total'
+                  .format(organization['summed_events'],
+                          args.organization_limit))
         # If team limit is hit but organization limit is not
         elif exit == 1:
             print('{} events are configured in total'.format(
