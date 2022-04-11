@@ -25,7 +25,7 @@ Copyright (c) 2022 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from typing import List
 import requests
 import sys
