@@ -4,6 +4,7 @@
 The script will exit with:
  - 0 (OK) All the limits provided to this check are kept
  - 1 (WARNING) Limits are either set to high or not at all
+ - 3 (UNKNOWN) Error while fetching team or project info via HTTP API
 
 Copyright (c) 2022 InnoGames GmbH
 """
