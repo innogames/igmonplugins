@@ -37,7 +37,8 @@ def parse_args() -> Namespace:
     Returns the parsed arguments in a dictionary.
     """
 
-    p = ArgumentParser()
+    p = ArgumentParser(
+        description='Monitor Sentry teams and organization for exceeding N events')
     p.add_argument('-b', '--bearer', required=True,
                    help='A sentry api token with at least read permissions')
     p.add_argument('-o', '--organization', required=True,
