@@ -185,6 +185,10 @@ def get_dsns_from_project(api: str, organization_slug: str, project: str,
     res = requests.get(
             f'{api}/0/projects/{organization_slug}/{project}/keys/',
             headers=headers)
+    if res.status_code != 200:
+        print(f'Expected HTTP 200 but got {res.status_code} while fetching dsns for project')
+        sys.exit(3)  # Nagios code UNKNOWN
+
     return res.json()
 
 
