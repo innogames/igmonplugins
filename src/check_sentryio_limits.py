@@ -31,7 +31,7 @@ import requests
 import sys
 
 
-def parse_args():
+def parse_args() -> Namespace:
     """
     Argument parser, usage helper
     Returns the parsed arguments in a dictionary.
