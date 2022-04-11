@@ -91,9 +91,10 @@ def main():
 
             if dsn['rateLimit']:
                 # Calculate events per day and add them to the counters
+                seconds_per_day = 60 * 60 * 24
                 rate_count = dsn['rateLimit']['count']
                 rate_window = dsn['rateLimit']['window']
-                rate_daily = int(rate_count * 14400 / rate_window)
+                rate_daily = int(rate_count * seconds_per_day / rate_window)
                 organization['summed_events'] += rate_daily
                 team['summed_events'] += rate_daily
                 if args.verbose:
