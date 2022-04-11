@@ -49,7 +49,7 @@ def parse_args() -> Namespace:
                    help='If the total amount of events per day is higher '
                    'than this limit the script will exit with a warning and '
                    'the exit code 1, for nrpe compatibility')
-    p.add_argument('-t', '--teams', action='append', dest='teams',
+    p.add_argument('-t', '--teams', action='append',
                    help='Only check this team, can be added repeatedly')
     p.add_argument('-p', '--per-team-limit', type=int,
                    help="If any teams' projects' keys summed up limits is "
