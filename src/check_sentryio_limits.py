@@ -181,7 +181,7 @@ def get_teams(api: str, organization_slug: str, bearer: str) -> dict:
         print(f'Expected HTTP 200 but got {res.status_code} while fetching teams')
         sys.exit(3)  # Nagios code UNKNOWN
         
-     return res.json()
+    return res.json()
 
 
 def get_dsns_from_project(api: str, organization_slug: str, project: str,
