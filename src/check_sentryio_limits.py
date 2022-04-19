@@ -76,7 +76,7 @@ def main():
         ))
 
         if len(args.teams) != len(teams):
-            print(f"Could not find all teams: {args.teams}! Typo ?")
+            print(f"UNKNOWN: Could not find all teams: {args.teams}! Typo ?")
             sys.exit(3)
 
     # Initiate exit code and organization wide event counter
