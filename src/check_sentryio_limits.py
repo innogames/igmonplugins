@@ -168,7 +168,7 @@ def main():
                   "in total")
 
     # If neither team nor organization limit is hit
-    elif exit == 0:
+    if exit == 0:
         print(f"OK: {organization['summed_events']} "
               "events are configured in total")
 
