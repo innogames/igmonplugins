@@ -21,6 +21,7 @@ Copyright (c) 2019 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import socket
 import ssl
 import sys
 from argparse import ArgumentParser, RawTextHelpFormatter
@@ -61,6 +62,10 @@ def parse_args():
         help='Port on the host where Nagios will connect to. Defaults to 443.'
     )
     parser.add_argument(
+        '-t', '--timeout', type=int, default=2,
+        help='Socket timeout (in seconds) for each SSL connection'
+    )
+    parser.add_argument(
         '-d', dest='domains', required=True,
         help='Domains to retrieve certificates for. For multiple domains, '
              'provide them as single string, comma separated.'
@@ -82,7 +87,9 @@ def main():
         sys.exit(3)
 
     try:
-        state, output = get_check_result(domains, args.ip, args.port)
+        state, output = get_check_result(
+            domains, args.ip, args.port, args.timeout
+        )
     except ConnectionRefusedError:
         output = 'CRITICAL - The host refused the connection'
         state = 1
@@ -98,10 +105,10 @@ def get_domains(domains):
     return domains
 
 
-def fetch_cert_info(domain, ip, port):
+def fetch_cert_info(domain, ip, port, timeout):
     domain = domain.replace('*', 'www', 1)
 
-    conn = ssl.create_connection((ip, port))
+    conn = ssl.create_connection((ip, port), timeout)
     context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     with context.wrap_socket(conn, server_hostname=domain) as sock:
         cert = crypto.load_certificate(
@@ -120,12 +127,16 @@ def fetch_cert_info(domain, ip, port):
     return data
 
 
-def get_check_result(domains, ip, port):
+def get_check_result(domains, ip, port, timeout):
     output = []
     expirations = []
 
     for domain in domains:
-        expirations.append(fetch_cert_info(domain, ip, port))
+        try:
+            cert_info = fetch_cert_info(domain, ip, port, timeout)
+            expirations.append(cert_info)
+        except (socket.timeout, TimeoutError):
+            return (3, 'The connection to the destination host timed out')
 
     if not expirations:
         return (3, 'Could not obtain expiration dates')
