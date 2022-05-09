@@ -70,7 +70,7 @@ CPU_OIDS = {
 
 PORT_REGEXP = {
     'cisco_ios': re.compile('^(?P<port>(Fa|Gi|Tu)[0-9/]+)$'),
-    'cumulus': re.compile('^(?P<port>swp[0-9]+)$'),
+    'cumulus': re.compile('^(?P<port>swp[0-9]+(s[0-9]+)?)$'),
     'extreme': re.compile('^(?P<port>[0-9]:[0-9]+)$'),
     'force10_mxl': re.compile('^(TenGigabitEthernet|fortyGigE) (?P<port>[0-9]+/[0-9]+)$'),
     'netiron_mlx': re.compile('^(?P<port>ethernet[0-9]+/[0-9]+)$'),
