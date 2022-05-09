@@ -75,7 +75,7 @@ PORT_REGEXP = {
     'force10_mxl': re.compile('^(TenGigabitEthernet|fortyGigE) (?P<port>[0-9]+/[0-9]+)$'),
     'netiron_mlx': re.compile('^(?P<port>ethernet[0-9]+/[0-9]+)$'),
     'powerconnect': re.compile('^(?P<port>(Gi|Te|Po|Trk)[0-9/]+)$'),
-    'procurve': re.compile('^(?P<port>(Trk)?[0-9]+)$'),
+    'procurve': re.compile('^(?P<port>[0-9]+)$'),
 }
 
 
