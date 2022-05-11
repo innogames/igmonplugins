@@ -41,7 +41,9 @@ load_config = '/etc/nagios-plugins/check_smartmon.cfg'
 conf_data = {}
 
 try:
-    execfile(load_config, conf_data)
+    with open(load_config) as f:
+        code = compile(f.read(), load_config, 'exec')
+        exec(code, conf_data)
     CSV_PATH = conf_data['CSV_PATH']
     HDD_NAMES = conf_data['HDD_NAMES']
     ALERTS = conf_data['ALERTS']
