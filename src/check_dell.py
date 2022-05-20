@@ -28,7 +28,7 @@ import re
 import sys
 import traceback
 
-from subprocess import check_output
+from subprocess import check_output, CalledProcessError, STDOUT
 
 racadm_commands = {
     'sel':           'getsel -o',
@@ -156,6 +156,12 @@ def check_ipmi(host, user, password, command):
         return (
             NagiosCodes.unknown, 'UNKNOWN: unable to run ipmitool.', False
         )
+    except CalledProcessError as e:
+        return (
+            NagiosCodes.unknown, f'UNKNOWN: {e.stdout}', False
+        )
+
+
 
     for r1 in res:
         for r2 in r1:
@@ -405,13 +411,13 @@ def ipmi_command(host, user, password, command):
 
     res = check_output(
         ipmi_cmd + ['-I', 'lanplus'] + command,
-        close_fds=False, universal_newlines=True,
+        close_fds=False, universal_newlines=True, stderr=STDOUT
     )
 
     if res.find('0xd4 Insufficient privilege level') != -1:
         res = check_output(
             ipmi_cmd + command,
-            close_fds=False, universal_newlines=True,
+            close_fds=False, universal_newlines=True, stderr=STDOUT
         )
 
     ret = []
