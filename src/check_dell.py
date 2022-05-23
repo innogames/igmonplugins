@@ -3,7 +3,7 @@
 
 This script checks some parameters of Dell servers via iDRAC.
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2022 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,7 @@ import re
 import sys
 import traceback
 
-from subprocess import check_output, CalledProcessError, STDOUT
+from subprocess import check_output, CalledProcessError, PIPE
 
 racadm_commands = {
     'sel':           'getsel -o',
@@ -97,7 +97,9 @@ def check_hardware(host, user, password, command):
     try:
         res = idrac_command(host, user, password, racadm_commands[command])
     except OSError:
-        out = (NagiosCodes.unknown, 'UNKNOWN: unable to run racadm.')
+        return (NagiosCodes.unknown, 'UNKNOWN: unable to run racadm.', False)
+    except CalledProcessError as e:
+        return (NagiosCodes.unknown, f'UNKNOWN: {e.stderr}', False)
     else:
         try:
             if len(res):
@@ -158,10 +160,8 @@ def check_ipmi(host, user, password, command):
         )
     except CalledProcessError as e:
         return (
-            NagiosCodes.unknown, f'UNKNOWN: {e.stdout}', False
+            NagiosCodes.unknown, f'UNKNOWN: {e.stderr}', False
         )
-
-
 
     for r1 in res:
         for r2 in r1:
@@ -312,9 +312,12 @@ def check_racadm_sel(host, user, password, res):
     # SEL seems too empty.  There should be at least message saying that it
     # was cleared.  DRACs >= 7 return no SEL at all.  Check size of SEL and
     # complain, if there is more than 1 message.
-    out = idrac_command(host, user, password, 'getsel -i')
-    numerrors = int(out[0].split(':')[1])
+    try:
+        out = idrac_command(host, user, password, 'getsel -i')
+    except CalledProcessError as e:
+        return NagiosCodes.unknown, f'UNKNOWN: {e.stderr}'
 
+    numerrors = int(out[0].split(':')[1])
     if numerrors > 1:
         return (
             NagiosCodes.warning,
@@ -378,7 +381,7 @@ def idrac_command(host, user, password, command):
             '-u', user,
             '-p', password,
         ] + command.split(' '),
-        close_fds=False, universal_newlines=True,
+        close_fds=False, universal_newlines=True, stderr=PIPE
     )
 
     for line in res.splitlines():
@@ -411,13 +414,13 @@ def ipmi_command(host, user, password, command):
 
     res = check_output(
         ipmi_cmd + ['-I', 'lanplus'] + command,
-        close_fds=False, universal_newlines=True, stderr=STDOUT
+        close_fds=False, universal_newlines=True, stderr=PIPE
     )
 
     if res.find('0xd4 Insufficient privilege level') != -1:
         res = check_output(
             ipmi_cmd + command,
-            close_fds=False, universal_newlines=True, stderr=STDOUT
+            close_fds=False, universal_newlines=True, stderr=PIPE
         )
 
     ret = []
