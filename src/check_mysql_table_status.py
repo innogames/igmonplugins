@@ -271,34 +271,40 @@ class Database(object):
         type_position = self.get_column_position('type')
         extra_position = self.get_column_position('extra')
         for row in rows:
-            if 'auto_increment' in row[extra_position]:
-                if 'unsigned' in row[type_position]:
-                    return row[type_position].split('(', 1)[0]
-                else:
-                    return str(row[type_position].split('(', 1)[0]) + '_signed'
+            extra, _type = row[extra_position], row[type_position]
+            _type = _type.decode() if isinstance(_type, bytes) else _type
+
+            if 'auto_increment' in extra:
+                s = _type.split('(', 1)[0]
+                if 'unsigned' not in _type:
+                    s += '_signed'
+                return s
+
+
 
     @staticmethod
     def datatype_max_value(datatype):
-        if datatype == 'tinyint':
+        if datatype == 'tinyint' or datatype == 'tinyint unsigned':
             return 255
         if datatype == 'tinyint_signed':
             return 127
-        if datatype == 'smallint':
+        if datatype == 'smallint' or datatype == 'smallint unsigned':
             return 65535
         if datatype == 'smallint_signed':
             return 32767
-        if datatype == 'mediumint':
+        if datatype == 'mediumint' or datatype == 'mediumint unsigned':
             return 16777215
         if datatype == 'mediumint_signed':
             return 8388607
-        if datatype == 'int':
+        if datatype == 'int' or datatype == 'int unsigned':
             return 4294967295
         if datatype == 'int_signed':
             return 2147483647
-        if datatype == 'bigint':
+        if datatype == 'bigint' or datatype == 'bigint unsigned':
             return 18446744073709551615
         if datatype == 'bigint_signed':
             return 9223372036854775807
+        raise Exception('datatype {} is not implemented'.format(datatype))
 
 
 class Output(object):
