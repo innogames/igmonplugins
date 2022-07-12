@@ -64,7 +64,7 @@ for manufacturer in HDD_NAMES:
             exit_status = 1
         continue
 
-    for csvfile in glob.glob("*" + manufacturer + "*.csv"):
+    for csvfile in glob.glob(".*" + manufacturer + "*.csv"):
         with open(csvfile) as myfile:
             csv_last_line = (list(myfile)[-1])
         csv_array = csv_last_line.split("\t")
