@@ -23,14 +23,14 @@ Copyright (c) 2020 InnoGames GmbH
 
 import argparse
 from subprocess import check_output, STDOUT, CalledProcessError
-import platform
-import re
 import sys
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description=('Check raid state, fragmentation and utilisation of ZPools'),
+        description=(
+            'Check raid state, fragmentation and utilisation of ZPools'
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -43,7 +43,7 @@ def main():
 
     parser.add_argument(
         '--fragmentation-critical',
-        help="critical threshold for fragmentation of zpool",\
+        help="critical threshold for fragmentation of zpool",
         metavar='percentage',
         type=int, default=50,
     )
@@ -65,8 +65,12 @@ def main():
     args = parser.parse_args()
 
     try:
-        proc = check_output(
-            ['/sbin/zpool', 'list', '-H'], stderr=STDOUT
+        proc = check_output([
+            '/sbin/zpool',
+            'list',
+            '-H',
+            '-o', 'name,frag,cap,health'
+        ], stderr=STDOUT
         ).decode()
     except OSError as e:
         print('UNKNOWN: can\'t read zpool status: {}'.format(e))
@@ -74,7 +78,7 @@ def main():
     except CalledProcessError as e:
         print('UNKNOWN: can\'t read zpool status: {}'.format(e.output))
         return ExitCodes.unknown
-    
+
     exit_multiline = []
     lines = proc.splitlines()
 
@@ -107,12 +111,12 @@ def parse_zpool(line, args):
     """
 
     data = line.split('\t')
-    assert len(data) == 10, "Expected 10 columns from zpool status"
+    assert len(data) == 4, "Expected 10 columns from zpool status"
 
     name = data[0]
-    frag = data[5]
-    cap = data[6]
-    health = data[8]
+    frag = data[1]
+    cap = data[2]
+    health = data[3]
 
     ret_code = ExitCodes.ok
     cap = int(cap.split('%')[0])
