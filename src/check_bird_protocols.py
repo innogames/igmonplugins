@@ -25,6 +25,7 @@ Copyright (c) 2022 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import re
 import sys
 
 from argparse import ArgumentParser
@@ -36,21 +37,28 @@ def parse_args():
         description='Check if all BIRD protocols are up and established'
     )
     parser.add_argument('path', help='Path to the birdc/birdc6 binary')
-
+    parser.add_argument(
+        '-i',
+        '--ignore-regex',
+        required=False,
+        default=None,
+        help='Regular expression that matches protocols that should be ignored'
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     birdc_path = args.path
+    ignore_regex = args.ignore_regex
 
-    code, reason = check_birdc_protocols(birdc_path)
+    code, reason = check_birdc_protocols(birdc_path, ignore_regex)
 
     print(format_nagios_message(code, reason))
     sys.exit(code)
 
 
-def check_birdc_protocols(path):
+def check_birdc_protocols(path, ignore_regex):
     try:
         output = check_output([path, 'show', 'protocols'], stderr=STDOUT)
     except (FileNotFoundError, PermissionError):
@@ -78,8 +86,12 @@ def check_birdc_protocols(path):
         ProtocolStates.disabled: [],
         ProtocolStates.unknown: [],
     }
+    ignore_pattern = re.compile(ignore_regex) if ignore_regex else None
 
     for protocol in protocols_parsed:
+        if ignore_pattern and ignore_pattern.match(protocol['name']):
+            continue
+
         if protocol['type'] == 'BGP':
             ret = check_bgp_protocol(protocol)
         elif protocol['type'] == 'OSPF':
