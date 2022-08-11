@@ -66,7 +66,12 @@ for manufacturer in HDD_NAMES:
 
     for csvfile in glob.glob("*" + manufacturer + "*.csv"):
         with open(csvfile) as myfile:
-            csv_last_line = (list(myfile)[-1])
+            # Get a snapshot in case file changes in the meantime
+            myfile_list = list(myfile)
+            if len(myfile_list) == 0:
+                # Empty, pass
+                continue
+            csv_last_line = myfile_list[-1]
         csv_array = csv_last_line.split("\t")
 
         smart_date = csv_array.pop(0).strip(";\n")
