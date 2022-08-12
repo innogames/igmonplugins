@@ -23,112 +23,12 @@ Copyright (c) 2021 InnoGames GmbH
 
 import json, subprocess, re, tempfile
 from argparse import ArgumentParser
+from collections import defaultdict
 from datetime import datetime
 from os import rename, chmod
 
-
-def main():
-    carps = check_carps()
-
-    # Don't run any further if there are no MASTER carps on this hwlb
-    carp_master = False
-    for k, v in carps.items():
-        carp_master = (carp_master | v['carp_master'])
-
-    if not carp_master:
-        print("The check is run only when there is a MASTER CARP")
-        return
-
-    args = args_parse()
-
-    if args.hwlb_group:
-        nagios_service = 'lbpool_states_' + args.hwlb_group
-    else:
-        nagios_service = 'lbpool_states'
-
-    pfctl_output, err = subprocess.Popen(['sudo', 'pfctl', '-vsr'],
-                                         stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE).communicate()
-
-    # The default limit set in pf.conf, fetch it from what is loaded in pf
-    default_limits, err1 = subprocess.Popen(['sudo', 'pfctl', '-sm'],
-                                            stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE).communicate()
-
-    # Hard state limit is always printed in first line
-    default_limit_lines = default_limits.decode().splitlines()
-
-    for line in default_limit_lines:
-        if "states" in line:
-            default_state_limit = int(line.split(' ')[-1])
-
-    states_dict = pfctl_parser(pfctl_output)
-
-    lbpools = get_lbpools()
-
-    lbpools = {
-        lbname: {
-            'state_limit': (
-                int(lb_params['state_limit'])
-                if lb_params['state_limit']
-                else default_state_limit
-            ),
-            'cur_states': int(states_dict[lb_params['pf_name']]['cur_states']),
-            'carp_master': carp_status['carp_master'],
-        }
-        for vlan, carp_status in carps.items()
-        for lbname, lb_params in lbpools.items()
-        if (lb_params['protocol_port'] and
-            lb_params['nodes'] and
-            lb_params['pf_name'] in states_dict and
-            lb_params['vlan'] == int(vlan)
-            )
-    }
-
-    if not args.nsca_srv:
-        separator = "\n"
-    else:
-        separator = "\27"
-
-    send_msg = check_states(lbpools,
-                            states_dict,
-                            default_state_limit,
-                            nagios_service,
-                            separator,
-                            args.warning,
-                            args.critical
-                            )
-
-    lbpools_igcollect = {
-        'network': {
-            'lbpools': {
-                lbname: lb_params
-                for lbname, lb_params in lbpools.items()
-                if lb_params['carp_master'] and lb_params.pop('carp_master')
-            }
-        }
-    }
-
-    # Send metrics to grafana via helper
-    grafana_msg = send_grafsy(lbpools_igcollect)
-
-    if not args.nsca_srv:
-        print(send_msg)
-        print("default_state_limit is {}\n".format(default_state_limit))
-        print(grafana_msg)
-    else:
-
-        for monitor in args.nsca_srv:
-            nsca = subprocess.Popen(
-                [
-                    '/usr/local/sbin/send_nsca',
-                    '-H', monitor,
-                    '-to', '20',
-                    '-c', '/usr/local/etc/nagios/send_nsca.cfg',
-                ],
-                stdin=subprocess.PIPE,
-            )
-            nsca.communicate(send_msg.encode())
+POOL_RE = re.compile(r'(pool_[\d]+)_')
+STATES_RE = re.compile('States: ([\d]+)')
 
 
 def args_parse():
@@ -157,104 +57,153 @@ def args_parse():
     return parser.parse_args()
 
 
-def check_carps():
-    configs = ['/var/run/iglb/carp_state.json', '/etc/iglb/networks.json']
+def main():
+    args = args_parse()
 
-    with open(configs[0]) as carp_statejson, \
-            open(configs[1]) as networkjson:
-        carp_state = json.load(carp_statejson)
-        network = json.load(networkjson)
-        carps = {
-            vn['vlan_tag']: {
-                'carp_master': v['carp_master']
-            }
-            for k, v in carp_state.items()
-            for kn, vn in network['internal_networks'].items()
-            if k == kn
+    if args.hwlb_group:
+        nagios_service = 'lbpool_states_' + args.hwlb_group
+    else:
+        nagios_service = 'lbpool_states'
+
+    carp_states = get_carp_states()
+    current_states = get_current_states()
+    default_state_limit = get_state_limit()
+    lbpools_configs = get_lbpools_config()
+
+    lbpools_states = {}
+    for lbpool_name, lbpool_params in lbpools_configs.items():
+
+        # Skip things which are not real LB Pools
+        if not (lbpool_params['protocol_port'] and lbpool_params['nodes']):
+            continue
+
+        # Skip LB Pools with no corresponding MASTER carp
+        route_network = ''
+        for lbnode_params in lbpool_params['nodes'].values():
+            route_network = lbnode_params['route_network']
+        if not carp_states[route_network]:
+            continue
+
+        lbpools_states[lbpool_name] = {
+            'state_limit': lbpool_params['state_limit']
+                if lbpool_params['state_limit'] else default_state_limit,
+            'cur_states': current_states[lbpool_params['pf_name']],
         }
 
-    return carps
+    if not args.nsca_srv:
+        separator = "\n"
+    else:
+        separator = "\27"
+
+    send_msg = check_states(lbpools_states, nagios_service, separator, args.warning, args.critical)
+
+    # Send metrics to grafana via helper
+    grafana_msg = send_grafsy(lbpools_states)
+
+    if not args.nsca_srv:
+        print(send_msg)
+        print(grafana_msg)
+    else:
+
+        for monitor in args.nsca_srv:
+            nsca = subprocess.Popen(
+                [
+                    '/usr/local/sbin/send_nsca',
+                    '-H', monitor,
+                    '-to', '20',
+                    '-c', '/usr/local/etc/nagios/send_nsca.cfg',
+                ],
+                stdin=subprocess.PIPE,
+            )
+            nsca.communicate(send_msg.encode())
 
 
-def get_lbpools():
+def get_carp_states():
+    ret = {}
+    with open('/var/run/iglb/carp_state.json') as carp_states_file:
+        carp_states = json.load(carp_states_file)
+        for network_name, network_params in carp_states.items():
+            ret[network_name] = carp_states[network_name]['carp_master']
+
+    return ret
+
+
+def get_lbpools_config():
     config = '/etc/iglb/lbpools.json'
 
     with open(config) as jsonfile:
-        lbpools_obj = json.load(jsonfile)
-
-    return lbpools_obj
+        return json.load(jsonfile)
 
 
-def check_states(lbpools, states_dict, default_state_limit, nagios_service,
-                 separator, warn, crit):
+def check_states(lbpools_states, nagios_service, separator, warn, crit):
     """ Compare the current states of each lbpool and compute results """
 
     msg = ''
 
-    for lbname, lb_params in lbpools.items():
+    for lbpool_name, lbpool_params in lbpools_states.items():
+        status = ''
+        exit_code = local_exit_code = 0
+        state_limit = lbpool_params['state_limit']
+        critical = state_limit * (crit * 0.01)
+        warning = state_limit * (warn * 0.01)
+        cur_states = lbpool_params['cur_states']
 
-        if lb_params['carp_master']:
-            statuses = ''
-            exit_code = local_exit_code = 0
-            state_limit = lb_params['state_limit']
-            critical = state_limit * (crit * 0.01)
-            warning = state_limit * (warn * 0.01)
-            cur_states = int(lb_params['cur_states'])
+        if cur_states >= critical:
+            local_exit_code = 2
+            status = f'Used states are above {crit}% of states limit | '
 
-            if cur_states >= critical:
-                local_exit_code = 2
-                statuses += ('Used states are above {}% of states '
-                             'limit | States limit: {}, Current states: {'
-                             '}').format(crit, state_limit, cur_states)
-            elif cur_states >= warning:
-                local_exit_code = 1
-                statuses += ('Number of states are above {}% of states '
-                             'limit | States limit: {}, Current states: {'
-                             '}').format(warn, state_limit, cur_states)
+        elif cur_states >= warning:
+            local_exit_code = 1
+            status = f'Number of states are above {warn}% of states limit | '
 
-            if exit_code < local_exit_code:
-                exit_code = local_exit_code
+        if exit_code < local_exit_code:
+            exit_code = local_exit_code
 
-            if exit_code == 0:
-                statuses = ('Used states are below the thresholds | '
-                            'States limit: {}, Current states: {}'
-                            ).format(state_limit, cur_states)
+        if exit_code == 0:
+            status = f'Used states are below the thresholds | '
 
-            msg += ('{}\t{}\t{}\t{}{}').format(lbname, nagios_service,
-                                               exit_code,
-                                               statuses, separator
-                                               )
+        status += f'limit={state_limit}, current={cur_states}'
+
+        msg += f'{lbpool_name}\t{nagios_service}\t{exit_code}\t{status}{separator}'
+
     return msg
 
 
-def pfctl_parser(pfctl_output):
+def get_state_limit():
+    # The default limit set in pf.conf, fetch it from what is loaded in pf
+    default_limits = subprocess.run(
+        ['sudo', 'pfctl', '-sm'],
+        capture_output=True, text=True,
+    ).stdout.splitlines()
+
+    for line in default_limits:
+        if 'states' in line:
+            return int(line.split(' ')[-1])
+
+
+def get_current_states():
     """
-    For parsing pf output and create a dict containing the current max-states
-    for every lbpool object
+    Get pf ruleset including all anchors, look for route-to rules and get
+    the amount of states associated with each rule. Identify LB Pool name
+    for each rule and store the largest amount of states per LB Pool.
     """
 
-    states_dict = {}
-    output_pfctl_list = pfctl_output.decode().splitlines()
-    for line in output_pfctl_list:
-        indx = output_pfctl_list.index(line)
-        if "route-to" in line:
-            pool = re.search("(pool_\d{5,})(_)(\d)", line).group(1)
-            new_states = int(
-                output_pfctl_list[(indx + 1)].strip('[] ', ).split(
-                    'States:')[1].strip()
-            )
-            if pool in states_dict.keys():
-                if new_states > states_dict[pool]['cur_states']:
-                    states_dict[pool] = {'cur_states': new_states}
-            else:
-                states_dict.update({
-                    pool: {
-                        'cur_states': new_states
-                    }
-                })
+    pfctl_output = subprocess.run(
+        ['sudo', 'pfctl', '-vsr', '-a*'],
+        capture_output=True, text=True,
+    ).stdout.splitlines()
 
-    return states_dict
+    ret = defaultdict(int)
+    for line in pfctl_output:
+        indx = pfctl_output.index(line)
+        if 'route-to' not in line:
+            continue
+        lbpool_name = POOL_RE.search(line).group(1)
+        last_states = int(STATES_RE.search(pfctl_output[(indx + 1)]).group(1))
+        if last_states > ret[lbpool_name]:
+            ret[lbpool_name] = last_states
 
+    return ret
 
 def send_grafsy(data):
     "For sending the results to grafana"
