@@ -27,6 +27,7 @@ Copyright (c) 2022 InnoGames GmbH
 # THE SOFTWARE.
 
 from argparse import ArgumentParser, Namespace
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 import requests
 import sys
@@ -38,8 +39,8 @@ def parse_args() -> Namespace:
     Returns the parsed arguments in a dictionary.
     """
 
-    p = ArgumentParser(
-        description='Monitor Sentry teams and organization for exceeding N events')
+    p = ArgumentParser(description='Monitor Sentry teams and organization for '
+                       'exceeding N events')
     p.add_argument('-b', '--bearer', required=True,
                    help='A sentry api token with at least read permissions')
     p.add_argument('-o', '--organization', required=True,
@@ -110,9 +111,9 @@ def main():
                 if args.verbose:
                     print('with unlimited events')
 
+    threads = 20
     # Iterate over teams and their projects to sum up their keys' rates
     for team in teams:
-
         if args.verbose:
             print(f"\nTeam \"{team['slug']}\", checking for projects")
 
@@ -120,22 +121,22 @@ def main():
         team['summed_events'] = 0
         team['unlimited_events'] = False
 
-        # Iterate over all projects of a team to find the limits of all dsns
-        for project in team['projects']:
+        # Fetch all keys on the project
+        with ThreadPoolExecutor(max_workers=threads) as executor:
 
-            if args.verbose:
-                print(f" Project \"{project['slug']}\", checking for keys")
+            future_to_url = {executor.submit(
+                    get_dsns_from_project,
+                    args.api_url,
+                    args.organization,
+                    project['slug'],
+                    args.bearer) for project in team['projects']}
 
-            # Fetch all keys on the project
-            # TODO use concurrent requests to scale out for tons of projects
-            dsns = get_dsns_from_project(
-                args.api_url, args.organization, project['slug'], args.bearer)
-
-            # Fetch rateLimits for each key and add them to the totals
-            traverse_dsns(dsns, team)
-
-    if args.verbose:
-        print("")
+            for future in as_completed(future_to_url):
+                try:
+                    res = future.result()
+                    traverse_dsns(res, team)
+                except Exception as e:
+                    print('Looks like something went wrong:', e)
 
     # Check if any team is over the team limit
     if args.per_team_limit:
@@ -182,9 +183,10 @@ def get_teams(api: str, organization_slug: str, bearer: str) -> dict:
             f'{api}/0/organizations/{organization_slug}/teams/',
             headers=headers)
     if res.status_code != 200:
-        print(f'Expected HTTP 200 but got {res.status_code} while fetching teams')
+        print(f'Expected HTTP 200 but got {res.status_code} '
+              'while fetching teams')
         sys.exit(3)  # Nagios code UNKNOWN
-        
+
     return res.json()
 
 
@@ -196,7 +198,8 @@ def get_dsns_from_project(api: str, organization_slug: str, project: str,
             f'{api}/0/projects/{organization_slug}/{project}/keys/',
             headers=headers)
     if res.status_code != 200:
-        print(f'Expected HTTP 200 but got {res.status_code} while fetching dsns for project')
+        print(f'Expected HTTP 200 but got {res.status_code} while fetching '
+              'dsns for project')
         sys.exit(3)  # Nagios code UNKNOWN
 
     return res.json()
