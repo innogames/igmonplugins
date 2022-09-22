@@ -80,63 +80,73 @@ def main():
             print(f"UNKNOWN: Could not find all teams: {args.teams}! Typo ?")
             sys.exit(3)
 
-    # Initiate exit code and organization wide event counter
+    # Initiate exit code, organization wide event counters and lists
     exit = 0
     organization = {'summed_events': 0, 'unlimited_events': False}
+    project_list = []
+    results = []
+    threads = 20
 
-    def traverse_dsns(dsns: List[dict], team: dict) -> None:
+    for team in teams:
+        team['summed_events'] = 0
+        team['unlimited_events'] = False
+
+    def merge_dsns(results: List[dict], teams: List[dict]) -> None:
         """
         Iterate over DSNs and update the team and organization
         counters and unlimited states
         """
-        for dsn in dsns:
 
+        seconds_per_day = 60 * 60 * 24
+
+        for team in teams:
             if args.verbose:
-                print(f'  Key: "{dsn["name"]}",', end=' ')
+                print(f"\nTeam \"{team['slug']}\", checking for projects")
 
-            if dsn['rateLimit']:
-                # Calculate events per day and add them to the counters
-                seconds_per_day = 60 * 60 * 24
-                rate_count = dsn['rateLimit']['count']
-                rate_window = dsn['rateLimit']['window']
-                rate_daily = int(rate_count * seconds_per_day / rate_window)
-                organization['summed_events'] += rate_daily
-                team['summed_events'] += rate_daily
-                if args.verbose:
-                    print(f'limited to {rate_daily} events per day')
-            else:
-                # Set unlimtied events if no limt is given
-                team['unlimited_events'] = True
-                organization['unlimited_events'] = True
-                if args.verbose:
-                    print('with unlimited events')
+            for dsn in results:
+                for project in team['projects']:
+                    if (int(dsn['projectId']) == int(project['id'])
+                            and dsn['rateLimit']):
+                        rate_count = dsn['rateLimit']['count']
+                        rate_window = dsn['rateLimit']['window']
+                        rate_daily = int(
+                            rate_count * seconds_per_day / rate_window)
+                        organization['summed_events'] += rate_daily
+                        team['summed_events'] += rate_daily
+                        if args.verbose:
+                            print(f'\tProject: {project["slug"]}, Key: '
+                                  f'{dsn["name"]} limited to: {rate_daily} '
+                                  'events per day')
+                    elif int(dsn['projectId']) == int(project['id']):
+                        organization['unlimited_events'] = True
+                        team['unlimited_events'] = True
+                        if args.verbose:
+                            print(f'\tProject: {project["slug"]}, Key: '
+                                  f'{dsn["name"]} with unlimited events')
 
-    threads = 20
-    # Iterate over teams and their projects to sum up their keys' rates
+    # Build list of all projects for parallel queries
     for team in teams:
-        if args.verbose:
-            print(f"\nTeam \"{team['slug']}\", checking for projects")
+        for project in team['projects']:
+            project['team'] = team
+            project_list.append(project)
 
-        # Initiate team wide event counters
-        team['summed_events'] = 0
-        team['unlimited_events'] = False
+    # Fetch all keys on the project
+    with ThreadPoolExecutor(max_workers=threads) as executor:
 
-        # Fetch all keys on the project
-        with ThreadPoolExecutor(max_workers=threads) as executor:
+        future_to_url = {executor.submit(
+                get_dsns_from_project,
+                args.api_url,
+                args.organization,
+                project['slug'],
+                args.bearer) for project in project_list}
 
-            future_to_url = {executor.submit(
-                    get_dsns_from_project,
-                    args.api_url,
-                    args.organization,
-                    project['slug'],
-                    args.bearer) for project in team['projects']}
+        for future in as_completed(future_to_url):
+            try:
+                results.append(future.result()[0])
+            except Exception as e:
+                print('Looks like something went wrong:', e)
 
-            for future in as_completed(future_to_url):
-                try:
-                    res = future.result()
-                    traverse_dsns(res, team)
-                except Exception as e:
-                    print('Looks like something went wrong:', e)
+    merge_dsns(results, teams)
 
     # Check if any team is over the team limit
     if args.per_team_limit:
@@ -147,9 +157,9 @@ def main():
                       f"{team['slug']}")
             elif team['summed_events'] > args.per_team_limit:
                 exit = 1
-                print(f"WARNING: {team['summed_events']} events are "
-                      f"configured, but {args.per_team_limit} allowed "
-                      f"for team: {team['slug']}")
+                print(f"WARNING: {team['summed_events']} "
+                      f"events are configured, but {args.per_team_limit} "
+                      f"allowed for team: {team['slug']}")
 
     # Check if organization wide limit is reached
     if args.organization_limit:
