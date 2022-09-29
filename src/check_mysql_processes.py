@@ -46,7 +46,7 @@ and critical reporting.  Here are some examples:
 --warning='in transaction at prepared'
     Emit warning for a prepared transaction
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2022 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -65,12 +65,11 @@ Copyright (c) 2020 InnoGames GmbH
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-import typing
 from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
 from collections import defaultdict
 from operator import itemgetter
-from sys import exit
 from re import compile as regexp_compile
+from sys import exit
 
 from mysql.connector import connect
 
@@ -82,34 +81,34 @@ def parse_args():
     parser.add_argument(
         '--host',
         default='localhost',
-        help='Target MySQL server (default: %(default)s)'
+        help='Target MySQL server (default: %(default)s)',
     )
     parser.add_argument(
         '--unix-socket',
         default='/var/run/mysqld/mysqld.sock',
-        help='Target unix socket (default: %(default)s)'
+        help='Target unix socket (default: %(default)s)',
     )
     parser.add_argument(
         '--user',
-        help='MySQL user (default: %(default)s)'
+        help='MySQL user (default: %(default)s)',
     )
     parser.add_argument(
         '--passwd',
-        help='MySQL password (default empty)'
+        help='MySQL password (default empty)',
     )
     parser.add_argument(
         '--warning',
         nargs='*',
         type=Filter,
         default=[Filter('1 for 30s')],
-        help='Warning threshold in count and time (default: %(default)s)'
+        help='Warning threshold in count and time (default: %(default)s)',
     )
     parser.add_argument(
         '--critical',
         nargs='*',
         type=Filter,
         default=[Filter('1 for 2min')],
-        help='Critical threshold in count and time (default: %(default)s)'
+        help='Critical threshold in count and time (default: %(default)s)',
     )
     parser.add_argument(
         '--exclude',
@@ -134,13 +133,14 @@ def main():
         if args.passwd:
             connection_kwargs['passwd'] = args.passwd
     db = Database(connect(**connection_kwargs))
+    check = Check(db, args.exclude)
 
-    critical_problems = db.get_problems(args.critical, args.exclude)
+    critical_problems = check.get_problems(args.critical)
     if critical_problems:
         print('CRITICAL {}'.format(', '.join(critical_problems)))
         exit(ExitCodes.critical)
 
-    warning_problems = db.get_problems(args.warning, args.exclude)
+    warning_problems = check.get_problems(args.warning)
     if warning_problems:
         print('WARNING {}'.format(', '.join(warning_problems)))
         exit(ExitCodes.warning)
@@ -245,7 +245,15 @@ class Database:
 
         return self.txns.get(process_id)
 
-    def parse_transaction_header(self, line):
+    def get_max_connections(self):
+        if self.max_connections is None:
+            result = self.execute("SHOW VARIABLES LIKE 'max_connections'")
+            assert len(result) == 1
+            self.max_connections = int(result[0]['value'])
+        return self.max_connections
+
+    @staticmethod
+    def parse_transaction_header(line):
         line = line[len('---TRANSACTION '):]
         txn_id_str, line = line.split(', ', 1)
         if not txn_id_str.isdigit():
@@ -272,17 +280,6 @@ class Database:
             'seconds': int(line_split[0]),
             'state': state,
         }
-
-    def get_max_connections(self):
-        if self.max_connections is None:
-            result = self.execute("SHOW VARIABLES LIKE 'max_connections'")
-            assert len(result) == 1
-            self.max_connections = int(result[0]['value'])
-        return self.max_connections
-
-    def get_problems(self, filters, excludes):
-        c = Check(self, excludes)
-        return list(filter(bool, (c.get_problem(f) for f in filters)))
 
 
 class ExitCodes:
@@ -332,8 +329,8 @@ class Interval:
             if self.seconds % next_multiplier == 0:
                 # The next one matches nicely.
                 continue
-            break
-        return str(self.seconds // multiplier) + unit
+
+            return str(self.seconds // multiplier) + unit
 
 
 class Filter:
@@ -417,6 +414,9 @@ class Check:
     def __init__(self, db, excludes):
         self._db = db
         self._excludes = excludes
+
+    def get_problems(self, filters):
+        return list(filter(bool, (self.get_problem(f) for f in filters)))
 
     def get_problem(self, filtr):
         for exclude in self._excludes:
