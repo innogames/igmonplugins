@@ -65,7 +65,7 @@ Copyright (c) 2020 InnoGames GmbH
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-
+import typing
 from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
 from collections import defaultdict
 from operator import itemgetter
@@ -111,6 +111,13 @@ def parse_args():
         default=[Filter('1 for 2min')],
         help='Critical threshold in count and time (default: %(default)s)'
     )
+    parser.add_argument(
+        '--exclude',
+        nargs='*',
+        type=Filter,
+        default=[],
+        help='Exclude specific queries globally',
+    )
 
     return parser.parse_args()
 
@@ -128,14 +135,16 @@ def main():
             connection_kwargs['passwd'] = args.passwd
     db = Database(connect(**connection_kwargs))
 
-    critical_problems = db.get_problems(args.critical)
+    critical_problems = db.get_problems(args.critical, args.exclude)
     if critical_problems:
         print('CRITICAL {}'.format(', '.join(critical_problems)))
         exit(ExitCodes.critical)
-    warning_problems = db.get_problems(args.warning)
+
+    warning_problems = db.get_problems(args.warning, args.exclude)
     if warning_problems:
         print('WARNING {}'.format(', '.join(warning_problems)))
         exit(ExitCodes.warning)
+
     print('OK')
     exit(ExitCodes.ok)
 
@@ -271,9 +280,9 @@ class Database:
             self.max_connections = int(result[0]['value'])
         return self.max_connections
 
-    def get_problems(self, filters):
-        c = Check()
-        return list(filter(bool, (c.get_problem(self, f) for f in filters)))
+    def get_problems(self, filters, excludes):
+        c = Check(self, excludes)
+        return list(filter(bool, (c.get_problem(f) for f in filters)))
 
 
 class ExitCodes:
@@ -352,7 +361,7 @@ class Filter:
         '(?P<command_time_unit>{time_units})?'
         ')?',
         '(?:at',  # State after separator
-        '(?P<command_state>[a-z ]+?)',
+        '(?P<command_state>[a-z; ]+?)',
         ')?',
         '\Z',
     ]).format(
@@ -405,22 +414,52 @@ class Filter:
 
 
 class Check:
-    def get_problem(self, db, filtr):
+    def __init__(self, db, excludes):
+        self._db = db
+        self._excludes = excludes
+
+    def get_problem(self, filtr):
+        for exclude in self._excludes:
+            count = self._count_problems(exclude)
+            if count >= self._get_count_limit(filtr):
+                return None
+
+        count = self._count_problems(filtr)
+        if count >= self._get_count_limit(filtr):
+            return self._format_problem(count, filtr)
+
+        return None
+
+    def _count_problems(self, filtr):
         count = 0
-        for process in db.get_processes():
+        for process in self._db.get_processes():
             if process['time'] < int(filtr.command_time):
                 if not filtr.txn_time:
                     break
                 continue
             if self._fail_command(process, filtr):
                 continue
-            if filtr.txn and self._fail_txn(process, db, filtr):
+            if filtr.txn and self._fail_txn(process, filtr):
                 continue
             count += 1
 
-        if count >= self._get_count_limit(db, filtr):
-            return self._format_problem(count, filtr)
-        return None
+        return count
+
+    def _fail_txn(self, process, filtr):
+        txn_info = self._db.get_txn(process['id'])
+        if not txn_info:
+            return True
+        if txn_info['seconds'] < int(filtr.txn_time):
+            return True
+        if filtr.txn_state:
+            if not txn_info['state'].lower().startswith(filtr.txn_state):
+                return True
+        return False
+
+    def _get_count_limit(self, filtr):
+        if not filtr.relative():
+            return filtr.count_number
+        return filtr.count_number * self._db.get_max_connections() / 100.0
 
     @staticmethod
     def _fail_command(process, filtr):
@@ -431,24 +470,6 @@ class Check:
             if not process['state'].lower().startswith(filtr.command_state):
                 return True
         return False
-
-    @staticmethod
-    def _fail_txn(process, db, filtr):
-        txn_info = db.get_txn(process['id'])
-        if not txn_info:
-            return True
-        if txn_info['seconds'] < int(filtr.txn_time):
-            return True
-        if filtr.txn_state:
-            if not txn_info['state'].lower().startswith(filtr.txn_state):
-                return True
-        return False
-
-    @staticmethod
-    def _get_count_limit(db, filtr):
-        if not filtr.relative():
-            return filtr.count_number
-        return filtr.count_number * db.get_max_connections() / 100.0
 
     @staticmethod
     def _format_problem(count, filtr):
