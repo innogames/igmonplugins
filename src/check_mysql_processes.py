@@ -46,7 +46,7 @@ and critical reporting.  Here are some examples:
 --warning='in transaction at prepared'
     Emit warning for a prepared transaction
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2022 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -65,12 +65,11 @@ Copyright (c) 2020 InnoGames GmbH
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-
 from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
 from collections import defaultdict
 from operator import itemgetter
-from sys import exit
 from re import compile as regexp_compile
+from sys import exit
 
 from mysql.connector import connect
 
@@ -82,34 +81,41 @@ def parse_args():
     parser.add_argument(
         '--host',
         default='localhost',
-        help='Target MySQL server (default: %(default)s)'
+        help='Target MySQL server (default: %(default)s)',
     )
     parser.add_argument(
         '--unix-socket',
         default='/var/run/mysqld/mysqld.sock',
-        help='Target unix socket (default: %(default)s)'
+        help='Target unix socket (default: %(default)s)',
     )
     parser.add_argument(
         '--user',
-        help='MySQL user (default: %(default)s)'
+        help='MySQL user (default: %(default)s)',
     )
     parser.add_argument(
         '--passwd',
-        help='MySQL password (default empty)'
+        help='MySQL password (default empty)',
     )
     parser.add_argument(
         '--warning',
         nargs='*',
-        type=Check,
-        default=[Check('1 for 30s')],
-        help='Warning threshold in count and time (default: %(default)s)'
+        type=Filter,
+        default=[Filter('1 for 30s')],
+        help='Warning threshold in count and time (default: %(default)s)',
     )
     parser.add_argument(
         '--critical',
         nargs='*',
-        type=Check,
-        default=[Check('1 for 2min')],
-        help='Critical threshold in count and time (default: %(default)s)'
+        type=Filter,
+        default=[Filter('1 for 2min')],
+        help='Critical threshold in count and time (default: %(default)s)',
+    )
+    parser.add_argument(
+        '--exclude',
+        nargs='*',
+        type=Filter,
+        default=[],
+        help='Exclude specific queries globally',
     )
 
     return parser.parse_args()
@@ -127,15 +133,18 @@ def main():
         if args.passwd:
             connection_kwargs['passwd'] = args.passwd
     db = Database(connect(**connection_kwargs))
+    check = Check(db, args.exclude)
 
-    critical_problems = db.get_problems(args.critical)
+    critical_problems = check.get_problems(args.critical)
     if critical_problems:
         print('CRITICAL {}'.format(', '.join(critical_problems)))
         exit(ExitCodes.critical)
-    warning_problems = db.get_problems(args.warning)
+
+    warning_problems = check.get_problems(args.warning)
     if warning_problems:
         print('WARNING {}'.format(', '.join(warning_problems)))
         exit(ExitCodes.warning)
+
     print('OK')
     exit(ExitCodes.ok)
 
@@ -236,7 +245,15 @@ class Database:
 
         return self.txns.get(process_id)
 
-    def parse_transaction_header(self, line):
+    def get_max_connections(self):
+        if self.max_connections is None:
+            result = self.execute("SHOW VARIABLES LIKE 'max_connections'")
+            assert len(result) == 1
+            self.max_connections = int(result[0]['value'])
+        return self.max_connections
+
+    @staticmethod
+    def parse_transaction_header(line):
         line = line[len('---TRANSACTION '):]
         txn_id_str, line = line.split(', ', 1)
         if not txn_id_str.isdigit():
@@ -264,16 +281,6 @@ class Database:
             'state': state,
         }
 
-    def get_max_connections(self):
-        if self.max_connections is None:
-            result = self.execute("SHOW VARIABLES LIKE 'max_connections'")
-            assert len(result) == 1
-            self.max_connections = int(result[0]['value'])
-        return self.max_connections
-
-    def get_problems(self, checks):
-        return list(filter(bool, (c.get_problem(self) for c in checks)))
-
 
 class ExitCodes:
     ok = 0
@@ -284,7 +291,7 @@ class ExitCodes:
 class Interval:
     units = [
         ('s', 1),
-        ('min', 60),            # "m" would mean "metre"
+        ('min', 60),  # "m" would mean "metre"
         ('h', 60 * 60),
         ('d', 12 * 60 * 60),
     ]
@@ -322,36 +329,36 @@ class Interval:
             if self.seconds % next_multiplier == 0:
                 # The next one matches nicely.
                 continue
-            break
-        return str(self.seconds // multiplier) + unit
+
+            return str(self.seconds // multiplier) + unit
 
 
-class Check:
-    pattern = regexp_compile('\s*'.join([   # Allow spaces between everything
+class Filter:
+    pattern = regexp_compile('\s*'.join([  # Allow spaces between everything
         '\A',
-        '(?:',                              # Count clause
+        '(?:',  # Count clause
         '(?P<count_number>[0-9]+)',
         '(?P<count_unit>%?)',
         ')?',
-        '(?:in',                            # Transaction after separator
+        '(?:in',  # Transaction after separator
         '(?P<txn>transaction)',
-        '(?:for',                           # Time clause after separator
+        '(?:for',  # Time clause after separator
         '(?P<txn_time_number>[0-9]+)',
         '(?P<txn_time_unit>{time_units})?'
         ')?',
-        '(?:at',                            # State after separator
+        '(?:at',  # State after separator
         '(?P<txn_state>[a-z ]+?)',
         ')?',
         ')?',
-        '(?:on',                            # Command after separator
+        '(?:on',  # Command after separator
         '(?P<command>[a-z ]+?)',
         ')?',
-        '(?:for',                           # Time clause after separator
+        '(?:for',  # Time clause after separator
         '(?P<command_time_number>[0-9]+)',
         '(?P<command_time_unit>{time_units})?'
         ')?',
-        '(?:at',                            # State after separator
-        '(?P<command_state>[a-z ]+?)',
+        '(?:at',  # State after separator
+        '(?P<command_state>[a-z; ]+?)',
         ')?',
         '\Z',
     ]).format(
@@ -402,52 +409,73 @@ class Check:
     def relative(self):
         return bool(self.count_unit)
 
-    def get_problem(self, db):
+
+class Check:
+    def __init__(self, db, excludes):
+        self._db = db
+        self._excludes = excludes
+
+    def get_problems(self, filters):
+        return list(filter(bool, (self.get_problem(f) for f in filters)))
+
+    def get_problem(self, filtr):
+        for exclude in self._excludes:
+            count = self._count_problems(exclude)
+            if count >= self._get_count_limit(filtr):
+                return None
+
+        count = self._count_problems(filtr)
+        if count >= self._get_count_limit(filtr):
+            return self._format_problem(count, filtr)
+
+        return None
+
+    def _count_problems(self, filtr):
         count = 0
-        for process in db.get_processes():
-            if process['time'] < int(self.command_time):
-                if not self.txn_time:
+        for process in self._db.get_processes():
+            if process['time'] < int(filtr.command_time):
+                if not filtr.txn_time:
                     break
                 continue
-            if self.fail_command(process):
+            if self._fail_command(process, filtr):
                 continue
-            if self.txn and self.fail_txn(process, db):
+            if filtr.txn and self._fail_txn(process, filtr):
                 continue
             count += 1
 
-        if count >= self.get_count_limit(db):
-            return self.format_problem(count)
-        return None
+        return count
 
-    def fail_command(self, process):
-        # Command time is checked by the caller.
-        if self.command and process['command'].lower() != self.command:
-            return True
-        if self.command_state:
-            if not process['state'].lower().startswith(self.command_state):
-                return True
-        return False
-
-    def fail_txn(self, process, db):
-        txn_info = db.get_txn(process['id'])
+    def _fail_txn(self, process, filtr):
+        txn_info = self._db.get_txn(process['id'])
         if not txn_info:
             return True
-        if txn_info['seconds'] < int(self.txn_time):
+        if txn_info['seconds'] < int(filtr.txn_time):
             return True
-        if self.txn_state:
-            if not txn_info['state'].lower().startswith(self.txn_state):
+        if filtr.txn_state:
+            if not txn_info['state'].lower().startswith(filtr.txn_state):
                 return True
         return False
 
-    def get_count_limit(self, db):
-        if not self.relative():
-            return self.count_number
-        return self.count_number * db.get_max_connections() / 100.0
+    def _get_count_limit(self, filtr):
+        if not filtr.relative():
+            return filtr.count_number
+        return filtr.count_number * self._db.get_max_connections() / 100.0
 
-    def format_problem(self, count):
-        problem = '{} processes{}'.format(count, self.get_spec_str())
-        if self.count_number > 1 or self.count_unit:
-            problem += ' exceeds ' + str(self.count_number) + self.count_unit
+    @staticmethod
+    def _fail_command(process, filtr):
+        # Command time is checked by the caller.
+        if filtr.command and process['command'].lower() != filtr.command:
+            return True
+        if filtr.command_state:
+            if not process['state'].lower().startswith(filtr.command_state):
+                return True
+        return False
+
+    @staticmethod
+    def _format_problem(count, filtr):
+        problem = '{} processes{}'.format(count, filtr.get_spec_str())
+        if filtr.count_number > 1 or filtr.count_unit:
+            problem += ' exceeds ' + str(filtr.count_number) + filtr.count_unit
         return problem
 
 
