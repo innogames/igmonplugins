@@ -30,12 +30,11 @@ from sys import exit
 
 
 def parse_args() -> Namespace:
-    parser = ArgumentParser()
-    parser.add_argument('-s', dest='service_name', type=str, required=True)
-    parser.add_argument('-w', dest='warning_days', type=int, required=True)
-    parser.add_argument('-c', dest='critical_days', type=int, required=True)
-    parser.add_argument('-p', dest='timestamp_file_path', type=str,
-                        required=True)
+    parser = ArgumentParser(__doc__)
+    parser.add_argument("-s", dest="service_name", type=str, required=True)
+    parser.add_argument("-w", dest="warning_days", type=int, required=True)
+    parser.add_argument("-c", dest="critical_days", type=int, required=True)
+    parser.add_argument("-p", dest="timestamp_file_path", type=str, required=True)
     return parser.parse_args()
 
 
@@ -48,10 +47,21 @@ def get_service_restart_time(service_name: str) -> datetime:
 
     Returns: Datetime.
     """
-    date_s = check_output(
-        ['/bin/systemctl', 'show', f"{service_name}.service", '-p',
-         'ExecMainStartTimestamp', '--value']).decode("utf-8").rstrip('\n')
-    return datetime.strptime(date_s, '%a %Y-%m-%d %H:%M:%S %Z')
+    date_s = (
+        check_output(
+            [
+                "/bin/systemctl",
+                "show",
+                f"{service_name}.service",
+                "-p",
+                "ExecMainStartTimestamp",
+                "--value",
+            ]
+        )
+        .decode("utf-8")
+        .rstrip("\n")
+    )
+    return datetime.strptime(date_s, "%a %Y-%m-%d %H:%M:%S %Z")
 
 
 def get_secret_file_time(timestamp_path: str) -> datetime:
@@ -65,8 +75,8 @@ def get_secret_file_time(timestamp_path: str) -> datetime:
 
     Returns: Datetime.
     """
-    with open(timestamp_path, 'r') as f:
-        date_line = f.readline().split(' ')[1].rstrip('\n')
+    with open(timestamp_path, "r") as f:
+        date_line = f.readline().split(" ")[1].rstrip("\n")
     return datetime.fromisoformat(date_line)
 
 
@@ -86,22 +96,29 @@ def get_time_delta(service_time: datetime,
 
 def main():
     args = parse_args()
-    delta = get_time_delta(get_service_restart_time(args.service_name),
-                           get_secret_file_time(args.timestamp_file_path))
+    delta = get_time_delta(
+        get_service_restart_time(args.service_name),
+        get_secret_file_time(args.timestamp_file_path),
+    )
     if delta.days > args.critical_days:
-        print(f"CRITICAL - {args.service_name} does not run with newest set of "
-              "secrets")
+        print(
+            f"CRITICAL - {args.service_name} does not run with newest set of"
+            " secrets"
+        )
         exit(2)
     elif delta.days > args.warning_days:
-        print(f"WARNING - {args.service_name} does not run with newest set of "
-              "secrets")
+        print(
+            f"WARNING - {args.service_name} does not run with newest set of"
+            " secrets"
+        )
         exit(1)
     else:
         print(
             f"OK - {args.service_name} is running with a current set of secrets"
-            " parameters.")
+            " parameters."
+        )
         exit(0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
