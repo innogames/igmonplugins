@@ -92,6 +92,13 @@ def check_server(opts):
         return ['CRITICAL', msg]
     if s['Seconds_Behind_Master'] > opts.WARN_SEC_BEHIND_MASTER:
         return ['WARNING', msg]
+    # There could be gaps in replication. We check here, because during delays
+    # this might happen. To spot a gap, we check if there is more than one
+    # colon per GTID line
+    for line in s['Executed_Gtid_Set'].split('\n'):
+        if line.count(':') > 1:
+            msg = 'Gaps in replication detected: ' + line
+            return ['CRITICAL', msg]
     return ['OK', msg]
 
 
