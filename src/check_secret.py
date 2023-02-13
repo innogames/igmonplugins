@@ -2,8 +2,10 @@
 """InnoGames Monitoring Plugins - check_secret
 
 Check if service was restarted after timestamp in secret_timestamp file.
+OR
+Check if file is older than timestamp in secret_timestamp file.
 
-Copyright (c) 2022 InnoGames GmbH
+Copyright (c) 2023 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,14 +29,22 @@ from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
 from subprocess import check_output
 from sys import exit
+from os import path
 
 
 def parse_args() -> Namespace:
     parser = ArgumentParser(__doc__)
-    parser.add_argument("-s", dest="service_name", type=str, required=True)
-    parser.add_argument("-w", dest="warning_days", type=int, required=True)
-    parser.add_argument("-c", dest="critical_days", type=int, required=True)
-    parser.add_argument("-p", dest="timestamp_file_path", type=str, required=True)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-s", dest="service_name", type=str,
+                       help='service to check')
+    group.add_argument("-f", dest="file_path", type=str,
+                       help='file name to check')
+    parser.add_argument("-w", dest="warning_days", type=int, required=True,
+                        help='days until warning should be thrown')
+    parser.add_argument("-c", dest="critical_days", type=int, required=True,
+                        help='days until critical should be thrown')
+    parser.add_argument("-p", dest="timestamp_file_path", type=str,
+                        required=True)
     return parser.parse_args()
 
 
@@ -80,7 +90,7 @@ def get_secret_file_time(timestamp_path: str) -> datetime:
     return datetime.fromisoformat(date_line)
 
 
-def get_time_delta(service_time: datetime,
+def get_time_delta(check_time: datetime,
                    secret_rotation_time: datetime) -> timedelta:
     """
     Calculates delta between service restart time and secret rotation time.
@@ -91,30 +101,48 @@ def get_time_delta(service_time: datetime,
 
     Returns: Timedelta of two inputs
     """
-    return secret_rotation_time - service_time
+    return secret_rotation_time - check_time
+
+
+def get_file_mtime(file_path: str) -> datetime:
+    """
+    Get file mtime and returns it.
+
+    Args:
+        file_path: Path of file
+
+    Returns:
+        datetime of file
+    """
+    return datetime.fromtimestamp(path.getmtime(file_path))
 
 
 def main():
     args = parse_args()
-    delta = get_time_delta(
-        get_service_restart_time(args.service_name),
-        get_secret_file_time(args.timestamp_file_path),
-    )
+    if args.service_name:
+        check_delta = get_service_restart_time(args.service_name)
+        warning_name = args.service_name
+    else:
+        check_delta = get_file_mtime(args.file_path)
+        warning_name = 'Server'
+    delta = get_time_delta(check_delta,
+                           get_secret_file_time(args.timestamp_file_path)
+                           )
     if delta.days > args.critical_days:
         print(
-            f"CRITICAL - {args.service_name} does not run with newest set of"
+            f"CRITICAL - {warning_name} does not run with newest set of"
             " secrets"
         )
         exit(2)
     elif delta.days > args.warning_days:
         print(
-            f"WARNING - {args.service_name} does not run with newest set of"
+            f"WARNING - {warning_name} does not run with newest set of"
             " secrets"
         )
         exit(1)
     else:
         print(
-            f"OK - {args.service_name} is running with a current set of secrets"
+            f"OK - {warning_name} is running with a current set of secrets"
             " parameters."
         )
         exit(0)
