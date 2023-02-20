@@ -125,7 +125,7 @@ def print_overview(args, last_run, now, age_sec):
 
 def get_filenames():
     puppet_disabled_file = '/var/lib/nagios3/.nopuppetd'
-    if platform.system() == 'Linux':
+    if platform.system() in ['Linux', 'Darwin']:
         return puppet_disabled_file, '/var/tmp/puppet_lastupdate'
     if platform.system() == 'FreeBSD':
         return puppet_disabled_file, '/var/puppet/lastupdate'
