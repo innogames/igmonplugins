@@ -24,12 +24,12 @@ Copyright (c) 2023 InnoGames GmbH
 import sys
 from argparse import ArgumentParser
 
-import certifi
 from elasticsearch import Elasticsearch
 
 
 def main():
     parser = ArgumentParser(description='Check Elasticsearch cluster shard count.')
+    group = parser.add_mutually_exclusive_group(required=True)
     parser.add_argument('--url',
                         help='Elasticsearch URL (including port)', required=True)
     parser.add_argument('--username',
@@ -45,17 +45,18 @@ def main():
     parser.add_argument('--no-verify-cert',
                         help='Disable certificate validation',
                         action='store_true')
-    parser.add_argument('--use-certifi',
+    group.add_argument('--use-certifi',
                         help='Use certifi trust store', action='store_true')
+    group.add_argument("--ca-path", type=str,
+                       help='Path of the CA cert')
     args = parser.parse_args()
 
-    # To support custom certificates this is hardcoded
-    # To be used instead of certifi.
-    linux_ca_certs = '/etc/ssl/certs/ca-certificates.crt'
+    if args.use_certifi:
+        import certifi
 
     es = Elasticsearch(args.url, http_auth=(args.username, args.password),
-                       ca_certs=certifi.where() if args.use_certifi else
-                       linux_ca_certs,
+                       ca_certs=args.ca_path if args.ca_path else
+                       certifi.where(),
                        verify_certs=False if args.no_verify_cert else True)
 
     cluster_health = es.cluster.health()
