@@ -79,7 +79,7 @@ def main():
     node_count = len(es.nodes.info()['nodes'])
     used_shards = cluster_health['active_shards']
     available_shards = int(shard_capacity_per_node) * int(node_count)
-    percentage_available = 100 * int(used_shards) / int(available_shards)
+    percentage_available = 100-(100 * int(used_shards) / int(available_shards))
 
     # Exit with appropriate code and message
     if percentage_available < args.critical:
