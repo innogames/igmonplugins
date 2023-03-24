@@ -42,7 +42,7 @@ def main():
     parser.add_argument('--critical',
                         help='Critical threshold in percent',
                         default=5, type=int)
-    parser.add_argument('--no-verify-cert',
+    group.add_argument('--no-verify-cert',
                         help='Disable certificate validation',
                         action='store_true')
     group.add_argument('--use-certifi',
@@ -51,12 +51,17 @@ def main():
                        help='Path of the CA cert')
     args = parser.parse_args()
 
-    if args.use_certifi:
+    if args.ca_path:
+        ca_certs = args.ca_path
+    elif args.use_certifi:
         import certifi
+        ca_certs = certifi.where()
+    elif args.no_verify_cert:
+        ca_certs = None
+
 
     es = Elasticsearch(args.url, http_auth=(args.username, args.password),
-                       ca_certs=args.ca_path if args.ca_path else
-                       certifi.where(),
+                       ca_certs=ca_certs,
                        verify_certs=False if args.no_verify_cert else True)
 
     cluster_health = es.cluster.health()
