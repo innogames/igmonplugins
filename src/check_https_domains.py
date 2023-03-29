@@ -134,6 +134,14 @@ def get_check_result(domains, ip, port, timeout):
     for domain in domains:
         try:
             cert_info = fetch_cert_info(domain, ip, port, timeout)
+            if cert_info['common_name'].startswith('*'):
+                if cert_info['common_name'].split('.')[1:] != \
+                        cert_info['domain'].split('.')[1:]:
+                    return(2, 'Certificate {} does not match domain {}'.format(
+                           cert_info['common_name'], cert_info['domain']))
+            elif cert_info['domain'] != cert_info['common_name']:
+                return(2, 'Certificate {} does not match domain {}'.format(
+                       cert_info['common_name'], cert_info['domain']))
             expirations.append(cert_info)
         except (socket.timeout, TimeoutError):
             return (3, 'The connection to the destination host timed out')
