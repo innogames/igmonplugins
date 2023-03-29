@@ -29,11 +29,12 @@ from datetime import datetime, timedelta
 from dateutil.parser import parse as parse_date
 from dateutil.tz import tzutc
 from OpenSSL import crypto
+from string import ascii_letters
+from random import choice 
 
 # Amount of days remaining before warning and critical states
 warn = 30
 crit = 2
-
 
 def parse_args():
     parser = ArgumentParser(
@@ -106,7 +107,8 @@ def get_domains(domains):
 
 
 def fetch_cert_info(domain, ip, port, timeout):
-    domain = domain.replace('*', 'www', 1)
+    rndpre = ''.join(choice(ascii_letters)  for i in range(20))
+    domain = domain.replace('*', rndpre, 1)
 
     conn = ssl.create_connection((ip, port), timeout)
     context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
