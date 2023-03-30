@@ -98,6 +98,16 @@ def main():
     print(output)
     sys.exit(state)
 
+def get_server_aternate_names(x509cert):
+    san = []
+    ext_count = x509cert.get_extension_count()
+    for i in range(0, ext_count):
+        if x509cert.get_extension(i).get_short_name() == b'subjectAltName':
+            sans = x509cert.get_extension(i).__str__()
+            for s in sans.split(','):
+                if s.strip().startswith('DNS:'):
+                    san.append(s.strip().lstrip('DNS:'))
+    return san
 
 def get_domains(domains):
     domains = domains.split(',')
@@ -108,11 +118,11 @@ def get_domains(domains):
 
 def fetch_cert_info(domain, ip, port, timeout):
     rndpre = ''.join(choice(ascii_letters)  for i in range(20))
-    domain = domain.replace('*', rndpre, 1)
+    r_domain = domain.replace('*', rndpre, 1)
 
     conn = ssl.create_connection((ip, port), timeout)
     context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    with context.wrap_socket(conn, server_hostname=domain) as sock:
+    with context.wrap_socket(conn, server_hostname=r_domain) as sock:
         cert = crypto.load_certificate(
             crypto.FILETYPE_PEM,
             ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
@@ -121,10 +131,12 @@ def fetch_cert_info(domain, ip, port, timeout):
     common_name = cert.get_subject().commonName
     not_after = parse_date(cert.get_notAfter().decode('utf-8'))
     remaining = not_after - datetime.now(tzutc())
+    sans = get_server_aternate_names(cert)
 
     data = {
         'remaining': remaining, 'common_name': common_name,
-        'domain': domain, 'not_after': not_after
+        'domain': domain, 'not_after': not_after, 'san': sans,
+        'r_domain': r_domain
     }
     return data
 
@@ -136,17 +148,16 @@ def get_check_result(domains, ip, port, timeout):
     for domain in domains:
         try:
             cert_info = fetch_cert_info(domain, ip, port, timeout)
-            if cert_info['common_name'].startswith('*'):
-                if cert_info['common_name'].split('.')[1:] != \
-                        cert_info['domain'].split('.')[1:]:
-                    return(2, 'Certificate {} does not match domain {}'.format(
-                           cert_info['common_name'], cert_info['domain']))
-            elif cert_info['domain'] != cert_info['common_name']:
-                return(2, 'Certificate {} does not match domain {}'.format(
-                       cert_info['common_name'], cert_info['domain']))
-            expirations.append(cert_info)
         except (socket.timeout, TimeoutError):
             return (3, 'The connection to the destination host timed out')
+
+        cert_info['san'].append(cert_info['common_name'])  
+        if cert_info['domain'] not in cert_info['san'] and \
+            '*.' + '.'.join(cert_info['domain'].split('.')[1:]) \
+            not in cert_info['san']:
+                return(2, 'Certificate {} does not match domain {}'.format(
+                       cert_info['san'], cert_info['domain']))
+        expirations.append(cert_info)
 
     if not expirations:
         return (3, 'Could not obtain expiration dates')
