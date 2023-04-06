@@ -39,10 +39,10 @@ def parse_args():
     parser.add_argument('path', help='Path to the birdc/birdc6 binary')
     parser.add_argument(
         '-i',
-        '--ignore-regex',
+        '--ignore',
         required=False,
-        default=None,
-        help='Regular expression that matches protocols that should be ignored'
+        action='append',
+        help='Protocols containing this expression will be ignored'
     )
     return parser.parse_args()
 
@@ -50,15 +50,15 @@ def parse_args():
 def main():
     args = parse_args()
     birdc_path = args.path
-    ignore_regex = args.ignore_regex
+    ignored_terms = args.ignore
 
-    code, reason = check_birdc_protocols(birdc_path, ignore_regex)
+    code, reason = check_birdc_protocols(birdc_path, ignored_terms)
 
     print(format_nagios_message(code, reason))
     sys.exit(code)
 
 
-def check_birdc_protocols(path, ignore_regex):
+def check_birdc_protocols(path, ignored_terms):
     try:
         output = check_output([path, 'show', 'protocols'], stderr=STDOUT)
     except (FileNotFoundError, PermissionError):
@@ -86,10 +86,9 @@ def check_birdc_protocols(path, ignore_regex):
         ProtocolStates.disabled: [],
         ProtocolStates.unknown: [],
     }
-    ignore_pattern = re.compile(ignore_regex) if ignore_regex else None
 
     for protocol in protocols_parsed:
-        if ignore_pattern and ignore_pattern.match(protocol['name']):
+        if ignored_terms and any(term in protocol['name'] for term in ignored_terms):
             continue
 
         if protocol['type'] == 'BGP':
