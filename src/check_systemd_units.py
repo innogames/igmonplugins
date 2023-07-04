@@ -3,15 +3,13 @@
 
 This is a Nagios script to check all or some units of "systemd".
 It checks for anomalies of those units like the ones not anymore
-defined but still running, and them being inactive.  Normally returns
-at most warning, if no critical units are specified.  Returns
+defined but still running, and them being inactive. Normally returns
+at most warning, if no critical units are specified. Returns:
 
 * critical when a critical unit is failed
-* warning when a critical unit is not running
-* warning when a non-critical unit is failed
-* warning for other anomalies.
+* warning for other anomalies
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2023 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -31,465 +29,450 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import argparse
+import collections
+import datetime
 import logging
-from argparse import ArgumentParser
-from contextlib import ExitStack
-from datetime import datetime
-from fnmatch import fnmatch
-from sys import exit
-from time import time
+import subprocess
+import sys
+import time
+import typing
 
-from systemd_dbus.exceptions import SystemdError
-from systemd_dbus.manager import Manager
-from systemd_dbus.service import Service
-from systemd_dbus.timer import Timer
+CheckResult = collections.namedtuple('CheckResult', ['code', 'msg'])
 
 logging.basicConfig(
-    format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+    format='%(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
 )
 logger = logging.getLogger(__name__)
 
-now = time()
-
-systemd_manager = Manager()
-
-
-class Codes(object):
-    OK = 0
-    WARNING = 1
-    CRITICAL = 2
-    UNKNOWN = 3
-
-
-class SystemdUnit:
-    """
-    Systemd unit
-
-    This class implements wraper around systemd_dbus.unit.Unit with supporting
-    of every unit type
-    """
-
-    def __init__(self, unit):
-        self.__unit_properties = unit.properties
-        self.unit_type = unit.properties.Id.rsplit('.', 1)[-1]
-        self.__dbus_path = unit._Unit__proxy.__dbus_object_path__
-        logger.debug('Unit type is: {}'.format(self.unit_type))
-
-    def __str__(self):
-        return str(self.unit_properties.Id)
-
-    def __lt__(self, other):
-        return str(self) < str(other)
-
-    @property
-    def unit_properties(self):
-        '''
-        Returns properties from unit interface
-        '''
-        return self.__unit_properties
-
-    @property
-    def type_properties(self):
-        '''
-        Returns properties from type specific interface
-        '''
-        if hasattr(self, '__type_properties'):
-            return self.__type_properties
-        if self.unit_type == 'service':
-            cls = Service
-        elif self.unit_type == 'timer':
-            cls = Timer
-
-        self.__type_properties = cls(self.__dbus_path).properties
-        return self.__type_properties
-
-    def match(self, pattern):
-        name = str(self)
-        logger.debug('Pattern is {}, name is {}'.format(pattern, name))
-        return fnmatch(name, pattern)
-
-    def check(self, timer_warn, timer_crit, critical=True, timer=False):
-        """
-        Detects general problems of a unit
-        """
-        logger.debug(
-            'Load and Active states for unit {} are: {} {}'.format(
-                str(self),
-                self.unit_properties.LoadState,
-                self.unit_properties.ActiveState,
-            )
-        )
-        self.__critical = critical
-        if self.__critical:
-            self._crit_level = Codes.CRITICAL
-            self._warn_level = Codes.WARNING
-        else:
-            self._crit_level = Codes.WARNING
-            self._warn_level = Codes.OK
-
-        if (
-                self.unit_properties.LoadState != 'loaded' and
-                self.unit_properties.ActiveState != 'inactive'
-        ):
-            return (
-                Codes.CRITICAL,
-                'the unit is not loaded but not inactive'
-            )
-        if self.unit_properties.LoadState != 'loaded':
-            return (self._warn_level, 'the unit is not loaded')
-        if self.unit_properties.ActiveState == 'failed':
-            return (self._crit_level, 'the unit is failed')
-        if self.unit_type == 'timer':
-            return self._check_timer(timer_warn, timer_crit)
-        if self.unit_type == 'service':
-            return self._check_service(timer)
-
-        return (Codes.OK, '')
-
-    def _check_service(self, timer=False):
-        '''
-        Detects problems for a service unit
-        '''
-
-        if (
-            self.unit_properties.ActiveState == 'activating' and
-            self.unit_properties.SubState == 'auto-restart'
-        ):
-            # Ignore service units that are currently restarting but only tell
-            # us if they are failed. This allows us to use systemd to restart
-            # services silently without raising a warning which requires no
-            # manual action.
-            return (Codes.OK, '')
-        if (
-            hasattr(self.unit_properties, 'ConditionResult') and
-            not self.unit_properties.ConditionResult
-        ):
-            # systemd on Debian Buster contains a lot of services in inactive
-            # state by "Condition*" parameters, it's fine to ignore them
-            return (Codes.OK, '')
-
-        # Most probably, oneshot is related to some timer
-        if self.type_properties.Type == 'oneshot':
-            # See the man 5 systemd.service for ExecMainStatus and
-            # SuccessExitStatus
-            # All currently running services have ExecMainStatus=0
-
-            # SuccessExitStatus is not always present in older versions
-            # of systemd.
-            # SuccessExitStatus[0] is an array that could be empty.
-            if hasattr(self.type_properties, 'SuccessExitStatus') and \
-                    len(self.type_properties.SuccessExitStatus[0]):
-                last_run_failed = self.type_properties.ExecMainStatus not in \
-                                  self.type_properties.SuccessExitStatus[0]
-            else:
-                # We only want to rely purely on ExecMainStatus != 0 if
-                # we don't have the SuccessExitStatus attribute or if the
-                # SuccessExitStatus array is empty.
-                last_run_failed = self.type_properties.ExecMainStatus != 0
-
-            if last_run_failed:
-                return (
-                    self._warn_level,
-                    'the service exited with {} code'.format(
-                        self.type_properties.ExecMainStatus
-                    )
-                )
-
-            if (
-                self.unit_properties.ActiveState == 'active'
-                and self.unit_properties.SubState == 'exited'
-                and timer
-            ):
-                return (
-                    self._crit_level,
-                    'the timer-related service is misconfigured,'
-                    ' set RemainAfterExit=false')
-        else:
-            if self.unit_properties.ActiveState != 'active':
-                return (
-                    self._crit_level, 'the service is inactive'
-                )
-            if self.unit_properties.SubState == 'exited':
-                # Non oneshot services should not exit
-                return (
-                    self._crit_level, 'the service is exited'
-                )
-
-        return (Codes.OK, '')
-
-    def _check_timer(self, timer_warn, timer_crit):
-        '''
-        Detects problems for a timer unit
-        '''
-        # This might check the service unit twice. We need to do that as we
-        # would not check timer service unit at all if the user didn't
-        # explicitly ask for them via arguments.
-        service_unit = SystemdUnit(
-            systemd_manager.get_unit(self.type_properties.Unit)
-        )
-
-        long_not_running = self._check_intervals(
-            service_unit,
-            timer_warn,
-            timer_crit,
-        )
-        if long_not_running:
-            return long_not_running
-
-        if self.unit_properties.ActiveState != 'active':
-            return (
-                self._crit_level, 'the timer is not active'
-            )
-
-        return service_unit.check(
-            timer_warn, timer_crit, self.__critical, timer=True
-        )
-
-    def _check_intervals(self, service_unit, timer_warn, timer_crit):
-        # We check intervals only if timer has been triggered after reboot,
-        # otherwise LastTriggerUSec=0 (1970-01-01:00:00:00)
-        if self.type_properties.LastTriggerUSec == 0:
-            return None
-
-        # We can check only monotonic triggers for regular execution
-        checked_intervals = ['OnUnitActiveUSec', 'OnUnitInactiveUSec']
-
-        intervals = [
-            (p[0], p[1]) for p in self.type_properties.TimersMonotonic
-            if p[0] in checked_intervals
-        ]
-        logger.debug('Monotonic timers are: {}'.format(intervals))
-        if not intervals:
-            return None
-
-        # Check each collected metric on its own
-        for interval in intervals:
-            result = self._check_interval(
-                service_unit,
-                interval,
-                timer_warn,
-                timer_crit,
-            )
-
-            if result:
-                return result
-
-        return None
-
-    def _check_interval(self, service_unit, interval, timer_warn, timer_crit):
-        # Microseconds to seconds
-        m = 1000000
-
-        # Doing the math
-        trigger, start_interval = interval
-        start_interval /= m
-        last_trigger = self.type_properties.LastTriggerUSec / m
-
-        if trigger == 'OnUnitActiveUSec':
-            state_change = (
-                service_unit.unit_properties.ActiveEnterTimestamp / m
-            )
-        else:
-            state_change = (
-                service_unit.unit_properties.InactiveEnterTimestamp / m
-            )
-
-        # If the unit was started everything is fine
-        if last_trigger > state_change:
-            return None
-
-        # A ratio of 1 means the timer has exactly started the unit after
-        # the amount of time it was configured. lower means it should not
-        # execute, yet, and higher means it should have been executed.
-        not_triggered_since = now - state_change
-        ratio = not_triggered_since / start_interval
-
-        logger.info(
-            '{}: interval={}, last_trigger={}, state_change={}, '
-            'not_triggered_since={}, '
-            'not_triggered_since / interval={}'.format(
-                str(self),
-                start_interval,
-                last_trigger,
-                state_change,
-                not_triggered_since,
-                ratio,
-            )
-        )
-
-        last_trigger_human = datetime.fromtimestamp(last_trigger)
-
-        if timer_crit <= ratio:
-            return (
-                self._crit_level,
-                'the timer hasn\'t been launched since {}, look at {}'
-                    .format(last_trigger_human, str(service_unit))
-            )
-
-        if timer_warn <= ratio:
-            return (
-                self._warn_level,
-                'the timer hasn\'t been launched since {}, look at {}'
-                    .format(last_trigger_human, str(service_unit))
-            )
-
-        return None
-
 
 def parse_args():
-    """Parse the arguments
-
-    We are returning them as a dict for callers convenience.
-    """
-    parser = ArgumentParser()
+    """Parse CLI arguments"""
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         '-a',
+        '--check-all',
         action='store_true',
-        dest='check_all',
-        default=False,
-        help='check all units (it is the default when no services are passed)',
-    )
-    parser.add_argument(
-        # TODO: remove
-        '-s',
-        action='append',
-        dest='critical_units',
-        default=[],
-        help='[DEPRECATED, use -u]',
+        help='Check all units (it is the default when no services are passed)',
     )
     parser.add_argument(
         '-u',
+        '--critical-units',
         action='append',
-        dest='critical_units',
         default=[],
-        help='unit to return critical when failed. Checking a timer unit'
+        help='Units to return critical when failed. Checking a timer unit'
              ' will implicitly check the related service unit as well',
     )
     parser.add_argument(
         '-i',
+        '--ignored-units',
         action='append',
-        dest='ignored_units',
         default=[],
-        help='unit to ignore',
+        help='Units to ignore',
     )
     parser.add_argument(
         '-w',
-        action='store',
-        dest='timer_warn',
-        default=3,
+        '--timer-warn',
+        default=3.,
         type=float,
-        help='warning threshold of timer (inactivity/min_monotonic_interval)',
+        help='Warning threshold of timer (inactivity/min_monotonic_interval)',
     )
     parser.add_argument(
         '-c',
-        action='store',
-        dest='timer_crit',
-        default=7,
+        '--timer-crit',
+        default=7.,
         type=float,
-        help='critical threshold of timer (inactivity/min_monotonic_interval)',
+        help='Critical threshold of timer (inactivity/min_monotonic_interval)',
     )
     parser.add_argument(
         '-l',
-        action='store',
+        '--log-level',
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'FATAL'],
-        dest='log_level',
         default=logging.CRITICAL,
-        help='set the script verbosity',
+        help='Set the script verbosity',
     )
 
     return parser.parse_args()
 
 
 def main():
-    """The main program"""
+    """Main entry point"""
     args = parse_args()
     logger.setLevel(args.log_level)
-    logger.info('Initial arguments are: {}'.format(args))
 
-    try:
-        units = systemd_manager.list_units()
-    except SystemdError as error:
-        print('UNKNOWN: ' + str(error))
-        exit_code = 3
+    exit_code, message = run_checks(args)
+    print(message)
+    sys.exit(exit_code)
+
+
+def run_checks(args: argparse.Namespace) -> CheckResult:
+    """Run all checks and generate Nagios results"""
+    if args.check_all or len(args.critical_units) == 0:
+        unit_filter = ['*']
+    elif any(u.endswith('.timer') for u in args.critical_units):
+        unit_filter = args.critical_units + ['*.service']
     else:
-        results = process([SystemdUnit(u) for u in units], args)
-        logger.info(
-            'criticals are: {}\nwarnings are: {}'
-            .format(results[2], results[1])
-        )
-        exit_code, message = gen_output(results)
-        print(message)
+        unit_filter = args.critical_units
 
-    exit(exit_code)
+    raw_units = show_units(unit_filter)
+    units = parse_units(raw_units)
+    results = process(args, units)
+
+    logger.info('Criticals are: {}'.format(results[2]))
+    logger.info('Warnings are: {}'.format(results[1]))
+
+    return gen_output(results)
 
 
-def process(units, args):
-    criticals = []
-    warnings = []
-    results = [None, warnings, criticals]
+def process(
+    args: argparse.Namespace,
+    units: dict,
+) -> typing.Dict[int, typing.List[typing.Tuple[str, str]]]:
+    """Run all unit checks"""
+    results = {Codes.WARNING: [], Codes.CRITICAL: []}
+    checker = UnitChecker(units, args.timer_warn, args.timer_crit)
 
-    # First, all critical units
-    for unit in filter_out(units, args.critical_units):
-        check_result = unit.check(args.timer_warn, args.timer_crit)
-        logger.info('Problem for filtered units are: {}'.format(check_result))
-        if check_result[0]:
-            results[check_result[0]].append((str(unit), check_result[1]))
-
-    # Last, the others
-    if args.check_all:
-        logger.info('Ignored units are: {}'.format(args.ignored_units))
-        for unit in units:
-            logger.debug('Unit name is: {}'.format(unit))
-            if str(unit) in args.ignored_units:
+    for unit_id in units:
+        if unit_id not in args.critical_units:
+            if unit_id in args.ignored_units:
                 continue
-            check_result = unit.check(args.timer_warn, args.timer_crit,
-                                      critical=False)
-            if check_result[0]:
-                logger.info('Problem for {} in all units are: {}'
-                            .format(str(unit), check_result))
-                results[check_result[0]].append((str(unit), check_result[1]))
+            if len(args.critical_units) and not args.check_all:
+                continue
+
+        res = checker.check_unit(unit_id)
+        res_code = res.code
+        if unit_id not in args.critical_units:
+            res_code = max(0, res_code - 1)
+
+        if res_code == Codes.OK:
+            continue
+
+        logger.info('Problem for {} is: {} - {}'.format(
+            unit_id, res_code, res.msg,
+        ))
+        results[res_code].append((unit_id, res.msg))
+
     return results
 
 
-def filter_out(units, ids):
-    logger.debug('ids are: {}'.format(ids))
-    if not ids:
-        return
-
-    remaining_units = []
-    for unit in units:
-        if any(unit.match(i) for i in ids):
-            yield unit
-        else:
-            remaining_units.append(unit)
-
-    units[:] = remaining_units
-
-
-def gen_output(results):
-    """Get the exit code and format the message to print out"""
-    if results[2]:
+def gen_output(
+    results: typing.Dict[int, typing.List[typing.Tuple[str, str]]],
+) -> CheckResult:
+    """Generate Nagios output from check results"""
+    if len(results[Codes.CRITICAL]):
         message = 'CRITICAL: '
-        exit_code = 2
-    elif results[1]:
+        exit_code = Codes.CRITICAL
+    elif len(results[Codes.WARNING]):
         message = 'WARNING: '
-        exit_code = 1
+        exit_code = Codes.WARNING
     else:
-        return 0, 'OK'
+        return Codes.OK, 'OK'
+
     problems = {}
     for unit, problem in results[1] + results[2]:
         if problem in problems:
             problems[problem] += ', ' + unit
         else:
             problems[problem] = unit
+
     logger.info('Problems are: {}'.format(problems))
     message += '; '.join([': '.join(i) for i in problems.items()])
 
     return exit_code, message
 
 
+def show_units(units: typing.List[str]) -> str:
+    """Query relevant units from systemctl"""
+    properties = [
+        'ActiveEnterTimestamp',
+        'ActiveState',
+        'ConditionResult',
+        'ExecMainStatus',
+        'Id',
+        'InactiveEnterTimestamp',
+        'LastTriggerUSec',
+        'LoadState',
+        'SubState',
+        'SuccessExitStatus',
+        'Type',
+        'Unit',
+    ]
+    args = [
+        '/bin/systemctl',
+        'show',
+        '-al',
+        '--no-pager',
+        '--property',
+        ','.join(properties),
+    ]
+    args += units
+    res = subprocess.check_output(args, stderr=subprocess.STDOUT)
+
+    return res.decode()
+
+
+def parse_units(raw_units: str) -> typing.Dict[str, dict]:
+    """Parse systemd units output"""
+    units = {}
+    curr_unit = {}
+
+    for line in raw_units.splitlines():
+        line = line.strip()
+
+        # Check if a new unit section is starting
+        if line == '':
+            units[curr_unit['Id']] = curr_unit
+            curr_unit = {}
+            continue
+
+        kv = line.split('=', 1)
+        if len(kv) != 2:
+            continue
+
+        # Ignore unset params
+        k, v = kv[0], kv[1]
+        if v == '[not set]':
+            continue
+
+        # Parse dictionary values
+        if v.startswith('{'):
+            v = v.strip('{}')
+            params = v.split(' ; ')
+            param_dict = {}
+
+            for param in params:
+                kv = param.split('=')
+                param_dict[kv[0].strip()] = kv[1].strip()
+
+            curr_unit[k] = param_dict
+        else:
+            curr_unit[k] = v
+
+    units[curr_unit['Id']] = curr_unit
+
+    return units
+
+
+class UnitChecker:
+    def __init__(
+        self,
+        units: typing.Dict[str, dict],
+        timer_warn: int,
+        timer_crit: int,
+    ) -> None:
+        self._units = units
+        self._timer_warn = timer_warn
+        self._timer_crit = timer_crit
+        self._now = time.time()
+
+    def check_unit(self, unit_id: str, timer: bool = False) -> CheckResult:
+        """
+        Check for any problem with a systemd unit
+
+        Args:
+            unit_id (str): The unit to check
+            timer (bool): Whether the service has a timer
+        """
+        unit = self._units[unit_id]
+        logger.debug(
+            'Load and active states for unit {} are: {} {}'.format(
+                unit_id,
+                unit['LoadState'],
+                unit['ActiveState'],
+            )
+        )
+
+        # Fast state checks first
+        if unit['LoadState'] != 'loaded' and unit['ActiveState'] != 'inactive':
+            return CheckResult(
+                Codes.CRITICAL,
+                'the unit is not loaded but not inactive',
+            )
+        elif unit['ActiveState'] == 'failed':
+            return CheckResult(Codes.CRITICAL, 'the unit is failed')
+        elif unit['LoadState'] != 'loaded':
+            return CheckResult(Codes.WARNING, 'the unit is not loaded')
+
+        # Check the specifics about the different unit types
+        if unit_id.endswith('.timer'):
+            return self.check_timer(unit_id)
+        elif unit_id.endswith('.service'):
+            return self.check_service(unit_id, timer)
+
+        return CheckResult(Codes.OK, '')
+
+    def check_service(self, unit_id: str, timer: bool = False) -> CheckResult:
+        """Check for any problem with a service unit"""
+        unit = self._units[unit_id]
+
+        # Ignore service units that are currently restarting but only tell
+        # us if they are failed. This allows us to use systemd to restart
+        # services silently without raising a warning which requires no
+        # manual action.
+        if (
+            unit['ActiveState'] == 'activating'
+            and unit['SubState'] == 'auto-restart'
+        ):
+            return CheckResult(Codes.OK, '')
+
+        # Systemd on Debian Buster contains a lot of services in inactive
+        # state by "Condition*" parameters, it's fine to ignore them
+        if 'ConditionResult' in unit and unit['ConditionResult'] == 'no':
+            return CheckResult(Codes.OK, '')
+
+        # Non-oneshot services should not exit
+        if unit['Type'] != 'oneshot':
+            if unit['ActiveState'] != 'active':
+                return CheckResult(Codes.CRITICAL, 'the service is inactive')
+            if unit['SubState'] == 'exited':
+                return CheckResult(Codes.CRITICAL, 'the service is exited')
+            return CheckResult(Codes.OK, '')
+
+        # Check exit code
+        res = self.check_exit_code(unit_id)
+        if res.code != Codes.OK:
+            return res
+
+        # Check left-behind oneshot services
+        if (
+            unit['ActiveState'] == 'active'
+            and unit['SubState'] == 'exited'
+            and timer
+        ):
+            return CheckResult(
+                Codes.CRITICAL,
+                'the timer-related service is misconfigured,'
+                ' set RemainAfterExit=false',
+            )
+
+        return CheckResult(Codes.OK, '')
+
+    def check_exit_code(self, unit_id: str) -> CheckResult:
+        """Checks expected exit code of the service"""
+        unit = self._units[unit_id]
+
+        # See the man 5 systemd.service for ExecMainStatus and SuccessExitStatus
+        # All currently running services have ExecMainStatus=0
+        success_codes = []
+        if 'SuccessExitStatus' in unit and len(unit['SuccessExitStatus']):
+            success_codes.extend(unit['SuccessExitStatus'].split())
+        success_codes.append('0')
+
+        exit_code = unit['ExecMainStatus']
+        if exit_code not in success_codes:
+            return CheckResult(
+                Codes.WARNING,
+                f'the service exited with {exit_code} code',
+            )
+        return CheckResult(Codes.OK, '')
+
+    def check_timer(self, unit_id: str) -> CheckResult:
+        """Check for any problem with a timer unit"""
+        res = self.check_intervals(unit_id)
+        if res.code != Codes.OK:
+            return res
+
+        unit = self._units[unit_id]
+        if unit['ActiveState'] != 'active':
+            return CheckResult(Codes.CRITICAL, 'the timer is not active')
+
+        # This might check the service unit twice. We need to do that as we
+        # would not check timer service unit at all if the user didn't
+        # explicitly ask for them via arguments.
+        return self.check_unit(unit['Unit'], timer=True)
+
+    def check_intervals(self, unit_id: str) -> CheckResult:
+        """Check all monotonic triggers of a timer unit"""
+        unit = self._units[unit_id]
+
+        # We check intervals only if timer has been triggered after reboot,
+        # otherwise LastTriggerUSec=0 (1970-01-01:00:00:00)
+        if unit['LastTriggerUSec'] == 0:
+            return CheckResult(Codes.OK, '')
+
+        # We only check monotonic timers
+        if 'TimersMonotonic' not in unit:
+            return CheckResult(Codes.OK, '')
+
+        # We can check only monotonic triggers for regular execution
+        checked_intervals = ['OnUnitActiveUSec', 'OnUnitInactiveUSec']
+        intervals = [
+            (p[0], p[1]) for p in unit['TimersMonotonic']
+            if p[0] in checked_intervals
+        ]
+        logger.debug('Monotonic timers are: {}'.format(intervals))
+        if not intervals:
+            return CheckResult(Codes.OK, '')
+
+        # Check each collected metric on its own
+        for interval in intervals:
+            result = self._check_interval(unit_id, interval)
+            if result:
+                return result
+
+        return CheckResult(Codes.OK, '')
+
+    def _check_interval(
+        self,
+        unit_id: str,
+        interval: typing.Tuple[str, int],
+    ) -> CheckResult:
+        """Check a specific monotonic trigger of a timer unit"""
+        unit = self._units[unit_id]
+
+        # Doing the math
+        m = 1000000  # Microseconds to seconds
+        trigger, start_interval = interval
+        start_interval /= m
+        last_trigger = unit['LastTriggerUSec'] / m
+        service_unit = self._units[unit['Unit']]
+
+        if trigger == 'OnUnitActiveUSec':
+            state_change = service_unit['ActiveEnterTimestamp'] / m
+        else:
+            state_change = service_unit['InactiveEnterTimestamp'] / m
+
+        # If the unit was started everything is fine
+        if last_trigger > state_change:
+            return CheckResult(Codes.OK, '')
+
+        # A ratio of 1 means the timer has exactly started the unit after
+        # the amount of time it was configured. lower means it should not
+        # execute, yet, and higher means it should have been executed.
+        not_triggered_since = self._now - state_change
+        ratio = not_triggered_since / start_interval
+        last_trigger_human = datetime.datetime.fromtimestamp(last_trigger)
+
+        logger.info(
+            f'{unit_id}: interval={start_interval}, '
+            f'last_trigger={last_trigger}, state_change={state_change}, '
+            f'not_triggered_since={not_triggered_since}, '
+            f'not_triggered_since / interval={ratio}'
+        )
+
+        # Check timer thresholds
+        if self._timer_crit <= ratio:
+            code = Codes.CRITICAL
+        elif self._timer_warn <= ratio:
+            code = Codes.WARNING
+        else:
+            code = Codes.OK
+
+        if code != Codes.OK:
+            return CheckResult(
+                code,
+                f"the timer hasn't been launched since {last_trigger_human}, "
+                f"look at {service_unit['Id']}"
+            )
+        return CheckResult(Codes.OK, '')
+
+
+class Codes:
+    OK = 0
+    WARNING = 1
+    CRITICAL = 2
+    UNKNOWN = 3
+
+
 if __name__ == '__main__':
-    with ExitStack() as stack:
-        # Manager must unsubscribe from DBus when it finishes the work
-        stack.callback(systemd_manager.unsubscribe)
-        main()
+    main()
