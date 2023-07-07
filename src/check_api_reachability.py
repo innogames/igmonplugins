@@ -16,12 +16,13 @@
 #
 
 from argparse import ArgumentParser
-from urllib.request import urlopen, Request
-from urllib.error import (
+from urllib3 import PoolManager
+from urllib3.exceptions import (
     HTTPError,
-    URLError,
+    MaxRetryError,
+    NewConnectionError,
+    TimeoutError,
 )
-from socket import timeout
 
 
 class ExitCodes:
@@ -34,15 +35,28 @@ class ExitCodes:
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
-        'url_list', metavar='URL', type=str, nargs='+'
+        'url_list',
+        metavar='URL',
+        type=str,
+        nargs='+'
     )
     parser.add_argument(
-        '--code', dest='codes_list', type=int, action='append',
+        '--code',
+        dest='codes_list',
+        type=int,
+        action='append',
         default=None
     )
     parser.add_argument(
-        '--http_method', dest='http_method', type=str,
+        '--http_method',
+        dest='http_method',
+        type=str,
         default='HEAD'
+    )
+    parser.add_argument(
+        '--allow-redirects',
+        dest='allow_redirects',
+        action='store_true',
     )
 
     return parser.parse_args()
@@ -75,11 +89,23 @@ def print_nagios_message(code, output):
     print('{} - {}'.format(state_text, output))
 
 
-def check_urls(url_list, codes_list, http_method):
+def check_urls(
+    url_list: list,
+    codes_list: list,
+    http_method: str,
+    allow_redirects: bool,
+):
     unreachable_urls = []
+    manager = PoolManager()
     for url in url_list:
         try:
-            request = urlopen(Request(url, method=http_method), timeout=10)
+            request = manager.request(
+                method=http_method,
+                url=url,
+                timeout=5,
+                retries=2,
+                redirect=allow_redirects,
+            )
             code = request.status
             if codes_list is None:
                 accepted_codes = ['1', '2', '3']
@@ -94,7 +120,12 @@ def check_urls(url_list, codes_list, http_method):
                         request.status,
                     )
                 })
-        except (URLError, HTTPError, timeout) as e:
+        except (
+            HTTPError,
+            MaxRetryError,
+            NewConnectionError,
+            TimeoutError
+        ) as e:
             unreachable_urls.append({'url': url, 'error': str(e)})
 
     return unreachable_urls
@@ -103,7 +134,11 @@ def check_urls(url_list, codes_list, http_method):
 def main():
     args = parse_args()
     unreachable_urls = check_urls(
-        args.url_list, args.codes_list, args.http_method)
+        url_list=args.url_list,
+        codes_list=args.codes_list,
+        http_method=args.http_method,
+        allow_redirects=args.allow_redirects,
+        )
     exit_code, message = build_plugin_output(unreachable_urls)
 
     print_nagios_message(exit_code, message)
