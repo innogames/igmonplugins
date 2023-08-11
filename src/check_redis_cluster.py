@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Redis Cluster Check
 
-This script checks the status of redis cluster which consists of at least
-6 instances (3 master + 3 slaves).
+This script checks the status of a Redis Cluster.
 
-A warning state represents a degraded cluster if one of three nodes is down.
+A warning state represents a degraded cluster.
 A critical state represents a broken cluster.
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2023 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,114 +26,206 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import subprocess
 
-from argparse import ArgumentParser
-from sys import exit
+import argparse
+import collections
+import subprocess
+import sys
+import typing
+
+ClusterInfo = collections.namedtuple('ClusterInfo', [
+    'cluster_current_epoch',
+    'cluster_known_nodes',
+    'cluster_my_epoch',
+    'cluster_size',
+    'cluster_slots_assigned',
+    'cluster_slots_fail',
+    'cluster_slots_ok',
+    'cluster_slots_pfail',
+    'cluster_state',
+    'cluster_stats_messages_fail_received',
+    'cluster_stats_messages_ping_received',
+    'cluster_stats_messages_ping_sent',
+    'cluster_stats_messages_pong_received',
+    'cluster_stats_messages_pong_sent',
+    'cluster_stats_messages_received',
+    'cluster_stats_messages_sent',
+])
+ClusterNode = collections.namedtuple('ClusterNode', [
+    'id', 'addr', 'flags', 'master', 'ping_sent', 'pong_recv', 'config_epoch',
+    'link_state', 'slots',
+])
+
+
+def parse_args():
+    """Parse CLI arguments"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-p',
+        '--port',
+        type=int,
+        default=7000,
+        help='Port number of the Redis Cluster instance',
+    )
+    parser.add_argument(
+        '-a',
+        '--password',
+        help='Redis password',
+    )
+
+    return parser.parse_args()
+
 
 def main():
     """Main entrypoint for script"""
+    args = parse_args()
+    port = args.port
+    password = args.password
 
-    args = get_parser().parse_args()
-
-    master_addr, master_state, cluster_state_master, failed_master = _get_cluster_status(
-        args.master_port, args.password)
-    slave_addr, slave_state, cluster_state_slave, failed_slave = _get_cluster_status(
-        args.slave_port, args.password)
-    if master_state != 'unknown' and slave_state != 'unknown':
-        if cluster_state_master != 'ok' and cluster_state_slave != 'ok':
-            print('CRITICAL - cluster is broken')
-            code = 2
-        elif len(failed_master + failed_slave) > 0:
-            print('WARNING - cluster status is degraded')
-            for host in failed_master + failed_slave:
-                print('{} is in a failed state'.format(host))
-                code = 1
-        # Report if a node has the same role twice. This is not important for
-        # the functionality of the cluster, but the load on the double master
-        # is increased and we would like to make this visible in Nagios
-        elif master_state == slave_state:
-            print(f'WARNING - node has two {master_state} roles')
-            code = 1
-        else:
-            print('OK - cluster status is OK')
-            print('{} - {}'.format(master_addr, master_state))
-            print('{} - {}'.format(slave_addr, slave_state))
-            code = 0
-    else:
-        print('UNKNOWN - cluster status is UNKNOWN')
-        print(
-            'master on port {0} - {1}'.format(
-                args.master_port, cluster_state_master))
-        print(
-            'slave on port {0} - {1}'.format(
-                args.slave_port, cluster_state_slave))
-        code = 3
-
-    exit(code)
-
-
-def get_parser():
-    """Get argument parser -> ArgumentParser
-
-    We need ports and password to connect
-    """
-
-    parser = ArgumentParser()
-
-    parser.add_argument(
-        '--master-port',
-        action='store',
-        dest='master_port',
-        type=int,
-        default=7000,
-        help='redis port of the master instance',
-    )
-    parser.add_argument(
-        '--slave-port',
-        action='store',
-        dest='slave_port',
-        type=int,
-        default=7001,
-        help='redis port of the slave instance',
-    )
-    parser.add_argument(
-        '--password',
-        action='store',
-        dest='password',
-        default='',
-        help='redis password needed',
-    )
-
-    return parser
-
-
-def _get_cluster_status(port, password):
-    """Get the Cluster Information
-
-    The status of the local instances will be checked
-    """
-
+    # Query the node for cluster state
     try:
-        role = subprocess.check_output(
-            'redis-cli -p {0} -a {1} cluster nodes'.format(
-                port, password), shell=True).decode().split()
-        state_index = [i for i, s in enumerate(role) if 'myself' in s][0]
-        failed_hosts = [role[i-1] for i, s in enumerate(role) if 'fail' in s and str(port) in role[i-1]]
-        role_state = role[state_index].replace('myself,', '')
-        role_addr = role[state_index - 1]
+        info = get_cluster_info(port, password)
+        nodes = get_cluster_nodes(port, password)
+    except ExecutionError as e:
+        print('UNKNOWN - Could not retrieve cluster state')
+        print(e)
+        sys.exit(3)
 
-        cluster_state = subprocess.check_output(
-            'redis-cli -p {0} -a {1} cluster info'.format(
-                port, password), shell=True).split()[0]
-        cluster_state = cluster_state.decode().split(':')[1]
-    except subprocess.CalledProcessError:
-        role_addr = 'unknown'
-        role_state = 'unknown'
-        cluster_state = 'unknown'
-        failed_hosts = 'unknown'
+    # Evaluate if there are any problems
+    warns, crits = get_problems(info, nodes)
+    if len(crits) > 0:
+        print('CRITICAL - Cluster is broken')
+        code = 2
+    elif len(warns) > 0:
+        print('WARNING - Cluster is degraded')
+        code = 1
+    else:
+        print('OK - Cluster is good')
+        code = 0
 
-    return role_addr, role_state, cluster_state, failed_hosts
+    # Print the details and exit
+    for crit in crits:
+        print(crit)
+    for warn in warns:
+        print(warn)
+
+    sys.exit(code)
+
+
+def get_problems(info: ClusterInfo, nodes: typing.Iterable[ClusterNode]):
+    warns = []
+    crits = []
+
+    # Check the general cluster state from the point of view of the node
+    if info.cluster_state != 'ok':
+        crits.append('Cluster state is not ok')
+    if int(info.cluster_slots_pfail) > 0:
+        warns.append(
+            f'{info.cluster_slots_pfail} slots are not reachable for us',
+        )
+    if int(info.cluster_slots_fail) > 0:
+        crits.append(
+            f'{info.cluster_slots_fail} slots are not reachable for all nodes',
+        )
+
+    # Check all known cluster nodes
+    masters_by_ip = collections.defaultdict(lambda: 0)
+    for node in nodes:
+        flags = node.flags.split(',')
+        if 'fail?' in flags:
+            warns.append(f'{node.addr} is not reachable for us')
+        elif 'fail' in flags:
+            crits.append(f'{node.addr} is not reachable for all nodes')
+        if 'noaddr' in flags:
+            warns.append(f'No address known for {node.id}')
+            continue
+
+        # Count how many masters we got per host
+        if 'master' in flags:
+            ip = node.addr.split('@')[0].rsplit(':', 1)[0]
+            masters_by_ip[ip] += 1
+
+    # Report if a node has the same role twice. This is not important for
+    # the functionality of the cluster, but the load on the double master
+    # is increased and we would like to make this visible in Nagios
+    for ip, masters in masters_by_ip.items():
+        if masters > 1:
+            warns.append(f'{ip} has {masters} masters')
+
+    return warns, crits
+
+
+def get_cluster_info(port: int, password: str) -> ClusterInfo:
+    """Get Redis Cluster info"""
+    lines = execute_redis_cmd(port, password, ['cluster', 'info'])
+
+    # Parse command output
+    fields = {}
+    for line in lines:
+        k, v = line.split(':')
+        if k == 'Warning':
+            continue
+
+        fields[k] = v
+
+    # There might be more stats depending on certain conditions, but we are
+    # only interested in the ones that are always present
+    relevant_keys = set(ClusterInfo._fields).intersection(fields.keys())
+    relevant_fields = {k: fields[k] for k in relevant_keys}
+
+    return ClusterInfo(**relevant_fields)
+
+
+def get_cluster_nodes(
+    port: int,
+    password: str,
+) -> typing.Generator[ClusterNode, None, None]:
+    """Get Redis Cluster nodes"""
+    lines = execute_redis_cmd(port, password, ['cluster', 'nodes'])
+
+    # Parse command output
+    for line in lines:
+        fields = line.split(maxsplit=9)
+        if len(fields) < 8 or fields[7] not in ['connected', 'disconnected']:
+            # Nothing we would expect here
+            continue
+
+        # Slaves don't have slots assigned
+        if 'slave' in fields[2]:
+            fields.append('')
+
+        yield ClusterNode(*fields)
+
+
+def execute_redis_cmd(
+    port: int,
+    password: str,
+    args: typing.Iterable,
+) -> typing.List[str]:
+    """Execute an arbitrary Redis command on the node"""
+    # Build command
+    cmd = ['redis-cli', '-p', str(port)]
+    if password:
+        cmd.extend(['-a', password])
+    cmd.extend(args)
+
+    # Execute
+    try:
+        res = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        lines = res.decode().splitlines()
+    except subprocess.CalledProcessError as e:
+        raise ExecutionError('Failed to execute command') from e
+
+    # Check for errors
+    for line in lines:
+        if line.startswith('NOAUTH'):
+            raise ExecutionError(line)
+
+    return lines
+
+
+class ExecutionError(RuntimeError):
+    pass
 
 
 if __name__ == '__main__':
