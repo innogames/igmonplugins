@@ -31,7 +31,13 @@ import argparse
 import collections
 import subprocess
 import sys
+import traceback
 import typing
+
+EXIT_OK = 0
+EXIT_WARN = 1
+EXIT_CRIT = 2
+EXIT_UNKNOWN = 3
 
 ClusterInfo = collections.namedtuple('ClusterInfo', [
     'cluster_current_epoch',
@@ -86,22 +92,22 @@ def main():
     try:
         info = get_cluster_info(port, password)
         nodes = get_cluster_nodes(port, password)
-    except ExecutionError as e:
+    except ExecutionError:
         print('UNKNOWN - Could not retrieve cluster state')
-        print(e)
-        sys.exit(3)
+        traceback.print_exc()
+        sys.exit(EXIT_UNKNOWN)
 
     # Evaluate if there are any problems
     warns, crits = get_problems(info, nodes)
     if len(crits) > 0:
         print('CRITICAL - Cluster is broken')
-        code = 2
+        code = EXIT_CRIT
     elif len(warns) > 0:
         print('WARNING - Cluster is degraded')
-        code = 1
+        code = EXIT_WARN
     else:
         print('OK - Cluster is good')
-        code = 0
+        code = EXIT_OK
 
     # Print the details and exit
     for crit in crits:
@@ -119,13 +125,13 @@ def get_problems(info: ClusterInfo, nodes: typing.Iterable[ClusterNode]):
     # Check the general cluster state from the point of view of the node
     if info.cluster_state != 'ok':
         crits.append('Cluster state is not ok')
-    if int(info.cluster_slots_pfail) > 0:
-        warns.append(
-            f'{info.cluster_slots_pfail} slots are not reachable for us',
-        )
     if int(info.cluster_slots_fail) > 0:
         crits.append(
             f'{info.cluster_slots_fail} slots are not reachable for all nodes',
+        )
+    if int(info.cluster_slots_pfail) > 0:
+        warns.append(
+            f'{info.cluster_slots_pfail} slots are not reachable for us',
         )
 
     # Check all known cluster nodes
@@ -147,7 +153,7 @@ def get_problems(info: ClusterInfo, nodes: typing.Iterable[ClusterNode]):
 
     # Report if a node has the same role twice. This is not important for
     # the functionality of the cluster, but the load on the double master
-    # is increased and we would like to make this visible in Nagios
+    # is increased, and we would like to make this visible in Nagios
     for ip, masters in masters_by_ip.items():
         if masters > 1:
             warns.append(f'{ip} has {masters} masters')
@@ -157,7 +163,7 @@ def get_problems(info: ClusterInfo, nodes: typing.Iterable[ClusterNode]):
 
 def get_cluster_info(port: int, password: str) -> ClusterInfo:
     """Get Redis Cluster info"""
-    lines = execute_redis_cmd(port, password, ['cluster', 'info'])
+    lines = execute_redis_cluster_cmd(port, password, 'info')
 
     # Parse command output
     fields = {}
@@ -181,7 +187,7 @@ def get_cluster_nodes(
     password: str,
 ) -> typing.Generator[ClusterNode, None, None]:
     """Get Redis Cluster nodes"""
-    lines = execute_redis_cmd(port, password, ['cluster', 'nodes'])
+    lines = execute_redis_cluster_cmd(port, password, 'nodes')
 
     # Parse command output
     for line in lines:
@@ -197,26 +203,30 @@ def get_cluster_nodes(
         yield ClusterNode(*fields)
 
 
-def execute_redis_cmd(
+def execute_redis_cluster_cmd(
     port: int,
     password: str,
-    args: typing.Iterable,
+    cluster_cmd: str,
 ) -> typing.List[str]:
     """Execute an arbitrary Redis command on the node"""
     # Build command
     cmd = ['redis-cli', '-p', str(port)]
     if password:
         cmd.extend(['-a', password])
-    cmd.extend(args)
+    cmd.append('cluster')
+    cmd.append(cluster_cmd)
 
     # Execute
     try:
         res = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         lines = res.decode().splitlines()
     except subprocess.CalledProcessError as e:
+        # Mask password inside exception
+        if password:
+            e.cmd[4] = '******'
         raise ExecutionError('Failed to execute command') from e
 
-    # Check for errors
+    # Check for NOAUTH auth error
     for line in lines:
         if line.startswith('NOAUTH'):
             raise ExecutionError(line)
@@ -224,7 +234,7 @@ def execute_redis_cmd(
     return lines
 
 
-class ExecutionError(RuntimeError):
+class ExecutionError(Exception):
     pass
 
 
