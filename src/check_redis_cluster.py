@@ -137,6 +137,8 @@ def get_problems(info: ClusterInfo, nodes: typing.Iterable[ClusterNode]):
             warns.append(f'{node.addr} is not reachable for us')
         elif 'fail' in flags:
             crits.append(f'{node.addr} is not reachable for all nodes')
+        if 'master' in flags and node.slots == '':
+            warns.append(f'{node.addr} is master but does not have any slots')
         if 'noaddr' in flags:
             warns.append(f'No address known for {node.id}')
             continue
@@ -191,8 +193,9 @@ def get_cluster_nodes(
             # Nothing we would expect here
             continue
 
-        # Slaves don't have slots assigned
-        if 'slave' in fields[2]:
+        # Masters don't necessarily have slots assigned and slaves don't have
+        # them at all.
+        if len(fields) < 9:
             fields.append('')
 
         yield ClusterNode(*fields)
