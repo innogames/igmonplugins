@@ -49,11 +49,6 @@ ClusterInfo = collections.namedtuple('ClusterInfo', [
     'cluster_slots_ok',
     'cluster_slots_pfail',
     'cluster_state',
-    'cluster_stats_messages_fail_received',
-    'cluster_stats_messages_ping_received',
-    'cluster_stats_messages_ping_sent',
-    'cluster_stats_messages_pong_received',
-    'cluster_stats_messages_pong_sent',
     'cluster_stats_messages_received',
     'cluster_stats_messages_sent',
 ])
