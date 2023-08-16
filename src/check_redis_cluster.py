@@ -186,7 +186,7 @@ def get_cluster_nodes(
 
     # Parse command output
     for line in lines:
-        fields = line.split(maxsplit=9)
+        fields = line.split(maxsplit=8)
         if len(fields) < 8 or fields[7] not in ['connected', 'disconnected']:
             # Nothing we would expect here
             continue
