@@ -50,8 +50,11 @@ def parse_args() -> Namespace:
                    help='If the total amount of events per day is higher '
                    'than this limit the script will exit with a warning and '
                    'the exit code 1, for nrpe compatibility')
-    p.add_argument('-t', '--teams', action='append',
+    p.add_argument('-t', '--teams', nargs='+',
                    help='Only check this team, can be added repeatedly')
+    p.add_argument('-c', '--check-teams', action='store_true',
+                   help='Look up configured teams in sentry and compare them '
+                   'with teams provided with -t')
     p.add_argument('-p', '--per-team-limit', type=int,
                    help="If any teams' projects' keys summed up limits is "
                    "higher than this, or not set the script will exit with a "
@@ -67,18 +70,40 @@ def parse_args() -> Namespace:
 def main():
 
     args = parse_args()
-    teams = get_teams(args.api_url, args.organization, args.bearer)
+    all_teams = get_teams(args.api_url, args.organization, args.bearer)
 
     # Filter teams to the ones provided via arguments
     if args.teams:
         teams = list(filter(
             lambda t: t['slug'] in args.teams or t['name'] in args.teams,
-            teams
+            all_teams
         ))
 
         if len(args.teams) != len(teams):
             print(f"UNKNOWN: Could not find all teams: {args.teams}! Typo ?")
             sys.exit(3)
+
+    # Find unconfigured teams from the API
+    if args.teams and args.check_teams:
+        unconfigured_teams = [t for t in all_teams if t not in teams]
+
+        if unconfigured_teams:
+            team_names = [t['name'] for t in unconfigured_teams]
+            team_names_str = ', '.join(team_names)
+            print(f"WARNING: There are teams without configured dedicated check: "
+                  f"{team_names_str}")
+            sys.exit(1)
+        else:
+            print("All teams are configured correctly!")
+            sys.exit(0)
+
+    elif args.check_teams:
+        # If no teams were specified as arguments, print all teams from the API
+        team_names = [t['name'] for t in all_teams]
+        team_names_str = ', '.join(team_names)
+        print(f"All teams from sentry api: "
+              f"{team_names_str}")
+        sys.exit(0)
 
     # Initiate exit code, organization wide event counters and lists
     exit = 0
