@@ -70,13 +70,13 @@ def parse_args() -> Namespace:
 def main():
 
     args = parse_args()
-    all_teams = get_teams(args.api_url, args.organization, args.bearer)
+    teams = get_teams(args.api_url, args.organization, args.bearer)
 
     # Filter teams to the ones provided via arguments
     if args.teams:
         teams = list(filter(
             lambda t: t['slug'] in args.teams or t['name'] in args.teams,
-            all_teams
+            teams
         ))
 
         if len(args.teams) != len(teams):
@@ -84,26 +84,30 @@ def main():
             sys.exit(3)
 
     # Find unconfigured teams from the API
-    if args.teams and args.check_teams:
-        unconfigured_teams = [t for t in all_teams if t not in teams]
+    if args.check_teams:
+        all_teams = get_teams(args.api_url, args.organization, args.bearer)
 
-        if unconfigured_teams:
-            team_names = [t['name'] for t in unconfigured_teams]
-            team_names_str = ', '.join(team_names)
-            print(f"WARNING: There are teams without configured dedicated check: "
-                  f"{team_names_str}")
-            sys.exit(1)
+        if args.teams:
+            unconfigured_teams = [t for t in all_teams if t not in teams]
+
+            if unconfigured_teams:
+                team_names = [t['name'] for t in unconfigured_teams]
+                team_names_str = ', '.join(team_names)
+                print(f"WARNING: There are teams without configured dedicated check: "
+                      f"{team_names_str}")
+                sys.exit(1)
+
+            else:
+                print("All teams are configured correctly!")
+                sys.exit(0)
+
         else:
-            print("All teams are configured correctly!")
+            # If no teams were specified as arguments, print all teams from the API
+            team_names = [t['name'] for t in teams]
+            team_names_str = ', '.join(team_names)
+            print(f"All teams from sentry api: "
+                  f"{team_names_str}")
             sys.exit(0)
-
-    elif args.check_teams:
-        # If no teams were specified as arguments, print all teams from the API
-        team_names = [t['name'] for t in all_teams]
-        team_names_str = ', '.join(team_names)
-        print(f"All teams from sentry api: "
-              f"{team_names_str}")
-        sys.exit(0)
 
     # Initiate exit code, organization wide event counters and lists
     exit = 0
