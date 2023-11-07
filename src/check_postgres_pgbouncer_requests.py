@@ -38,7 +38,7 @@ def main():
 
     args = get_parser().parse_args()
 
-    requests = int(get_pgbouncer_requests(args.port, args.dbname))
+    requests = int(get_pgbouncer_requests(args.port, args.dbname, args.host))
 
     code = 0
 
@@ -68,6 +68,11 @@ def get_parser():
         type=str,
     )
     parser.add_argument(
+        '--host', '-H', help='database host/socket to connect',
+        default='/var/run/postgresql',
+        type=str,
+    )
+    parser.add_argument(
         '--port', '-p', help='the port pgbouncer is listening',
         default=6432,
         type=int,
@@ -82,7 +87,7 @@ def get_parser():
     return parser
 
 
-def get_pgbouncer_requests(port, dbname):
+def get_pgbouncer_requests(port, dbname, host):
     """Get pgbouncer requests
 
     Get the actual pgbouncer requests per second on the regarding database
@@ -91,7 +96,9 @@ def get_pgbouncer_requests(port, dbname):
     """
 
     output = subprocess.check_output(
-            'psql -p {} pgbouncer -Ac "show stats;"'.format(port), shell=True)
+            'psql -p {} pgbouncer -h {} -Ac "show stats;"'.format(
+                port, host
+            ), shell=True)
 
     rows = output.decode().split('\n')
     header = rows.pop(0).split('|')
