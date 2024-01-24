@@ -24,18 +24,28 @@ Copyright (c) 2024 InnoGames GmbH
 # THE SOFTWARE.
 
 
+import re
 import subprocess
 import sys
 import typing
-import re
 
+# This matches version table entries in "apt-cache policy" output, like:
+# 500 http://ftp2.de.debian.org/debian bullseye/main amd64 Packages
+# It does however not match dpkg status entries, like: 100 /var/lib/dpkg/status
 SOURCE_REGEX = re.compile(r'^\s+[0-9]+\s(\S+\s\S+\s\S+\s\S+)$')
 
 
 def main() -> typing.Tuple[int, str]:
-    policy_output = get_apt_cache_policy_output()
-    ambiguous_sources = find_ambiguous_sources(policy_output)
+    """Execute the check and generate exit codes and messages."""
+    try:
+        policy_output = get_apt_cache_policy_output()
+    except subprocess.CalledProcessError as e:
+        return 3, (
+            'UNKNOWN - Calling apt-cache policy failed with exit code '
+            f'{e.returncode}\n{e.stderr.decode()}'
+        )
 
+    ambiguous_sources = find_ambiguous_sources(policy_output)
     if len(ambiguous_sources) == 0:
         return 0, 'OK - No ambiguous sources found'
 
@@ -43,10 +53,16 @@ def main() -> typing.Tuple[int, str]:
 
 
 def get_warn_msg(ambiguous_sources: typing.Dict[str, typing.List[str]]) -> str:
+    """
+    Generate a warning message containing all affected packages and their
+    sources. The first line only lists the package names and the following
+    lines contain an HTML table that is rendered in Thruk.
+    """
     pkg_names = list(sorted(ambiguous_sources.keys()))
     msg = (
         f'WARNING - Found {len(pkg_names)} packages with ambiguous sources: '
         f'{", ".join(pkg_names)}\n'
+        f'Check for yourself with "apt-cache policy {" ".join(pkg_names)}"\n'
         '<table class="cellborder rowhover">'
         '<tr><th>Package</th><th>Sources</th></tr>'
     )
@@ -66,20 +82,27 @@ def get_warn_msg(ambiguous_sources: typing.Dict[str, typing.List[str]]) -> str:
 def find_ambiguous_sources(
     policy_output: str,
 ) -> typing.Dict[str, typing.List[str]]:
+    """Parses apt-cache policy output to find ambiguous package sources."""
     sources = {}
     ambiguous_sources = {}
     curr_pkg = None
     in_version_table = False
+
     for line in policy_output.splitlines():
+        # A new package name is not indented and all information related to a
+        # package is indented.
         if not line.startswith(' '):
+            # If there were multiple sources we add them to our record.
             if len(sources) > 1:
                 ambiguous_sources[curr_pkg] = list(sources.keys())
 
+            # Reset our state to start parsing the next package.
             curr_pkg = line.split(':')[0]
             in_version_table = False
             sources = {}
             continue
 
+        # When we found the version table start parsing the source entries.
         if in_version_table:
             match = SOURCE_REGEX.fullmatch(line)
             if match is None:
@@ -87,6 +110,7 @@ def find_ambiguous_sources(
 
             sources[match.group(1)] = True
 
+        # Continue until we find the version table.
         if 'Version table:' in line:
             in_version_table = True
 
@@ -94,10 +118,12 @@ def find_ambiguous_sources(
 
 
 def get_apt_cache_policy_output() -> str:
+    """Calls apt-cache policy to get all the package sources."""
     policy_cmd = subprocess.run(
         ['apt-cache', 'policy', '.'],
         check=True,
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
     return policy_cmd.stdout.decode()
 
