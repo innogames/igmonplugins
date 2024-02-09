@@ -24,6 +24,7 @@ Copyright (c) 2024 InnoGames GmbH
 # THE SOFTWARE.
 
 
+import argparse
 import re
 import subprocess
 import sys
@@ -35,7 +36,22 @@ import typing
 SOURCE_REGEX = re.compile(r'^\s+[0-9]+\s(\S+\s\S+\s\S+\s\S+)$')
 
 
-def main() -> typing.Tuple[int, str]:
+def parse_args() -> argparse.Namespace:
+    """Define the CLI of the check."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-e', '--exclude',
+        action='append',
+        default=[],
+        dest='excludes',
+        help='Exclude specific packages from the check. '
+             'Can be specified multiple times',
+    )
+
+    return parser.parse_args()
+
+
+def main(excludes: typing.List[str]) -> typing.Tuple[int, str]:
     """Execute the check and generate exit codes and messages."""
     try:
         policy_output = get_apt_cache_policy_output()
@@ -45,7 +61,7 @@ def main() -> typing.Tuple[int, str]:
             f'{e.returncode}\n{e.stderr.decode()}'
         )
 
-    ambiguous_sources = find_ambiguous_sources(policy_output)
+    ambiguous_sources = find_ambiguous_sources(policy_output, excludes)
     if len(ambiguous_sources) == 0:
         return 0, 'OK - No ambiguous sources found'
 
@@ -81,6 +97,7 @@ def get_warn_msg(ambiguous_sources: typing.Dict[str, typing.List[str]]) -> str:
 
 def find_ambiguous_sources(
     policy_output: str,
+    excludes: typing.List[str],
 ) -> typing.Dict[str, typing.List[str]]:
     """Parses apt-cache policy output to find ambiguous package sources."""
     sources = {}
@@ -100,6 +117,10 @@ def find_ambiguous_sources(
             curr_pkg = line.split(':')[0]
             in_version_table = False
             sources = {}
+            continue
+
+        # Skip excluded packages processing
+        if curr_pkg and curr_pkg in excludes:
             continue
 
         # When we found the version table start parsing the source entries.
@@ -129,6 +150,7 @@ def get_apt_cache_policy_output() -> str:
 
 
 if __name__ == '__main__':
-    code, output = main()
+    args = parse_args()
+    code, output = main(args.excludes)
     print(output)
     sys.exit(code)
