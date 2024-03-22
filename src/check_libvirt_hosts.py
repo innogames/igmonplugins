@@ -142,7 +142,8 @@ def main():
     outputs = collections.defaultdict(lambda: [])
 
     for code, reason in [
-        check_inactive_domains(domains),
+        check_inactive_domains(domains, vms),
+        check_active_domains(domains, vms),
         check_extraneous_domains(domains, vms),
         check_missing_domains(domains, vms),
         check_retired_vms(vms),
@@ -197,17 +198,37 @@ def check_extraneous_domains(domains, vms):
     return exit_code, exit_message
 
 
-def check_inactive_domains(domains):
-    #  - Check if there are VMs in libvirt in a non-running state
+def check_inactive_domains(domains, vms):
+    # Check if there are domains in libvirt in a non-running state, apart from ones
+    # that are marked as non-running in Serveradmin.
     inactive_domains = set(
-        d['hostname'] for d in domains.values() if not d['is_active'])
+        d['hostname'] for d_id, d in domains.items() if not d['is_active'] and
+        vms.get(d_id, {}).get('state') not in ('cold_standby', 'retired')
+    )
     if len(inactive_domains) > 0:
         code = ExitCodes.warning
-        message = 'Found non-running domains:'
+        message = 'Found non-running domains which should be running:'
         message += indent_hostname_list(inactive_domains)
     else:
         code = ExitCodes.ok
-        message = 'All domains are running'
+        message = 'All domains configured as running domains are running'
+
+    return code, message
+
+def check_active_domains(domains, vms):
+    # Check if there are running domains in libvirt that are marked as non-running
+    # in Serveradmin.
+    standby_domains = set(
+        d['hostname'] for d_id, d in domains.items() if d['is_active'] and
+        vms.get(d_id, {}).get('state') in ('cold_standby', 'retired')
+    )
+    if len(standby_domains) > 0:
+        code = ExitCodes.warning
+        message = 'Found running domains which should not be running:'
+        message += indent_hostname_list(standby_domains)
+    else:
+        code = ExitCodes.ok
+        message = 'All domains configured as non-running domains are powered off'
 
     return code, message
 
