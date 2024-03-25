@@ -119,7 +119,7 @@ def _check_readonly_volumes(data: dict[str, Any]) -> int:
             for endpoint in server.values():
                 for volume in endpoint:
                     if volume['ReadOnly']:
-                        readonly_volumes.append(volume['Id'])
+                        readonly_volumes.append(str(volume['Id']))
 
     if readonly_volumes:
         volumes_str = ', '.join(readonly_volumes)
