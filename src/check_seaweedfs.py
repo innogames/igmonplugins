@@ -117,6 +117,10 @@ def _check_readonly_volumes(data: dict[str, Any]) -> int:
     for datacenter in data['Volumes']['DataCenters'].values():
         for server in datacenter.values():
             for endpoint in server.values():
+                if endpoint is None:
+                    # We get none instead of an empty list here,
+                    # if there are no volumes on the server, skip
+                    continue
                 for volume in endpoint:
                     if volume['ReadOnly']:
                         readonly_volumes.append(str(volume['Id']))
