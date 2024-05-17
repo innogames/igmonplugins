@@ -52,116 +52,124 @@ except IOError as e:
 
 senddata = []
 exit_status = 0
-
 kingston_gb_written = 0
-for manufacturer in HDD_NAMES:
 
-    try:
-        os.chdir(CSV_PATH)
-    except OSError as e:
-        senddata.append(str(e) + ' ')
+try:
+    os.chdir(CSV_PATH)
+except OSError as e:
+    print('Could not find {}'.format(CSV_PATH))
+    senddata.append(str(e) + ' ')
+    if exit_status < 1:
+        exit_status = 1
+    sys.exit(exit_status)
+
+# find all csvfiles and match a HDD_NAME and use the first one
+files = {}
+for csv in glob.glob("*.csv"):
+    for model in HDD_NAMES:
+        if csv.find(model) != -1:
+            files[csv] = model
+            break
+
+for csvfile in files:
+    with open(csvfile) as myfile:
+        manufacturer = files[csvfile]
+        # Get a snapshot in case file changes in the meantime
+        myfile_list = list(myfile)
+        if len(myfile_list) == 0:
+            # Empty, pass
+            continue
+        csv_last_line = myfile_list[-1]
+    csv_array = csv_last_line.split("\t")
+
+    smart_date = csv_array.pop(0).strip(";\n")
+    smart_year = int(smart_date.split("-")[0])
+    smart_mon = int(smart_date.split("-")[1])
+    smart_day = int(smart_date.split("-")[2].split(" ")[0])
+    smart_h = int(smart_date.split(":")[0].split(" ")[1])
+    smart_m = int(smart_date.split(":")[1])
+    smart_s = int(smart_date.split(":")[2])
+
+    smart_date_diff = datetime.datetime.now() - datetime.datetime(
+        smart_year, smart_mon, smart_day, smart_h, smart_m, smart_s
+    )
+
+    # Throw error if csv data is more than 6 hours old!
+    if smart_date_diff > datetime.timedelta(hours=6):
+        senddata.append(
+            'SMART-CSV-Data is {} old! ({}/{})\n' .format(
+                smart_date_diff, CSV_PATH, csvfile
+            )
+        )
         if exit_status < 1:
             exit_status = 1
-        continue
 
-    for csvfile in glob.glob("*" + manufacturer + "*.csv"):
-        with open(csvfile) as myfile:
-            # Get a snapshot in case file changes in the meantime
-            myfile_list = list(myfile)
-            if len(myfile_list) == 0:
-                # Empty, pass
-                continue
-            csv_last_line = myfile_list[-1]
-        csv_array = csv_last_line.split("\t")
+    for elements in csv_array:
+        element = elements.split(";")
+        smart_id = int(element[0])
 
-        smart_date = csv_array.pop(0).strip(";\n")
-        smart_year = int(smart_date.split("-")[0])
-        smart_mon = int(smart_date.split("-")[1])
-        smart_day = int(smart_date.split("-")[2].split(" ")[0])
-        smart_h = int(smart_date.split(":")[0].split(" ")[1])
-        smart_m = int(smart_date.split(":")[1])
-        smart_s = int(smart_date.split(":")[2])
+        # Skip attributes that do not exists in our config
+        if smart_id not in ALERTS[manufacturer]:
+            continue
 
-        smart_date_diff = datetime.datetime.now() - datetime.datetime(
-            smart_year, smart_mon, smart_day, smart_h, smart_m, smart_s
-        )
+        if ALERTS[manufacturer][smart_id].get('raw'):
+            if ALERTS[manufacturer][smart_id].get('mask'):
+                smart_value = (
+                    int(element[2]) &
+                    ALERTS[manufacturer][smart_id].get('mask')
+                )
+            else:
+                smart_value = int(element[2])
+        else:
+            smart_value = int(element[1])
 
-        # Throw error if csv data is more than 6 hours old!
-        if smart_date_diff > datetime.timedelta(hours=6):
+        if not int(smart_id) in ALERTS[manufacturer]:
             senddata.append(
-                'SMART-CSV-Data is {} old! ({}/{})\n' .format(
-                    smart_date_diff, CSV_PATH, csvfile
+                'Error: No id {} in {}-config found. '
+                'Please configure this value.\n'
+                .format(
+                    smart_id, manufacturer
                 )
             )
             if exit_status < 1:
                 exit_status = 1
+            continue
 
-        for elements in csv_array:
-            element = elements.split(";")
-            smart_id = int(element[0])
-
-            # Skip attributes that do not exists in our config
-            if smart_id not in ALERTS[manufacturer]:
-                continue
-
-            if ALERTS[manufacturer][smart_id].get('raw'):
-                if ALERTS[manufacturer][smart_id].get('mask'):
-                    smart_value = (
-                        int(element[2]) &
-                        ALERTS[manufacturer][smart_id].get('mask')
-                    )
-                else:
-                    smart_value = int(element[2])
-            else:
-                smart_value = int(element[1])
-
-            if not int(smart_id) in ALERTS[manufacturer]:
+        # In Kingston drives some values are just 0 in old version of disk.
+        if ALERTS[manufacturer][smart_id].get('or') != smart_value:
+            if smart_value < ALERTS[manufacturer][smart_id]['min']:
                 senddata.append(
-                    'Error: No id {} in {}-config found. '
-                    'Please configure this value.\n'
-                    .format(
-                        smart_id, manufacturer
+                    '{}: [id={}] "{}" is "{}" '
+                    'which is lower than "{}"\n'.format(
+                        manufacturer, smart_id,
+                        ALERTS[manufacturer][smart_id]['description'],
+                        smart_value,
+                        ALERTS[manufacturer][smart_id]['min']
                     )
                 )
-                if exit_status < 1:
-                    exit_status = 1
-                continue
-
-            # In Kingston drives some values are just 0 in old version of disk.
-            if ALERTS[manufacturer][smart_id].get('or') != smart_value:
-                if smart_value < ALERTS[manufacturer][smart_id]['min']:
-                    senddata.append(
-                        '{}: [id={}] "{}" is "{}" '
-                        'which is lower than "{}"\n'.format(
-                            manufacturer, smart_id,
-                            ALERTS[manufacturer][smart_id]['description'],
-                            smart_value,
-                            ALERTS[manufacturer][smart_id]['min']
-                        )
-                    )
-                    if (
-                        exit_status <
+                if (
+                    exit_status <
+                    ALERTS[manufacturer][smart_id]['exit_status']
+                ):
+                    exit_status = \
                         ALERTS[manufacturer][smart_id]['exit_status']
-                    ):
-                        exit_status = \
-                            ALERTS[manufacturer][smart_id]['exit_status']
 
-                if smart_value > ALERTS[manufacturer][smart_id]['max']:
-                    senddata.append(
-                        '{}: [id={}] "{}" is "{}" '
-                        'which is higher than "{}"\n'.format(
-                            manufacturer, smart_id,
-                            ALERTS[manufacturer][smart_id]['description'],
-                            smart_value,
-                            ALERTS[manufacturer][smart_id]['max']
-                        )
+            if smart_value > ALERTS[manufacturer][smart_id]['max']:
+                senddata.append(
+                    '{}: [id={}] "{}" is "{}" '
+                    'which is higher than "{}"\n'.format(
+                        manufacturer, smart_id,
+                        ALERTS[manufacturer][smart_id]['description'],
+                        smart_value,
+                        ALERTS[manufacturer][smart_id]['max']
                     )
-                    if (
-                        exit_status <
+                )
+                if (
+                    exit_status <
+                    ALERTS[manufacturer][smart_id]['exit_status']
+                ):
+                    exit_status = \
                         ALERTS[manufacturer][smart_id]['exit_status']
-                    ):
-                        exit_status = \
-                            ALERTS[manufacturer][smart_id]['exit_status']
 
 if kingston_gb_written > 0 and kingston_gb_written < 99:
     for i in range(len(senddata)):
