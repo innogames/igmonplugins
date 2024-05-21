@@ -58,7 +58,6 @@ try:
     os.chdir(CSV_PATH)
 except OSError as e:
     print('Could not find {}'.format(CSV_PATH))
-    senddata.append(str(e) + ' ')
     if exit_status < 1:
         exit_status = 1
     sys.exit(exit_status)
