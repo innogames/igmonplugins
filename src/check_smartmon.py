@@ -62,7 +62,8 @@ except OSError as e:
         exit_status = 1
     sys.exit(exit_status)
 
-# find all csvfiles and match a HDD_NAME and use the first one
+# find all csvfiles and match a HDD_NAME, only the first match will be used
+# ordering in the config file matters now
 files = {}
 for csv in glob.glob("*.csv"):
     for model in HDD_NAMES:
