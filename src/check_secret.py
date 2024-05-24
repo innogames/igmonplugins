@@ -86,8 +86,8 @@ def get_secret_file_time(timestamp_path: str) -> datetime:
     Returns: Datetime.
     """
     with open(timestamp_path, "r") as f:
-        date_line = f.readline().split(" ")[1].rstrip("\n")
-    return datetime.fromisoformat(date_line)
+        date_line = f.readline()
+    return datetime.fromtimestamp(int(date_line))
 
 
 def get_time_delta(check_time: datetime,
