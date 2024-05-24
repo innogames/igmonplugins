@@ -272,8 +272,12 @@ def main():
     # Build output
     nsca_output, mismatch_doms, unknown_doms \
         = build_nsca_output(hypervisor_qemu_version, domains)
-    # Push NSCA results
-    nsca_result = send_nsca(args.hosts, nsca_output)
+    # If there are no domains, the nsca_output will have length zero. In that
+    # case, we just pretend we sent data to NSCA.
+    if len(nsca_output) != 0:
+        nsca_result = send_nsca(args.hosts, nsca_output)
+    else:
+        nsca_result = True
 
     # Generate plugin results for HV
     code, reason = build_plugin_output(
