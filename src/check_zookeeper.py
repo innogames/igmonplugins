@@ -5,7 +5,7 @@ It requires ZooKeeper 3.4.0 or greater.  The script needs the 'mntr' 4letter
 word command (patch ZOOKEEPER-744) that was now committed to the trunk.
 The script also works with ZooKeeper 3.3.x but in a limited way.
 
-Copyright (c) 2018 InnoGames GmbH
+Copyright (c) 2024 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,7 @@ import subprocess
 from io import StringIO
 from optparse import OptionParser, OptionGroup
 
-__version__ = (0, 1, 0)
+__version__ = (0, 1, 1)
 
 logging.basicConfig(level=logging.ERROR)
 log = logging.getLogger()
@@ -77,7 +77,7 @@ class NagiosHandler(object):
         for host, stats in cluster_stats.items():
             if opts.key in stats:
 
-                value = stats[opts.key]
+                value = int(float(stats[opts.key]))
                 values.append('Value: {}; Warning: {}; Critical: {}'.format(
                         value,
                         warning,
