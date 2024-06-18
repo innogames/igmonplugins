@@ -27,31 +27,42 @@ from collections import defaultdict
 from datetime import datetime
 from os import rename, chmod
 
-POOL_RE = re.compile(r'(pool_[\d]+)_')
-STATES_RE = re.compile('States: ([\d]+)')
+POOL_RE = re.compile(r"(pool_[\d]+)_")
+STATES_RE = re.compile("States: ([\d]+)")
 
 
 def args_parse():
     parser = ArgumentParser()
 
     parser.add_argument(
-        '-H', dest='nsca_srv', action='append',
-        help='Nagios servers to report the results to'
+        "-H",
+        dest="nsca_srv",
+        action="append",
+        help="Nagios servers to report the results to",
     )
 
     parser.add_argument(
-        '-g', dest='hwlb_group',
-        help='HWLB Group to send results to',
+        "-g",
+        dest="hwlb_group",
+        help="HWLB Group to send results to",
     )
 
     parser.add_argument(
-        '-w', '--warning', dest='warning', type=int, default=70,
-        help='Warning threshold in percentage, default 70'
+        "-w",
+        "--warning",
+        dest="warning",
+        type=int,
+        default=70,
+        help="Warning threshold in percentage, default 70",
     )
 
     parser.add_argument(
-        '-c', '--critical', dest='critical', type=int, default=85,
-        help='Critical threshold in percentage, default 85'
+        "-c",
+        "--critical",
+        dest="critical",
+        type=int,
+        default=85,
+        help="Critical threshold in percentage, default 85",
     )
 
     return parser.parse_args()
@@ -61,9 +72,9 @@ def main():
     args = args_parse()
 
     if args.hwlb_group:
-        nagios_service = 'lbpool_states_' + args.hwlb_group
+        nagios_service = "lbpool_states_" + args.hwlb_group
     else:
-        nagios_service = 'lbpool_states'
+        nagios_service = "lbpool_states"
 
     carp_states = get_carp_states()
     current_states = get_current_states()
@@ -74,20 +85,23 @@ def main():
     for lbpool_name, lbpool_params in lbpools_configs.items():
 
         # Skip things which are not real LB Pools
-        if not (lbpool_params['protocol_port'] and lbpool_params['nodes']):
+        if not (lbpool_params["protocol_port"] and lbpool_params["nodes"]):
             continue
 
         # Skip LB Pools with no corresponding MASTER carp
-        route_network = ''
-        for lbnode_params in lbpool_params['nodes'].values():
-            route_network = lbnode_params['route_network']
+        route_network = ""
+        for lbnode_params in lbpool_params["nodes"].values():
+            route_network = lbnode_params["route_network"]
         if not carp_states[route_network]:
             continue
 
         lbpools_states[lbpool_name] = {
-            'state_limit': lbpool_params['state_limit']
-                if lbpool_params['state_limit'] else default_state_limit,
-            'cur_states': current_states[lbpool_params['pf_name']],
+            "state_limit": (
+                lbpool_params["state_limit"]
+                if lbpool_params["state_limit"]
+                else default_state_limit
+            ),
+            "cur_states": current_states[lbpool_params["pf_name"]],
         }
 
     if not args.nsca_srv:
@@ -95,7 +109,9 @@ def main():
     else:
         separator = "\27"
 
-    send_msg = check_states(lbpools_states, nagios_service, separator, args.warning, args.critical)
+    send_msg = check_states(
+        lbpools_states, nagios_service, separator, args.warning, args.critical
+    )
 
     # Send metrics to grafana via helper
     grafana_msg = send_grafsy(lbpools_states)
@@ -108,10 +124,13 @@ def main():
         for monitor in args.nsca_srv:
             nsca = subprocess.Popen(
                 [
-                    '/usr/local/sbin/send_nsca',
-                    '-H', monitor,
-                    '-to', '20',
-                    '-c', '/usr/local/etc/nagios/send_nsca.cfg',
+                    "/usr/local/sbin/send_nsca",
+                    "-H",
+                    monitor,
+                    "-to",
+                    "20",
+                    "-c",
+                    "/usr/local/etc/nagios/send_nsca.cfg",
                 ],
                 stdin=subprocess.PIPE,
             )
@@ -120,51 +139,51 @@ def main():
 
 def get_carp_states():
     ret = {}
-    with open('/var/run/iglb/carp_state.json') as carp_states_file:
+    with open("/var/run/iglb/carp_state.json") as carp_states_file:
         carp_states = json.load(carp_states_file)
         for network_name, network_params in carp_states.items():
-            ret[network_name] = carp_states[network_name]['carp_master']
+            ret[network_name] = carp_states[network_name]["carp_master"]
 
     return ret
 
 
 def get_lbpools_config():
-    config = '/etc/iglb/lbpools.json'
+    config = "/etc/iglb/lbpools.json"
 
     with open(config) as jsonfile:
         return json.load(jsonfile)
 
 
 def check_states(lbpools_states, nagios_service, separator, warn, crit):
-    """ Compare the current states of each lbpool and compute results """
+    """Compare the current states of each lbpool and compute results"""
 
-    msg = ''
+    msg = ""
 
     for lbpool_name, lbpool_params in lbpools_states.items():
-        status = ''
+        status = ""
         exit_code = local_exit_code = 0
-        state_limit = lbpool_params['state_limit']
+        state_limit = lbpool_params["state_limit"]
         critical = state_limit * (crit * 0.01)
         warning = state_limit * (warn * 0.01)
-        cur_states = lbpool_params['cur_states']
+        cur_states = lbpool_params["cur_states"]
 
         if cur_states >= critical:
             local_exit_code = 2
-            status = f'Used states are above {crit}% of states limit | '
+            status = f"Used states are above {crit}% of states limit | "
 
         elif cur_states >= warning:
             local_exit_code = 1
-            status = f'Number of states are above {warn}% of states limit | '
+            status = f"Number of states are above {warn}% of states limit | "
 
         if exit_code < local_exit_code:
             exit_code = local_exit_code
 
         if exit_code == 0:
-            status = f'Used states are below the thresholds | '
+            status = f"Used states are below the thresholds | "
 
-        status += f'limit={state_limit}, current={cur_states}'
+        status += f"limit={state_limit}, current={cur_states}"
 
-        msg += f'{lbpool_name}\t{nagios_service}\t{exit_code}\t{status}{separator}'
+        msg += f"{lbpool_name}\t{nagios_service}\t{exit_code}\t{status}{separator}"
 
     return msg
 
@@ -172,13 +191,14 @@ def check_states(lbpools_states, nagios_service, separator, warn, crit):
 def get_state_limit():
     # The default limit set in pf.conf, fetch it from what is loaded in pf
     default_limits = subprocess.run(
-        ['sudo', 'pfctl', '-sm'],
-        capture_output=True, text=True,
+        ["sudo", "pfctl", "-sm"],
+        capture_output=True,
+        text=True,
     ).stdout.splitlines()
 
     for line in default_limits:
-        if 'states' in line:
-            return int(line.split(' ')[-1])
+        if "states" in line:
+            return int(line.split(" ")[-1])
 
 
 def get_current_states():
@@ -189,14 +209,15 @@ def get_current_states():
     """
 
     pfctl_output = subprocess.run(
-        ['sudo', 'pfctl', '-vsr', '-a*'],
-        capture_output=True, text=True,
+        ["sudo", "pfctl", "-vsr", "-a*"],
+        capture_output=True,
+        text=True,
     ).stdout.splitlines()
 
     ret = defaultdict(int)
     for line in pfctl_output:
         indx = pfctl_output.index(line)
-        if 'route-to' not in line:
+        if "route-to" not in line:
             continue
         lbpool_name = POOL_RE.search(line).group(1)
         last_states = int(STATES_RE.search(pfctl_output[(indx + 1)]).group(1))
@@ -205,21 +226,22 @@ def get_current_states():
 
     return ret
 
+
 def send_grafsy(data):
     "For sending the results to grafana"
 
-    output = ''
+    output = ""
 
     for k1, v1 in data.items():
-        template = k1.replace('.', '_') + '.'
+        template = k1.replace(".", "_") + "."
         output += carbonize(template, v1)
 
-    with tempfile.NamedTemporaryFile('w', delete=False) as tmpfile:
+    with tempfile.NamedTemporaryFile("w", delete=False) as tmpfile:
         tmpfile.write(output)
         tmpname = tmpfile.name
         chmod(tmpname, 0o644)
 
-    grafsy_file = "/tmp/grafsy/" + tmpname.split('tmp/')[1]
+    grafsy_file = "/tmp/grafsy/" + tmpname.split("tmp/")[1]
     # We want Atomicity for writing files to grafsy
     rename(tmpname, grafsy_file)
 
@@ -227,18 +249,24 @@ def send_grafsy(data):
 
 
 def carbonize(template, v1):
-    """ Transform the data in a format that carbon expects and return """
+    """Transform the data in a format that carbon expects and return"""
 
-    data = ''
+    data = ""
     if isinstance(v1, dict):
         for k2, v2 in v1.items():
             prefix = template
-            prefix += k2.replace('.', '_') + '.'
+            prefix += k2.replace(".", "_") + "."
             ret = carbonize(prefix, v2)
             data += ret
     else:
-        data = template.rstrip('.') + ' ' + str(
-            v1) + ' ' + datetime.utcnow().strftime("%s") + '\n'
+        data = (
+            template.rstrip(".")
+            + " "
+            + str(v1)
+            + " "
+            + datetime.utcnow().strftime("%s")
+            + "\n"
+        )
 
     return data
 
