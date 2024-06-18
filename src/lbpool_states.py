@@ -65,6 +65,14 @@ def args_parse():
         help="Critical threshold in percentage, default 85",
     )
 
+    parser.add_argument(
+        "--prefix",
+        dest="prefix",
+        type=str,
+        default="network.lbpools",
+        help="Graphite path prefix",
+    )
+
     return parser.parse_args()
 
 
@@ -114,7 +122,7 @@ def main():
     )
 
     # Send metrics to grafana via helper
-    grafana_msg = send_grafsy(lbpools_states)
+    grafana_msg = send_grafsy(lbpools_states, args.prefix)
 
     if not args.nsca_srv:
         print(send_msg)
@@ -227,14 +235,16 @@ def get_current_states():
     return ret
 
 
-def send_grafsy(data):
+def send_grafsy(data, prefix):
     "For sending the results to grafana"
 
     output = ""
+    ts = datetime.utcnow().strftime("%s")
 
     for k1, v1 in data.items():
-        template = k1.replace(".", "_") + "."
-        output += carbonize(template, v1)
+        k1 = k1.replace(".", "_")
+        for k2, v2 in v1.items():
+            output += f"{prefix}.{k1}.{k2} {v2} {ts}\n"
 
     with tempfile.NamedTemporaryFile("w", delete=False) as tmpfile:
         tmpfile.write(output)
@@ -246,29 +256,6 @@ def send_grafsy(data):
     rename(tmpname, grafsy_file)
 
     return output
-
-
-def carbonize(template, v1):
-    """Transform the data in a format that carbon expects and return"""
-
-    data = ""
-    if isinstance(v1, dict):
-        for k2, v2 in v1.items():
-            prefix = template
-            prefix += k2.replace(".", "_") + "."
-            ret = carbonize(prefix, v2)
-            data += ret
-    else:
-        data = (
-            template.rstrip(".")
-            + " "
-            + str(v1)
-            + " "
-            + datetime.utcnow().strftime("%s")
-            + "\n"
-        )
-
-    return data
 
 
 if __name__ == "__main__":
