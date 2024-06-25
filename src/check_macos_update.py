@@ -30,18 +30,20 @@ from typing import List
 
 
 def main():
-    if sys.platform != 'darwin':
+    if sys.platform != "darwin":
         print("UNKNOWN - This script is only supported on macOS")
         sys.exit(3)
 
     current_os_version = get_os_version()
     update_list = get_update_list()
 
-    lines = update_list.split('\n')
+    lines = update_list.split("\n")
     relevant_updates = filter_relevant_updates(lines, current_os_version)
 
     if relevant_updates:
-        print(f"WARNING - Recommended updates are available for {current_os_version}: {'; '.join(relevant_updates)}")
+        print(
+            f"WARNING - Recommended updates are available for MacOS {current_os_version}: {'; '.join(relevant_updates)}"
+        )
         sys.exit(1)
 
     print("OK - No recommended updates available")
@@ -56,7 +58,9 @@ def get_update_list() -> str:
         str: A string output of available updates, provided by "softwareupdate -l".
     """
     try:
-        result = subprocess.run(["softwareupdate", "-l"], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["softwareupdate", "-l"], capture_output=True, text=True, check=True
+        )
         output = result.stdout
     except subprocess.CalledProcessError as err:
         print(f"UNKNOWN - Unable to check for updates: {err.stderr}")
@@ -72,7 +76,9 @@ def get_os_version() -> str:
     Returns:
         str: The major version number of the current macOS, e.g., "13" for macOS Ventura.
     """
-    result = subprocess.run(["sw_vers", "-productVersion"], capture_output=True, text=True, check=True)
+    result = subprocess.run(
+        ["sw_vers", "-productVersion"], capture_output=True, text=True, check=True
+    )
 
     return result.stdout.strip()
 
@@ -90,7 +96,7 @@ def filter_relevant_updates(lines: List[str], current_os_version: str) -> List[s
     """
     relevant_updates = []
 
-    current_major_os_version = current_os_version.split('.')[0]
+    current_major_os_version = current_os_version.split(".")[0]
     for line in lines:
         if "Recommended: YES" not in line or "Title: macOS" not in line:
             continue
