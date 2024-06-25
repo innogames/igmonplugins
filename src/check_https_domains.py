@@ -136,7 +136,7 @@ def get_check_result(domains, ip, port, timeout):
             cert_info = fetch_cert_info(domain, ip, port, timeout)
             expirations.append(cert_info)
         except (socket.timeout, TimeoutError):
-            return (3, 'The connection to the destination host timed out')
+            return (3, f'The connection to the destination host {domain} timed out')
 
     if not expirations:
         return (3, 'Could not obtain expiration dates')
