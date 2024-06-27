@@ -27,6 +27,7 @@ Copyright (c) 2024 InnoGames GmbH
 import subprocess
 import sys
 from typing import List
+import re
 
 
 def main():
@@ -38,12 +39,16 @@ def main():
     update_list = get_update_list()
 
     lines = update_list.split("\n")
-    relevant_updates = filter_relevant_updates(lines, current_os_version)
+    updates = filter_relevant_updates(lines, current_os_version)
 
-    if relevant_updates:
+    if updates:
         print(
-            f"WARNING - Recommended updates are available for MacOS {current_os_version}: {'; '.join(relevant_updates)}"
+            f"WARNING - {len(updates)} recommended updates are available for MacOS {current_os_version}:"
         )
+        for update in updates:
+            print(
+                f"{update}: sudo softwareupdate --restart --os-only --install {update}"
+            )
         sys.exit(1)
 
     print("OK - No recommended updates available")
@@ -59,7 +64,10 @@ def get_update_list() -> str:
     """
     try:
         result = subprocess.run(
-            ["softwareupdate", "-l"], capture_output=True, text=True, check=True
+            ["softwareupdate", "--product-types=macOS", "--no-scan", "--list"],
+            capture_output=True,
+            text=True,
+            check=True,
         )
         output = result.stdout
     except subprocess.CalledProcessError as err:
@@ -101,8 +109,14 @@ def filter_relevant_updates(lines: List[str], current_os_version: str) -> List[s
         if "Recommended: YES" not in line or "Title: macOS" not in line:
             continue
 
-        if f"Version: {current_major_os_version}." in line:
-            relevant_updates.append(line.strip())
+        version_match = re.search(r"Version: ([\d.]+),", line)
+        if version_match:
+            version = version_match.group(1)
+            if current_major_os_version != version.split(".")[0]:
+                # ignore updates for other major versions
+                continue
+
+            relevant_updates.append(version)
 
     return relevant_updates
 
