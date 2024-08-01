@@ -43,17 +43,15 @@ def is_on_different_filesystem(path):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description='\n'.join(
-            [
-                'Check folder writeability for Nagios.',
-                '',
-                'This script writes a random word to a file in a directory and then reads it back.',
-                'The read word is compared to the original word.',
-                '',
-                'It wants all options explicitly and does not assume file paths etc. since it',
-                'can be used in environments with network mounts and other special cases.',
-            ]
-        ),
+        description="""
+Check folder writeability for Nagios.
+
+This script writes a random word to a file in a directory and then reads it back.
+The read word is compared to the original word.
+
+It wants all options explicitly and does not assume file paths etc. since it
+can be used in environments with network mounts and other special cases."""
+),
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -84,12 +82,12 @@ def main():
     args = parse_arguments()
 
     if not os.path.isdir(args.directory):
-        print('UNKNOWN - Directory does not exist')
+        print(f'UNKNOWN - Directory "{args.directory}" does not exist')
         sys.exit(3)
 
     if args.enforce_different_fs:
         if not is_on_different_filesystem(args.directory):
-            print('CRITICAL - Directory is not mounted')
+            print(f'CRITICAL - Directory "{args.directory}" is not mounted')
             sys.exit(2)
 
     # Generate or use provided word and filename
