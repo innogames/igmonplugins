@@ -67,9 +67,9 @@ def parse_redis_config(file_path: str) -> dict[str, Union[str, list[str]]]:
                         config[current_key].append(line)
                     current_key = parts[0] if parts else None
         return config
-    except Exception as e:
+    except (FileNotFoundError, PermissionError, IOError, OSError) as error:
         # Maybe permission error? But let's catch more broadly
-        print(f'UNKNOWN - Error: {str(e)}')
+        print(f'UNKNOWN - Error: {error}')
         sys.exit(UNKNOWN)
 
 
@@ -79,14 +79,14 @@ def normalize_value(value: Union[str, list[str]]) -> str:
     """
     if isinstance(value, list):
         return ' '.join(value)
-    return str(value).lower()
+    return value.lower()
 
 
 def parse_memory_size(size_str: str) -> Union[int, str]:
     """
     Parses a memory size string and returns the size in bytes or the original string.
     """
-    size_str = str(size_str).upper()
+    size_str = size_str.upper()
     if size_str.isdigit():
         return int(size_str)
 
@@ -219,7 +219,7 @@ def main():
         sys.exit(exit_code)
 
     except Exception as e:
-        print(f'UNKNOWN - Error: {str(e)}')
+        print(f'UNKNOWN - Error: {e}')
         sys.exit(UNKNOWN)
 
 
