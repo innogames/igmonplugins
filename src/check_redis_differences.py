@@ -93,8 +93,8 @@ def parse_memory_size(size_str: str) -> Union[int, str]:
     multipliers = {
         'B': 1,
         'KB': 1024,
-        'MB': 1024 * 1024,
-        'GB': 1024 * 1024 * 1024,
+        'MB': 1024 ** 2,
+        'GB': 1024 ** 3,
     }
 
     match = re.match(r'^(\d+(?:\.\d+)?)\s*([KMGB]B?)?$', size_str)
@@ -123,7 +123,7 @@ def compare_memory_values(file_value: str, running_value: str) -> int:
     return CRITICAL
 
 
-def compare_client_output_buffer_limit(
+def is_client_output_buffer_limit_equal(
     file_value: list[str], running_value: str
 ) -> bool:
     """Compares client output buffer limit configurations."""
@@ -163,7 +163,7 @@ def compare_configs(
                     )
                     exit_code = max(exit_code, result)
             elif key == 'client-output-buffer-limit':
-                if not compare_client_output_buffer_limit(
+                if not is_client_output_buffer_limit_equal(
                     file_value, running_value
                 ):
                     differences.append(
