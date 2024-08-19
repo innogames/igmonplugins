@@ -43,19 +43,19 @@ def is_on_different_filesystem(path):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="""
-Check folder writeability for Nagios.
+        description="""Check folder writeability for Nagios.
 
 This script writes a random word to a file in a directory and then reads it back.
 The read word is compared to the original word.
 
 It wants all options explicitly and does not assume file paths etc. since it
-can be used in environments with network mounts and other special cases."""
-),
+can be used in environments with network mounts and other special cases.""",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
-        '--external-cmd', required=True, help='The command to confirm the written data.'
+        '--external-cmd',
+        required=True,
+        help='The command to confirm the written data.',
     )
     parser.add_argument(
         '--directory', required=True, help='Directory to test writeability in.'
