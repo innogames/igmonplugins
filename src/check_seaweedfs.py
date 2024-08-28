@@ -127,7 +127,7 @@ def _check_readonly_volumes(data: dict[str, Any]) -> int:
 
     if readonly_volumes:
         volumes_str = ', '.join(readonly_volumes)
-        print(f'CRITICAL: Readonly volumes detected: {volumes_str}')
+        print(f'CRITICAL: Detected read-only volume IDs: {volumes_str}')
         return 2
 
     return 0
