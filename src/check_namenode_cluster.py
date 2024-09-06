@@ -30,7 +30,6 @@ from typing import (
     Dict,
     Iterable,
     List,
-    Sequence,
     Tuple,
 )
 
@@ -63,15 +62,20 @@ def get_problems(
                 crits.append('Multiple active nodes found')
 
             active_node = node
+        elif service_state != 'standby':
+            crits.append(f'Unexpected service state: {service_state}')
 
     if active_node is None:
         crits.append('No active node found')
 
     # Make sure active node is not in safe mode
     if active_node is not None:
-        safemode_state = safemode_states[active_node]
-        if safemode_state == 'ON':
-            crits.append(f'Active node {active_node} is in safe mode')
+        if active_node in safemode_states:
+            safemode_state = safemode_states[active_node]
+            if safemode_state == 'ON':
+                crits.append(f'Active node {active_node} is in safe mode')
+        else:
+            crits.append(f'No safe mode state found for {active_node}')
 
     # Check if there are other nodes in safe mode
     for node, safemode_state in safemode_states.items():
@@ -84,9 +88,9 @@ def get_problems(
 
 
 def get_output(
-    warns: Sequence[str],
-    crits: Sequence[str],
-    unknowns: Sequence[str],
+    warns: List[str],
+    crits: List[str],
+    unknowns: List[str],
 ) -> Tuple[int, str]:
     if len(crits) > 0:
         code = 2
@@ -113,7 +117,7 @@ def get_service_state() -> Dict[str, str]:
         if line == '':
             continue
 
-        addr, state = line.split()
+        addr, state = line.split(maxsplit=1)
         service_state[addr] = state
 
     return service_state
@@ -142,7 +146,6 @@ def get_safemode_state() -> Dict[str, str]:
 def call_hdfs(args: Iterable[str]) -> str:
     cmd = subprocess.run(
         ['hdfs', *args],
-        check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
