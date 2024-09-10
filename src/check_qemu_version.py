@@ -115,14 +115,20 @@ def get_domain_list():
     for proc in psutil.process_iter():
         if proc.username() != 'libvirt-qemu':
             continue
-        vmname = list(filter(r.match, proc.cmdline()))[0]
-        if vmname:
-            domain = {
-                'pid':    proc.pid,
-                'vmname': r.search(vmname).group(2),
-                'hvname': hvname
-            }
-            domains.append(domain)
+
+        # If there are any kvm/qemu processes which are not a VM,
+        # the vmname receives an empty list and we skip to the next one.
+        vmname = list(filter(r.match, proc.cmdline()))
+        if not vmname:
+            continue
+
+        vmname = vmname[0]
+        domain = {
+            'pid':    proc.pid,
+            'vmname': r.search(vmname).group(2),
+            'hvname': hvname
+        }
+        domains.append(domain)
     return domains
 
 
