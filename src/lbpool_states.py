@@ -223,12 +223,11 @@ def get_current_states():
     ).stdout.splitlines()
 
     ret = defaultdict(int)
-    for line in pfctl_output:
-        indx = pfctl_output.index(line)
+    for idx, line in enumerate(pfctl_output):
         if "route-to" not in line:
             continue
         lbpool_name = POOL_RE.search(line).group(1)
-        last_states = int(STATES_RE.search(pfctl_output[(indx + 1)]).group(1))
+        last_states = int(STATES_RE.search(pfctl_output[(idx + 1)]).group(1))
         if last_states > ret[lbpool_name]:
             ret[lbpool_name] = last_states
 
