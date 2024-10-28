@@ -5,7 +5,7 @@ Check if service was restarted after timestamp in secret_timestamp file.
 OR
 Check if file is older than timestamp in secret_timestamp file.
 
-Copyright (c) 2023 InnoGames GmbH
+Copyright (c) 2024 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -90,18 +90,17 @@ def get_secret_file_time(timestamp_path: str) -> datetime:
     return datetime.fromtimestamp(int(date_line))
 
 
-def get_time_delta(check_time: datetime,
-                   secret_rotation_time: datetime) -> timedelta:
+def get_time_delta(check_time: datetime) -> timedelta:
     """
-    Calculates delta between service restart time and secret rotation time.
+    Calculates delta between given time and now.
 
     Args:
-        service_time: Time when service was restarted
+        check_time: Time when service was restarted
         secret_rotation_time: Time when secrets were rotated
 
     Returns: Timedelta of two inputs
     """
-    return secret_rotation_time - check_time
+    return datetime.now() - check_time
 
 
 def get_file_mtime(file_path: str) -> datetime:
@@ -120,24 +119,38 @@ def get_file_mtime(file_path: str) -> datetime:
 def main():
     args = parse_args()
     if args.service_name:
-        check_delta = get_service_restart_time(args.service_name)
+        service_restart_time = get_service_restart_time(args.service_name)
         warning_name = args.service_name
     else:
-        check_delta = get_file_mtime(args.file_path)
+        service_restart_time = get_file_mtime(args.file_path)
         warning_name = 'Server'
-    delta = get_time_delta(check_delta,
-                           get_secret_file_time(args.timestamp_file_path)
-                           )
-    if delta.days > args.critical_days:
+
+    # Get the maximum delta of service restart time and secret file time
+    # We need the oldest of these 2 values to compare with today
+    service_restart_delta = get_time_delta(service_restart_time),
+    secret_file_delta = (get_secret_file_time(args.timestamp_file_path))
+    if service_restart_time.days > args.critical_days:
         print(
             f"CRITICAL - {warning_name} does not run with newest set of"
             " secrets"
         )
         exit(2)
-    elif delta.days > args.warning_days:
+    elif service_restart_delta.days > args.warning_days:
         print(
             f"WARNING - {warning_name} does not run with newest set of"
             " secrets"
+        )
+        exit(1)
+    elif secret_file_delta.days > args.critical_days:
+        print(
+            f"CRITICAL - New secrets were not deployed on this server for "
+            f"{secret_file_delta.days} days."
+        )
+        exit(2)
+    elif secret_file_delta.days > args.warning_days:
+        print(
+            f"WARNING - New secrets were not deployed on this server for "
+            f"{secret_file_delta.days} days."
         )
         exit(1)
     else:
