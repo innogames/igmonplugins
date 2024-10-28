@@ -127,9 +127,9 @@ def main():
 
     # Get the maximum delta of service restart time and secret file time
     # We need the oldest of these 2 values to compare with today
-    service_restart_delta = get_time_delta(service_restart_time),
-    secret_file_delta = (get_secret_file_time(args.timestamp_file_path))
-    if service_restart_time.days > args.critical_days:
+    service_restart_delta = get_time_delta(service_restart_time)
+    secret_file_delta = get_time_delta(get_secret_file_time(args.timestamp_file_path))
+    if service_restart_delta.days > args.critical_days:
         print(
             f"CRITICAL - {warning_name} does not run with newest set of"
             " secrets"
