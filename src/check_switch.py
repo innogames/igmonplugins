@@ -242,7 +242,7 @@ def get_switch_model(snmp):
         return 'extreme'
     elif 'Dell Networking OS' in model:
         return 'force10_mxl'
-    elif 'Cumulus-Linux' in model:
+    elif 'Cumulus' in model:
         return 'cumulus'
     elif 'EdgeSwitch' in model:
         return 'edgeswitch'
