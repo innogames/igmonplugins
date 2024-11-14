@@ -251,8 +251,15 @@ def measure_latency(ifaces, count):
     for k, v in ifaces.items():
         ip_addresses[v] = k
 
+    # Ensure that all probes fit in 9 seconds, even if they fail.
+    # 10 seconds is nrpe execution limit.
+    period = 1000
+    if count * period > 9000:
+        period = 9000 // count
+
     for line in check_output(
-        ["/usr/bin/fping", "-q", "-c", str(count)] + list(ip_addresses.keys()),
+        ["/usr/bin/fping", "-p", str(period), "-q", "-c", str(count)]
+        + list(ip_addresses.keys()),
         universal_newlines=True,
         stderr=STDOUT,
     ).splitlines():
