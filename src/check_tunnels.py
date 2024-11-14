@@ -27,7 +27,7 @@ import re
 import sys
 
 from argparse import ArgumentParser
-from subprocess import check_output, STDOUT
+from subprocess import check_output, STDOUT, CalledProcessError
 
 IFCONFIG_RE = re.compile(
     r"^("
@@ -50,9 +50,10 @@ IFCONFIG_RE = re.compile(
 
 FPING_RE = re.compile(
     # 192.0.2.1                           : xmt/rcv/%loss = 3/3/0%, min/avg/max = 8.31/8.71/9.49
+    # 169.254.21.169                      : xmt/rcv/%loss = 10/0/100%
     r"(?P<ip_address>[0-9a-f.:]+)\s+: "
-    "xmt/rcv/%loss = [0-9]+/[0-9]+/(?P<percent_loss>[0-9]+)%, "
-    "min/avg/max = [0-9.]+/(?P<avg_ping>[0-9.]+)/[0-9.]+"
+    "xmt/rcv/%loss = [0-9]+/[0-9]+/(?P<percent_loss>[0-9]+)%(,\s+)?"
+    "(min/avg/max = [0-9.]+/(?P<avg_ping>[0-9.]+)/[0-9.]+)?"
 )
 
 
@@ -107,14 +108,17 @@ def main():
     output_lines = []
 
     for ifname, ifdata in result.items():
-        output_lines.append(
-            f'{ifname}: {ifdata["avg_ping"]}ms latency, '
-            f'{ifdata["percent_loss"]}% loss'
-        )
+        line = f"{ifname}: "
 
-        if ifdata["avg_ping"] > worst_latency:
-            worst_latency = ifdata["avg_ping"]
-            worst_latency_iface = ifname
+        if ifdata["avg_ping"]:
+            line += f'{ifdata["avg_ping"]}ms latency, '
+            if ifdata["avg_ping"] > worst_latency:
+                worst_latency = ifdata["avg_ping"]
+                worst_latency_iface = ifname
+
+        line += f'{ifdata["percent_loss"]}% loss'
+
+        output_lines.append(line)
 
         if ifdata["percent_loss"] > worst_loss:
             worst_loss = ifdata["percent_loss"]
@@ -257,18 +261,28 @@ def measure_latency(ifaces, count):
     if count * period > 9000:
         period = 9000 // count
 
-    for line in check_output(
-        ["/usr/bin/fping", "-p", str(period), "-q", "-c", str(count)]
-        + list(ip_addresses.keys()),
-        universal_newlines=True,
-        stderr=STDOUT,
-    ).splitlines():
-        r = FPING_RE.match(line)
+    try:
+        lines = check_output(
+            ["/usr/bin/fping", "-p", str(period), "-q", "-c", str(count)]
+            + list(ip_addresses.keys()),
+            universal_newlines=True,
+            stderr=STDOUT,
+        )
+    except CalledProcessError as e:
+        if e.returncode == 1:
+            lines = e.output
+        else:
+            raise
 
-        ret[ip_addresses[r.group("ip_address")]] = {
+    for line in lines.splitlines():
+        r = FPING_RE.match(line)
+        ret_key = ip_addresses[r.group("ip_address")]
+        ret[ret_key] = {
             "percent_loss": float(r.group("percent_loss")),
-            "avg_ping": float(r.group("avg_ping")),
+            "avg_ping": None,
         }
+        if r.groupdict().get("avg_ping"):
+            ret[ret_key]["avg_ping"] = float(r.group("avg_ping"))
 
     return ret
 
