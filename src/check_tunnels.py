@@ -73,7 +73,7 @@ def parse_args():
         help='Warning threshold for packet loss in percent')
     parser.add_argument('--critical-loss', type=int, default=50,
         help='Critical threshold for packet loss in percent')
-    parser.add_argument('--count', type=int, default=10,
+    parser.add_argument('--count', type=int, default=9,
         help='Count of pings to send')
     return parser.parse_args()
 
