@@ -263,7 +263,7 @@ def check_sensors(res):
     errors = []
     st_pos = 0
     for line in res:
-        line = re.split('\s+', line.strip())
+        line = re.split(r'\s+', line.strip())
         st_pos = list(filter(lambda d: d.strip().lower() == '<status>', line))
         if not st_pos:
             continue
