@@ -263,7 +263,7 @@ def check_sensors(res):
     errors = []
     st_pos = 0
     for line in res:
-        line = re.split('\s+', line.strip())
+        line = re.split(r'\s+', line.strip())
         st_pos = list(filter(lambda d: d.strip().lower() == '<status>', line))
         if not st_pos:
             continue
@@ -329,8 +329,9 @@ def check_racadm_sel(host, user, password, res):
 
 def check_ipmi_sel(res):
     """Check the response for the IPMI SEL"""
-    msgs = []
-    head = ''
+    entries = []
+    code = NagiosCodes.ok
+    msg = 'OK'
     for line in res:
         # Normally line is split by | symbol
         # But we don't need this detail for finding substrings.
@@ -339,18 +340,21 @@ def check_ipmi_sel(res):
             continue
         if linestr.find('SEL has no entries') != -1:
             continue
-        if line[4].lower().find('critical') != -1 or \
-            line[4].lower().find('to non-recoverable') != -1:
-            head = ' '.join(line[1:])
+
         # Reverse order
-        msgs.insert(0, ' '.join(line[1:]))
+        entries.insert(0, ' '.join(line[1:]))
 
-    if head == '' and msgs:
-        head = msgs[0]
-    multiline = '\n'.join(msgs)[:2048]
+        # If a CMOS battery is complaining, we add the message, but return OK,
+        # as we don't replace CMOS batteries anymore.
+        if 'CMOS Battery' not in linestr:
+            code = NagiosCodes.warning
+            msg = 'WARNING'
 
-    if len(msgs):
-        return (NagiosCodes.warning, 'WARNING: %s\n\n%s' % (head, multiline))
+    # Naemon has a limit on the output length.
+    multiline = '\n'.join(entries)[:2048]
+
+    if len(entries):
+        return (code, '%s: %s\n\n%s' % (msg, entries[0], multiline))
     return (NagiosCodes.ok, 'OK: SEL is empty')
 
 
