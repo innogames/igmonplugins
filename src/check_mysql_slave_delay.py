@@ -54,6 +54,15 @@ def parse_args():
         default=120,
     )
     parser.add_option(
+        '-C',
+        '--catch-up-multiplier',
+        help='Multiplier for catching up threshold',
+        dest='CATCH_UP_MULTIPLIER',
+        action='store',
+        type='int',
+        default=5,
+    )
+    parser.add_option(
         '-n',
         '--name',
         help='Name of slave to check (for multi-source replication)',
@@ -158,7 +167,7 @@ def check_server(opts):
     if current_behind > opts.CRIT_SEC_BEHIND_MASTER:
         if is_catching_up(current_behind, prev_behind, prev_time):
             # If catching up, use doubled threshold
-            if current_behind > (opts.CRIT_SEC_BEHIND_MASTER * 2):
+            if current_behind > (opts.CRIT_SEC_BEHIND_MASTER * opts.CATCH_UP_MULTIPLIER):
                 return ['CRITICAL', msg + ' (catching up, but extremely high)']
             return ['WARNING', msg + ' (catching up from critical)']
         return ['CRITICAL', msg]
@@ -167,7 +176,7 @@ def check_server(opts):
     if current_behind > opts.WARN_SEC_BEHIND_MASTER:
         if is_catching_up(current_behind, prev_behind, prev_time):
             # If catching up, use doubled threshold
-            if current_behind > (opts.WARN_SEC_BEHIND_MASTER * 2):
+            if current_behind > (opts.WARN_SEC_BEHIND_MASTER * opts.CATCH_UP_MULTIPLIER):
                 return ['WARNING', msg + ' (catching up, but still high)']
             return ['OK', msg + ' (catching up)']
         return ['WARNING', msg]
