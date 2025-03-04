@@ -4,9 +4,9 @@
 This script monitors the usage of the InnoDB buffer pool by issuing a query that calculates
 the percentage of the buffer pool currently utilized. It raises alerts based on defined thresholds.
 
-Warning at 90% usage.
+The Warning threshold is set to 90% by default.
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2025 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -26,20 +26,23 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
+from contextlib import closing
+
 from mysql.connector import (
     connect,
     DatabaseError,
 )
 
 
-def parse_args():
-    """Get argument parser -> ArgumentParser"""
+def parse_args() -> Namespace:
+    """Get argument parser"""
 
     parser = ArgumentParser()
     parser.add_argument('--user', default='root')
     parser.add_argument('--host', default='localhost')
-    parser.add_argument('--password', default='password')
+    parser.add_argument('--password', default='')
+    parser.add_argument('--threshold', type=float, default=90.0)
     parser.add_argument(
         '--unix-socket',
         default='/var/run/mysqld/mysqld.sock',
@@ -48,8 +51,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    """The main program"""
+def main() -> None:
+    """Main function"""
     args = parse_args()
 
     try:
@@ -59,15 +62,15 @@ def main():
         print('UNKNOWN: ' + str(error))
         exit(3)
 
-    if buffer_pool_usage >= 90:
-        print('WARNING: Buffer Pool Usage is at {}%'.format(buffer_pool_usage))
+    if buffer_pool_usage >= args.threshold:
+        print(f'WARNING: Buffer Pool Usage is at {buffer_pool_usage}%')
         exit(1)
 
-    print('OK: Buffer Pool Usage is at {}%'.format(buffer_pool_usage))
+    print(f'OK: Buffer Pool Usage is at {buffer_pool_usage}%')
     exit(0)
 
 
-def get_buffer_pool_usage(user, password, host, unix_socket):
+def get_buffer_pool_usage(user: str, password: str, host: str, unix_socket: str) -> float:
     """Get buffer pool usage percentage
 
     Query the database to obtain the percentage of buffer pool used.
@@ -98,37 +101,36 @@ def get_buffer_pool_usage(user, password, host, unix_socket):
     return float(buffer_pool_usage)
 
 
-def query_database(user, password, host, unix_socket, query):
-    """Query database
+def query_database(user: str, password: str, host: str, unix_socket: str, query: str) -> float:
+    """Query the database
 
     Query the specified database to obtain results from the query.
 
-    :param: :user: The username to connect to database
-    :param: :password: The password to connect to database
-    :param: :host: The hostname/hostaddress to connect
-    :param: :unix_socket: Try unix_socket as auth_method to connect
+    :param user: The username to connect to the database
+    :param password: The password to connect to the database
+    :param host: The hostname/host address to connect
+    :param unix_socket: Try unix_socket as auth_method to connect
+    :param query: The SQL query to execute
 
-    :return: result
+    :return: The result as a float
     """
 
-    cnx = connect(
-        user=user,
-        password=password,
-        host=host,
-        unix_socket=unix_socket,
-    )
+    conn_info = {
+        'user': user,
+        'password': password,
+        'host': host,
+        'unix_socket': unix_socket,
+    }
 
-    cur = cnx.cursor()
+    with closing(connect(**conn_info)) as cnx:
+        with closing(cnx.cursor()) as cur:
+            cur.execute(query)
+            row = cur.fetchone()
+            if row is None:
+                raise ValueError("Query returned no results")
 
-    cur.execute(query)
 
-    res = cur.fetchall()
-    result = res[0][0]  # Expecting a single result
-
-    cur.close()
-    cnx.close()
-
-    return result
+    return float(row[0])
 
 
 if __name__ == '__main__':
