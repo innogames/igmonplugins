@@ -142,7 +142,8 @@ def check_logrotation_config(config, exclude):
             with open(conf) as in_file:
                 for line in in_file:
                     if line.startswith('/'):
-                        configured_logs.add(line.rstrip('{\n\t '))
+                        configured_logs.update(set(
+                            glob.glob(line.rstrip('{\n\t '))))
 
         log_dirs = {os.path.dirname(c) for c in configured_logs}
 
