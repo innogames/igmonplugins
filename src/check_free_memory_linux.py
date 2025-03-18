@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Linux mem free check
 
-This script will read /proc/meminfo and calculate the sum of:
-* MemFree
-* SwapFree
-* Cached
+This script will read /proc/meminfo and warn if the available memory is
+below a certain threshold.
 
-Will raise a warning/critical if a certain percentage or absolute value
-is reached.
-
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2025 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +25,6 @@ Copyright (c) 2020 InnoGames GmbH
 # THE SOFTWARE.
 
 import argparse
-import os
 import sys
 
 
@@ -49,7 +43,7 @@ def parse_args():
         '--warning',
         metavar='warning',
         type=str,
-        default=str(768*1024*1024),  # 768 MiB
+        default=str(768 * 1024 * 1024),  # 768 MiB
         help=(
             'Expects an absolute value in bytes or a percentage of '
             'total memory (suffixed with %%)! '
@@ -62,7 +56,7 @@ def parse_args():
         '--critical',
         metavar='critical',
         type=str,
-        default=str(512*1024*1024),  # 512 MiB
+        default=str(512 * 1024 * 1024),  # 512 MiB
         help=(
             'Expects an absolute value in bytes or a percentage of '
             'total memory (suffixed with %%)! '
@@ -86,12 +80,11 @@ def main():
         print('Could not parse /proc/meminfo')
         sys.exit(3)
 
-    mem_free_kib = meminfo['MemFree'] + meminfo['SwapFree'] + meminfo['Cached']
+    mem_free_kib = meminfo['MemAvailable']
     mem_total_kib = meminfo['MemTotal'] + meminfo['SwapTotal']
 
     output = (
-        'Memory low! Please increase memory! (MemFree + SwapFree + Cached) '
-        '< {:,} MiB'.format(mem_free_kib >> 10)
+        f'Memory low! Please increase memory! < {mem_free_kib >> 10:,} MiB'
     )
     exit_status = 3
 
@@ -115,12 +108,12 @@ def read_proc_meminfo():
     """Return /proc/meminfo as a dict"""
     meminfo_dict = {}
     try:
-        with open('/proc/meminfo', 'r') as proc_file:
+        with open('/proc/meminfo') as proc_file:
             for line in proc_file.readlines():
                 name, value = line.strip().replace(' kB', '').split(':', 1)
                 meminfo_dict[name] = int(value)
             return meminfo_dict
-    except (OSError, IOError):
+    except OSError:
         return None
 
 
