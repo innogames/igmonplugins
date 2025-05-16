@@ -54,7 +54,7 @@ def _get_configs_pending_restarts():
     query = "select name from pg_settings where pending_restart = 't';"
 
     output = subprocess.check_output(
-        'psql postgres -tAc "{}"'.format(query), shell=True)
+        'psql postgres -tXAc "{}"'.format(query), shell=True)
 
     return(output.decode().splitlines())
 
