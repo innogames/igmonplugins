@@ -96,7 +96,7 @@ def get_pgbouncer_requests(port, dbname, host):
     """
 
     output = subprocess.check_output(
-            'psql -p {} pgbouncer -h {} -Ac "show stats;"'.format(
+            'psql -p {} pgbouncer -h {} -XAc "show stats;"'.format(
                 port, host
             ), shell=True)
 
