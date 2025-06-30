@@ -37,81 +37,86 @@ class ExitCodes:
 
 
 MULTIPLIERS = {
-    's': 1,
-    'ms': 0.001,
-    'us': 0.000001,
-    'ns': 0.000000001,
+    "s": 1,
+    "ms": 0.001,
+    "us": 0.000001,
+    "ns": 0.000000001,
 }
 
 
 def main():
     parser = ArgumentParser(
         description=(
-            'Check time difference between local Chrony deamon '
-            'and its NTP peers'
+            "Check time difference between local Chrony deamon " "and its NTP peers"
         )
     )
     parser.add_argument(
-        '-w', dest='warning',  type=float, required=True,
-        help="Time difference in seconds for Warning state"
+        "-w",
+        dest="warning",
+        type=float,
+        required=True,
+        help="Time difference in seconds for Warning state",
     )
     parser.add_argument(
-        '-c', dest='critical', type=float, required=True,
-        help="Time difference in seconds for Critical state"
+        "-c",
+        dest="critical",
+        type=float,
+        required=True,
+        help="Time difference in seconds for Critical state",
     )
     args = parser.parse_args()
 
-    if platform.system() == 'FreeBSD':
-        chrony = '/usr/local/bin/chronyc'
+    if platform.system() == "FreeBSD":
+        chrony = "/usr/local/bin/chronyc"
     else:
-        chrony = '/usr/bin/chronyc'
+        chrony = "/usr/bin/chronyc"
 
     try:
         proc = check_output(
-            [chrony, '-n', 'sources'],
+            [chrony, "-n", "sources"],
             stderr=STDOUT,
         ).decode()
     except OSError as e:
-        print('UNKNOWN: can\'t read Chrony status: {}'.format(e))
+        print(f"UNKNOWN: can't read Chrony status: {e}")
         return ExitCodes.unknown
     exit_code = ExitCodes.ok
     peers_found = False
     stats_found = False
-    for line in proc.split('\n'):
+    for line in proc.split("\n"):
         if line:
             # Chrony on Debian Jessie does not support `-c` parameter.
             # No CSV output for us, we must parse text.
-            if line.startswith('======='):
+            if line.startswith("======="):
                 stats_found = True
                 continue
             if not stats_found:
                 continue
             line = line.split()
             local_exit_code = ExitCodes.ok
-            local_exit_string = 'OK'
-            time_diff = re.match('[\+\-]([0-9]+)([a-z]s)', line[6])
+            local_exit_string = "OK"
+            time_diff = re.match("[\+\-]([0-9]+)([a-z]s)", line[6])
             if time_diff:
                 time_diff = time_diff.groups()
                 time_nice = time_diff[0] + time_diff[1]
                 time_diff = float(time_diff[0]) * MULTIPLIERS[time_diff[1]]
                 if time_diff > args.warning:
                     local_exit_code = ExitCodes.warning
-                    local_exit_string = 'WARNING'
+                    local_exit_string = "WARNING"
                 if time_diff > args.critical:
                     local_exit_code = ExitCodes.critical
-                    local_exit_string = 'CRITICAL'
-                print('{}: peer {} time offset {}'.format(
-                    local_exit_string, line[1], time_nice,
-                    ))
+                    local_exit_string = "CRITICAL"
+                print(
+                    f"{local_exit_string}: peer {local_exit_string} time offset {time_nice}"
+                )
                 exit_code = max(exit_code, local_exit_code)
                 peers_found = True
 
     if not peers_found:
-        print('UNKNOWN: no peers found!')
+        print("UNKNOWN: no peers found!")
         return ExitCodes.unknown
 
     return exit_code
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit(main())
