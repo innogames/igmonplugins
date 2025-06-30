@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Crony Check
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright © 2025 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,30 +21,14 @@ Copyright (c) 2020 InnoGames GmbH
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from subprocess import check_output, STDOUT
-from argparse import ArgumentParser
-from sys import exit
-import re
 import platform
+from argparse import ArgumentParser
+from enum import Enum
+from subprocess import check_output, STDOUT
+from sys import exit
 
 
-# Nagios plugin exit codes
-class ExitCodes:
-    ok = 0
-    warning = 1
-    critical = 2
-    unknown = 3
-
-
-MULTIPLIERS = {
-    "s": 1,
-    "ms": 0.001,
-    "us": 0.000001,
-    "ns": 0.000000001,
-}
-
-
-def main():
+def parse_args():
     parser = ArgumentParser(
         description=(
             "Check time difference between local Chrony deamon " "and its NTP peers"
@@ -64,8 +48,65 @@ def main():
         required=True,
         help="Time difference in seconds for Critical state",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "-g",
+        dest="good_peers",
+        type=int,
+        required=False,
+        help="Minimal amount of synchronized peers for good state",
+        default=2,
+    )
+    return parser.parse_args()
 
+
+def main():
+    args = parse_args()
+    peers = get_peers()
+    output_lines = []
+    worst_line = None
+
+    if not peers:
+        worst_exit_code = ExitCodes.critical
+        print("CRITICAL: No peers found!")
+        return worst_exit_code
+
+    synced_peers = 0
+    worst_exit_code = ExitCodes.ok
+    for peer_k, peer_v in peers.items():
+        peer_exit_code = ExitCodes.critical
+        line = f"{peer_k}: "
+        if peer_v["synced"]:
+            line += f"offset {peer_v['offset']:02f}s"
+            if peer_v["synced"]:
+                if abs(peer_v["offset"]) > args.critical:
+                    peer_exit_code = ExitCodes.critical
+                elif abs(peer_v["offset"]) > args.warning:
+                    peer_exit_code = ExitCodes.warning
+                else:
+                    synced_peers += 1
+                    peer_exit_code = ExitCodes.ok
+        else:
+            line += "not synced"
+        output_lines.append(line)
+        if peer_exit_code.value > worst_exit_code.value:
+            worst_exit_code = peer_exit_code
+            worst_line = line
+
+    # As long as there are 2 or more synced peers we can ignore peers that
+    # are unreachable or have too big offset.
+    if worst_line and synced_peers < args.good_peers:
+        output_lines.insert(
+            0, f"{worst_exit_code.name.upper()}: Worst peer {worst_line}"
+        )
+        exit_code = worst_exit_code
+    else:
+        output_lines.insert(0, f"OK: At least {args.good_peers} peers are synced!")
+        exit_code = ExitCodes.ok
+    print("\n".join(output_lines))
+    return exit_code
+
+
+def get_peers():
     if platform.system() == "FreeBSD":
         chrony = "/usr/local/bin/chronyc"
     else:
@@ -73,50 +114,38 @@ def main():
 
     try:
         proc = check_output(
-            [chrony, "-n", "sources"],
+            [chrony, "-c", "-n", "sources"],
             stderr=STDOUT,
         ).decode()
     except OSError as e:
         print(f"UNKNOWN: can't read Chrony status: {e}")
-        return ExitCodes.unknown
-    exit_code = ExitCodes.ok
-    peers_found = False
-    stats_found = False
+        exit(ExitCodes.unknown)
+
+    peers = {}
+
     for line in proc.split("\n"):
         if line:
-            # Chrony on Debian Jessie does not support `-c` parameter.
-            # No CSV output for us, we must parse text.
-            if line.startswith("======="):
-                stats_found = True
+            line = line.split(",")
+            if line[0] != "^":
+                # Exclude non-servers
                 continue
-            if not stats_found:
-                continue
-            line = line.split()
-            local_exit_code = ExitCodes.ok
-            local_exit_string = "OK"
-            time_diff = re.match("[\+\-]([0-9]+)([a-z]s)", line[6])
-            if time_diff:
-                time_diff = time_diff.groups()
-                time_nice = time_diff[0] + time_diff[1]
-                time_diff = float(time_diff[0]) * MULTIPLIERS[time_diff[1]]
-                if time_diff > args.warning:
-                    local_exit_code = ExitCodes.warning
-                    local_exit_string = "WARNING"
-                if time_diff > args.critical:
-                    local_exit_code = ExitCodes.critical
-                    local_exit_string = "CRITICAL"
-                print(
-                    f"{local_exit_string}: peer {local_exit_string} time offset {time_nice}"
-                )
-                exit_code = max(exit_code, local_exit_code)
-                peers_found = True
+            synced = False
+            if line[1] in ("*", "+", "-"):
+                synced = True
+            peers[line[2]] = {
+                "offset": float(line[8]),
+                "synced": synced,
+            }
+    return peers
 
-    if not peers_found:
-        print("UNKNOWN: no peers found!")
-        return ExitCodes.unknown
 
-    return exit_code
+# Nagios plugin exit codes
+class ExitCodes(Enum):
+    ok = 0
+    warning = 1
+    critical = 2
+    unknown = 3
 
 
 if __name__ == "__main__":
-    exit(main())
+    exit(main().value)
