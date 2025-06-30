@@ -73,19 +73,19 @@ def main():
     if args.user and args.password:
         connect_params["http_auth"] = (args.user, args.password)
 
-    index = args.index
+    index_name = args.index
     if args.daily:
-        index = index + "-" + datetime.now().strftime(args.date_format)
+        index_name = index_name + "-" + datetime.now().strftime(args.date_format)
 
     opensearch = OpenSearch([args.host], **connect_params)
 
     # Suppress print output from OpenSearch function
     sys.stderr = None
-    if not opensearch.indices.exists(index, allow_no_indices=False):
-        print(f'Index not found in cluster: {format(index)}.')
+    if not opensearch.indices.exists(index=index_name, allow_no_indices=False):
+        print(f'Index not found in cluster: {format(index_name)}.')
         sys.exit(1)
 
-    print(f'Index {format(index)} found')
+    print(f'Index {format(index_name)} found')
 
 
 if __name__ == "__main__":
