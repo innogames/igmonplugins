@@ -4,6 +4,7 @@ InnoGames Monitoring Plugins - check for repmgrd status
 Checks if repmgr cluster is healthy and all nodes are connected and healthy
 """
 
+import csv
 import subprocess
 import sys
 from typing import Dict, List, Tuple
@@ -26,7 +27,6 @@ def main() -> None:
 
     # Check overall cluster health
     is_healthy, health_message = check_cluster_health(cluster_nodes, service_status)
-
     if not is_healthy:
         print(f"CRITICAL - {health_message}")
         sys.exit(2)
@@ -47,19 +47,22 @@ def check_cluster_health(
     for node in cluster_nodes:
         service = service_status.get(node["node_id"])
         if not service:
-            issues.append(f"node_{node['node_id']}: service status not found")
+            issues.append(f"node {node['node_id']}: service status not found")
             continue
 
         node_name = service["node_name"]
 
         # Check connection
-        if node["connection_status"] != 0:
+        if node["connection_status"] != "0":
             issues.append(f"{node_name} is disconnected")
 
-        if not service["repmgrd_running"]:
+        if not int(service["pg_running"]):
+            issues.append(f"{node_name}: postgres not running")
+
+        if not int(service["repmgrd_running"]):
             issues.append(f"{node_name}: repmgrd not running")
 
-        if service["paused"]:
+        if int(service["paused"]):
             issues.append(f"{node_name}: repmgrd is paused")
 
     if issues:
@@ -83,48 +86,33 @@ def run_command(command: str) -> Tuple[int, str, str]:
 
 def parse_cluster_show_csv(output: str) -> List[dict]:
     """Parse repmgr cluster show --csv output"""
-    nodes: List[dict] = []
-    lines = output.strip().split("\n")
+    lines = output.strip().splitlines()
+    reader = csv.DictReader(lines, ["node_id", "connection_status", "recovery_type"])
+    result = list([row for row in reader])
 
-    for line in lines:
-        if not line.strip():
-            continue
-
-        parts = line.split(",")
-        if len(parts) >= 3:
-            node_info = {
-                "node_id": int(parts[0]),
-                "connection_status": int(parts[1]),  # 0 = connected
-                "recovery_type": int(
-                    parts[2]
-                ),  # -1 = unknown, 0 = primary, 1 = standby
-            }
-            nodes.append(node_info)
-
-    return nodes
+    return result
 
 
 def parse_service_status_csv(output: str) -> Dict[int, dict]:
-    """Parse repmgr service status --csv output"""
-    services: Dict[int, dict] = {}
-    lines = output.strip().split("\n")
+    """Parse repmgr service status --csv output. Indexed by node_id."""
 
-    for line in lines:
-        if not line.strip():
-            continue
-
-        parts = line.split(",")
-        if len(parts) >= 10:
-            node_id = int(parts[0])
-            service_info = {
-                "node_id": node_id,
-                "node_name": parts[1],
-                "repmgrd_running": int(parts[4]) == 1,
-                "paused": int(parts[6]),
-            }
-            services[node_id] = service_info
-
-    return services
+    lines = output.strip().splitlines()
+    reader = csv.DictReader(
+        lines,
+        [
+            "node_id",
+            "node_name",
+            "role",
+            "pg_running",
+            "repmgrd_running",
+            "pid",
+            "paused",
+            "priority",
+            "last_seen",
+            "location",
+        ],
+    )
+    return {row["node_id"]: row for row in reader}
 
 
 if __name__ == "__main__":
