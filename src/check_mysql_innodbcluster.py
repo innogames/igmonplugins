@@ -4,12 +4,20 @@
 This script checks the health of a MySQL InnoDB Cluster by examining
 member states, quorum, and replication status with role-aware lag detection.
 
+Authentication: This script is designed to use MySQL socket authentication.
+Configure your MySQL user with the auth_socket plugin for passwordless authentication:
+    CREATE USER 'nagios'@'localhost' IDENTIFIED WITH auth_socket;
+    GRANT SELECT, PROCESS, REPLICATION CLIENT ON *.* TO 'nagios'@'localhost';
+    GRANT SELECT ON mysql_innodb_cluster_metadata.* TO 'nagios'@'localhost';
+    GRANT SELECT ON performance_schema.* TO 'nagios'@'localhost';
+
 Copyright (c) 2025 InnoGames GmbH
 """
 
 from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
+from contextlib import contextmanager
 from sys import exit
-from mysql.connector import connect
+from mysql.connector import connect, Error as MySQLError
 import re
 
 
@@ -29,11 +37,7 @@ def parse_args():
     )
     parser.add_argument(
         '--user',
-        help='MySQL user',
-    )
-    parser.add_argument(
-        '--passwd',
-        help='MySQL password',
+        help='MySQL user (uses socket authentication)',
     )
     parser.add_argument(
         '--warning',
@@ -58,53 +62,71 @@ def parse_args():
     return parser.parse_args()
 
 
+@contextmanager
+def mysql_connection(**kwargs):
+    connection = None
+    try:
+        connection = connect(**kwargs)
+        yield connection
+    finally:
+        if connection:
+            connection.close()
+
+
 def main():
     args = parse_args()
 
-    # Build connection kwargs
-    connection_kwargs = {}
+    # Build connection kwargs with timeouts
+    connection_kwargs = {
+        'connection_timeout': 10,
+    }
+
     if args.host == 'localhost':
         connection_kwargs['unix_socket'] = args.unix_socket
     else:
         connection_kwargs['host'] = args.host
+        connection_kwargs['port'] = 3306
+
     if args.user:
         connection_kwargs['user'] = args.user
-        if args.passwd:
-            connection_kwargs['passwd'] = args.passwd
 
     try:
-        db = ClusterDatabase(connect(**connection_kwargs))
-    except Exception as e:
-        print(f'UNKNOWN - Cannot connect to MySQL: {e}')
+        with mysql_connection(**connection_kwargs) as connection:
+            db = ClusterDatabase(connection)
+            check = ClusterCheck(db)
+
+            # Check critical conditions first
+            critical_problems = check.get_problems(args.critical)
+            if critical_problems:
+                output = 'CRITICAL - ' + ', '.join(critical_problems)
+                if args.perfdata:
+                    output += ' | ' + check.get_perfdata()
+                print(output)
+                exit(ExitCodes.critical)
+
+            # Check warning conditions
+            warning_problems = check.get_problems(args.warning)
+            if warning_problems:
+                output = 'WARNING - ' + ', '.join(warning_problems)
+                if args.perfdata:
+                    output += ' | ' + check.get_perfdata()
+                print(output)
+                exit(ExitCodes.warning)
+
+            # All good
+            status_info = check.get_status_summary()
+            output = f'OK - Cluster healthy: {db.get_cluster_name()} - {status_info}'
+            if args.perfdata:
+                output += ' | ' + check.get_perfdata()
+            print(output)
+            exit(ExitCodes.ok)
+
+    except MySQLError as e:
+        print(f'UNKNOWN - MySQL error: {e}')
         exit(ExitCodes.unknown)
-
-    check = ClusterCheck(db)
-
-    # Check critical conditions first
-    critical_problems = check.get_problems(args.critical)
-    if critical_problems:
-        output = 'CRITICAL - ' + ', '.join(critical_problems)
-        if args.perfdata:
-            output += ' | ' + check.get_perfdata()
-        print(output)
-        exit(ExitCodes.critical)
-
-    # Check warning conditions
-    warning_problems = check.get_problems(args.warning)
-    if warning_problems:
-        output = 'WARNING - ' + ', '.join(warning_problems)
-        if args.perfdata:
-            output += ' | ' + check.get_perfdata()
-        print(output)
-        exit(ExitCodes.warning)
-
-    # All good
-    status_info = check.get_status_summary()
-    output = f'OK - Cluster healthy: {db.get_cluster_name()} - {status_info}'
-    if args.perfdata:
-        output += ' | ' + check.get_perfdata()
-    print(output)
-    exit(ExitCodes.ok)
+    except Exception as e:
+        print(f'UNKNOWN - {e}')
+        exit(ExitCodes.unknown)
 
 
 class ExitCodes:
@@ -194,25 +216,20 @@ class ClusterFilter:
 class ClusterDatabase:
     def __init__(self, connection):
         self.connection = connection
-        self.cursor = connection.cursor()
+        self.cursor = connection.cursor(dictionary=True)
         self._members = None
         self._cluster_info = None
         self._member_stats = None
         self._local_member_role = None
         self._replication_lag = None
 
-    def __del__(self):
-        if hasattr(self, 'connection'):
-            self.connection.close()
-
     def execute(self, statement):
-        """Return the results as a list of dicts"""
+        """Execute SQL statement and return results as list of dicts"""
         try:
             self.cursor.execute(statement)
-            col_names = [desc[0].lower() for desc in self.cursor.description]
-            return [dict(zip(col_names, r)) for r in self.cursor.fetchall()]
-        except Exception:
-            return []
+            return self.cursor.fetchall()
+        except MySQLError as e:
+            raise Exception(f"SQL execution failed: {e}")
 
     def get_members(self):
         if self._members is None:
@@ -225,6 +242,8 @@ class ClusterDatabase:
                                                 MEMBER_VERSION
                                          FROM performance_schema.replication_group_members
                                          ''')
+            if not self._members:
+                raise Exception("No group replication members found - not part of InnoDB Cluster?")
         return self._members
 
     def get_local_member_role(self):
@@ -235,10 +254,9 @@ class ClusterDatabase:
                                   FROM performance_schema.replication_group_members
                                   WHERE MEMBER_ID = @@server_uuid
                                   ''')
-            if result:
-                self._local_member_role = result[0]['member_role']
-            else:
-                self._local_member_role = 'UNKNOWN'
+            if not result:
+                raise Exception("Cannot determine local member role - not part of group replication?")
+            self._local_member_role = result[0]['MEMBER_ROLE']
         return self._local_member_role
 
     def get_member_stats(self):
@@ -262,7 +280,8 @@ class ClusterDatabase:
                                  ''')
 
             for stat in stats:
-                self._member_stats[stat['member_host']] = stat
+                stat_dict = {k.lower(): v for k, v in stat.items()}
+                self._member_stats[stat_dict['member_host']] = stat_dict
         return self._member_stats
 
     def get_secondary_replication_lag(self):
@@ -278,9 +297,7 @@ class ClusterDatabase:
                                                    TIMESTAMPDIFF(SECOND, GREATEST(
                                                                                  PROCESSING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP,
                                                                                  LAST_PROCESSED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP
-                                                                         ),
-                                                                         NOW()
-                                                   )                                  as lag_seconds
+                                                                         ), NOW())    as lag_seconds
                                             FROM performance_schema.replication_applier_status_by_coordinator
                                             WHERE CHANNEL_NAME = 'group_replication_applier'
                                               AND (PROCESSING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP > '1970-01-01'
@@ -292,7 +309,7 @@ class ClusterDatabase:
                     is_processing = status.get('is_processing', False)
                     lag_seconds = status.get('lag_seconds', 0) or 0
 
-                    # Check if there's queue activity to determine if lag is meaningful
+                    # Check if there's queue activity to determine if there is lag
                     stats = self.get_member_stats()
                     current_host = self.execute('SELECT @@hostname as hostname')
                     if current_host:
@@ -308,8 +325,6 @@ class ClusterDatabase:
                                 self._replication_lag[hostname] = lag_seconds
                         elif lag_seconds < 60:  # Only report very recent lag for idle secondaries
                             self._replication_lag[hostname] = lag_seconds
-
-            # Primary nodes don't have replication lag
 
         return self._replication_lag
 
@@ -343,22 +358,25 @@ class ClusterDatabase:
                 if result:
                     self._cluster_info = result[0]
                 else:
-                    self._cluster_info = {}
-            except:
-                self._cluster_info = {}
+                    raise Exception("No InnoDB Cluster metadata found")
+            except Exception as e:
+                raise Exception(f"Cannot access cluster metadata: {e}")
         return self._cluster_info
 
     def get_cluster_name(self):
         info = self.get_cluster_info()
-        return info.get('cluster_name', 'unknown')
+        cluster_name = info.get('cluster_name')
+        if not cluster_name:
+            raise Exception("Cluster name not found in metadata - corrupted cluster configuration?")
+        return cluster_name
 
     def count_members_by_state(self, state):
         return sum(1 for m in self.get_members()
-                   if m['member_state'] == state.upper())
+                   if m['MEMBER_STATE'] == state.upper())
 
     def count_members_by_role(self, role):
         return sum(1 for m in self.get_members()
-                   if m['member_role'] == role.upper())
+                   if m['MEMBER_ROLE'] == role.upper())
 
     def get_total_members(self):
         return len(self.get_members())
@@ -457,7 +475,6 @@ class ClusterCheck:
                 if large_queue:
                     max_queue = max(large_queue.values())
                     return f'Transaction queue too large: {max_queue} transactions'
-            # Skip transaction queue check for secondaries
 
         # Check member state conditions
         if filtr.state == 'offline':
