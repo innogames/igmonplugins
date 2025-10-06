@@ -103,6 +103,12 @@ def main():
         if not carp_states[route_network]:
             continue
 
+        # Skip LB Pools that have no_monitoring=true. These are not rendered
+        # into the monitoring configuration, so it is wasteful to push
+        # results for them.
+        if lbpool_params.get("no_monitoring", False):
+            continue
+
         lbpools_states[lbpool_name] = {
             "state_limit": (
                 lbpool_params["state_limit"]
