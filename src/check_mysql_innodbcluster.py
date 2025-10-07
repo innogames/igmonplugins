@@ -293,15 +293,18 @@ class ClusterDatabase:
             if local_role == 'SECONDARY':
                 # For secondaries, calculate actual replication lag
                 applier_data = self.execute('''
-                                            SELECT PROCESSING_TRANSACTION IS NOT NULL as is_processing,
+                                            SELECT PROCESSING_TRANSACTION IS NOT NULL
+                                                       AND PROCESSING_TRANSACTION != '' as is_processing,
                                                    TIMESTAMPDIFF(SECOND, GREATEST(
                                                                                  PROCESSING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP,
                                                                                  LAST_PROCESSED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP
                                                                          ), NOW())    as lag_seconds
                                             FROM performance_schema.replication_applier_status_by_coordinator
                                             WHERE CHANNEL_NAME = 'group_replication_applier'
-                                              AND (PROCESSING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP > '1970-01-01'
-                                                OR LAST_PROCESSED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP > '1970-01-01')
+                                              AND (PROCESSING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP
+                                                > '1970-01-01'
+                                               OR LAST_PROCESSED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP
+                                                > '1970-01-01')
                                             ''')
 
                 if applier_data:
