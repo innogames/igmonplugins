@@ -33,6 +33,7 @@ import argparse
 import collections
 import datetime
 import logging
+import re
 import subprocess
 import sys
 import time
@@ -282,7 +283,18 @@ class UnitChecker:
             )
         )
 
-        # Fast state checks first
+        # Ignore transient user/session units that are managed by logind.
+        # These come and go with user logins and are arguably harmless:
+        # * session-*.scope
+        # * user@.service
+        # * user-.slice
+        if re.match(
+            r'^(session-.*\.scope|user[@-].*\.(service|slice))$', unit_id
+        ):
+            logger.debug(f'Ignoring transient user/session unit {unit_id}')
+            return CheckResult(Codes.OK, '')
+
+        # Fast state checks
         if unit['LoadState'] != 'loaded' and unit['ActiveState'] != 'inactive':
             return CheckResult(
                 Codes.CRITICAL,
