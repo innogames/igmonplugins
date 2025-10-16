@@ -282,7 +282,13 @@ class UnitChecker:
             )
         )
 
-        # Fast state checks first
+        # First, ignore transient session and user scope units: not actionable + harmless
+        if unit_id.endswith('.scope'):
+            if unit_id.startswith('session-') or unit_id.startswith('user@'):
+                logger.debug(f'Ignoring transient scope unit {unit_id}')
+                return CheckResult(Codes.OK, '')
+
+        # Fast state checks
         if unit['LoadState'] != 'loaded' and unit['ActiveState'] != 'inactive':
             return CheckResult(
                 Codes.CRITICAL,
