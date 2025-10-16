@@ -273,6 +273,11 @@ class UnitChecker:
             unit_id (str): The unit to check
             timer (bool): Whether the service has a timer
         """
+        # Ignore transient session and user scope units: not actionable + harmless
+        if unit_id.endswith('.scope'):
+            if unit_id.startswith('session-') or unit_id.startswith('user@'):
+                return CheckResult(Codes.OK, '')
+
         unit = self._units[unit_id]
         logger.debug(
             'Load and active states for unit {} are: {} {}'.format(
