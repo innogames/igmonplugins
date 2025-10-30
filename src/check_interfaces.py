@@ -213,9 +213,13 @@ class InterfaceState:
             raise InterfaceStateException("Interface does not exist")
 
         for param in ("carrier", "carrier_down_count"):
-            with open(f"/sys/class/net/{interface}/{param}", "r") as interface_file:
-                for line in interface_file:
-                    setattr(self, param, int(line))
+            try:
+                with open(f"/sys/class/net/{interface}/{param}", "r") as interface_file:
+                    for line in interface_file:
+                        setattr(self, param, int(line))
+            except OSError:
+                # When interface is fully unconfigured the "carrier" file can't be opened.
+                setattr(self, param, 0)
 
         # Check for errors related to the l1 network link.
         # Skip errors related to things like buffers, interrupts and such.
