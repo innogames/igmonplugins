@@ -248,6 +248,9 @@ class InterfaceState:
 
     def _read_freebsd(self, interface: str):
         """Read interface data from FreeBSD"""
+
+        import sysctl  # Only on FreeBSD
+
         try:
             result = subprocess.run(
                 ["ifconfig", interface], capture_output=True, text=True, check=True
@@ -261,7 +264,29 @@ class InterfaceState:
         except subprocess.CalledProcessError:
             raise InterfaceStateException("Interface does not exist")
 
-        # Get network statistics using netstat with libxo JSON output
+        # Some interfaces include L3 and L4 errors in their counters exposed as netstat
+        # errors. We are not interested in those errors, but only in those related
+        # to cables, transcievers and such.
+        rx_from_sysctl = False
+        if interface.startswith("ixl"):
+            ifindex = interface.split("ixl")[1]
+            for oid in sysctl.filter(f"dev.ixl.{ifindex}.mac"):
+                for mac_stat in (
+                    "rx_jabber",
+                    "rx_oversized",
+                    "rx_fragmented",
+                    "rx_undersize",
+                    "rx_length_errors",
+                    "illegal_bytes",
+                    "crc_errors",
+                    "rx_discards",
+                ):
+                    if oid.name.endswith(mac_stat):
+                        rx_from_sysctl = True
+                        # TODO: Use specific counters.
+                        self.stats.rx_errors += oid.value
+
+        # Get TX network statistics using netstat with libxo JSON output
         result = subprocess.run(
             ["netstat", "--libxo=json", "-I", interface, "-b"],
             capture_output=True,
@@ -274,7 +299,8 @@ class InterfaceState:
         if "statistics" in netstat_data and "interface" in netstat_data["statistics"]:
             for iface in netstat_data["statistics"]["interface"]:
                 if iface.get("name") == interface:
-                    self.stats.rx_errors = iface["received-errors"]
+                    if not rx_from_sysctl:
+                        self.stats.rx_errors = iface["received-errors"]
                     self.stats.tx_errors = iface["send-errors"]
                     stats_found = True
                     break
