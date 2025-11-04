@@ -337,12 +337,12 @@ class InterfaceState:
                     if warning and per_second > warning:
                         ret = (
                             NagiosCodes.WARNING,
-                            f"Error counter {error_counter} {per_second}/s is above threshold!",
+                            f"Error counter {error_counter} {per_second:.2f}/s is above warning threshold!",
                         )
                     if critical and per_second > critical:
                         ret = (
                             NagiosCodes.CRITICAL,
-                            f"Error counter {error_counter} {per_second}/s is above threshold!",
+                            f"Error counter {error_counter} {per_second:.2f}/s is above critical threshold!",
                         )
 
         self.carrier_down_count = cur_carrier_down_count
