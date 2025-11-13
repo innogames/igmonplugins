@@ -347,10 +347,10 @@ class InterfaceState:
             cur_carrier_down_count = self.carrier_down_count
 
         if cur_carrier_down_count > prev_carrier_down_count:
-            ret = NagiosCodes.CRITICAL, "Link has flapped"
+            ret = NagiosCodes.WARNING, "Link has flapped"
 
         if self.carrier != 1:
-            ret = NagiosCodes.CRITICAL, "Link is down"
+            ret = NagiosCodes.WARNING, "Link is down"
 
         if prev_state.timestamp:
             delta_t = (self.timestamp - prev_state.timestamp).total_seconds()
