@@ -42,14 +42,20 @@ def parse_args():
     ret.add_argument(
         "--warning",
         type=int,
-        help="Warning threshold for errors per second",
+        help="Warning threshold for port errors per second",
         default=0,
     )
     ret.add_argument(
         "--critical",
         type=int,
-        help="Critical threshold for errors per second",
+        help="Critical threshold for port errors per second",
         default=0,
+    )
+    ret.add_argument(
+        "--critical-flap",
+        type=int,
+        help="Critical threshold for port flaps since the last check run",
+        default=1,
     )
     ret.add_argument(
         "--devd",
@@ -94,7 +100,10 @@ def main():
                 prev_state = cur_state
 
             nagios, result = cur_state.get_nagios_state(
-                prev_state, args.warning, args.critical
+                prev_state,
+                args.warning,
+                args.critical,
+                args.critical_flap,
             )
         except InterfaceStateException as e:
             nagios = NagiosCodes.UNKNOWN
@@ -135,7 +144,6 @@ def devd_increase_carrier_down(interface: str):
     """Increment carrier_down_count in saved state file for FreeBSD devd"""
     try:
         state = InterfaceState.from_json(interface)
-        state.prev_carrier_down_count = state.carrier_down_count
     except FileNotFoundError:
         state = InterfaceState(interface)
 
@@ -330,7 +338,9 @@ class InterfaceState:
         with open(f"/tmp/check_interfaces_{self.interface}.json", "w") as state_file:
             json.dump(state_dict, state_file)
 
-    def get_nagios_state(self, prev_state, warning: int, critical: int):
+    def get_nagios_state(
+        self, prev_state, warning: int, critical: int, critical_flap: int
+    ):
         """Calculate Nagios state by comparing this state with previous state"""
 
         ret = NagiosCodes.OK, "Link is up"
@@ -346,15 +356,15 @@ class InterfaceState:
             prev_carrier_down_count = prev_state.carrier_down_count
             cur_carrier_down_count = self.carrier_down_count
 
-        if cur_carrier_down_count > prev_carrier_down_count:
-            ret = NagiosCodes.WARNING, "Link has flapped"
-
-        if self.carrier != 1:
-            ret = NagiosCodes.WARNING, "Link is down"
-
+        # Counter-based checks overwrite the "link is down" state.
+        # They are more important, especially the flapping check.
         if prev_state.timestamp:
             delta_t = (self.timestamp - prev_state.timestamp).total_seconds()
+
             if delta_t > 0:  # Can't analyze counters for the 1st run
+                if (cur_carrier_down_count - prev_carrier_down_count) >= critical_flap:
+                    ret = NagiosCodes.CRITICAL, "Link is flapping"
+
                 for error_counter in vars(self.stats):
                     per_second = (
                         getattr(self.stats, error_counter)
@@ -370,6 +380,10 @@ class InterfaceState:
                             NagiosCodes.CRITICAL,
                             f"Error counter {error_counter} {per_second:.2f}/s is above critical threshold!",
                         )
+
+        # Link being down at the moment overrides other errors.
+        if self.carrier != 1:
+            ret = NagiosCodes.WARNING, "Link is down"
 
         self.carrier_down_count = cur_carrier_down_count
         self.prev_carrier_down_count = cur_carrier_down_count
