@@ -4,7 +4,7 @@
 This check queries and compares SSHFP records from the DNS with the keys
 on the server it is running.
 
-Copyright (c) 2020 InnoGames GmbH
+Copyright (c) 2025 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the 'Software'), to deal
@@ -32,7 +32,7 @@ from dns.exception import DNSException
 from dns.rdata import from_text as dns_from_text
 from dns.rdataclass import IN
 from dns.rdatatype import SSHFP
-from dns.resolver import query as dns_query
+from dns.resolver import resolve as dns_resolve
 
 
 def main():
@@ -42,7 +42,7 @@ def main():
     fqdn = getfqdn() + '.'
 
     try:
-        result = dns_query(fqdn, SSHFP)
+        result = dns_resolve(fqdn, SSHFP)
     except DNSException:
         print('WARNING got no host key fingerprint')
         exit(1)
@@ -50,7 +50,7 @@ def main():
     # Map the host keys in a dictionary using the algorithm and the fingerprint
     # type as the identifier for fast lookup while comparing them with the keys
     # from the DNS.
-    output = check_output(['ssh-keygen', '-r', fqdn], universal_newlines=True)
+    output = check_output(['ssh-keygen', '-r', fqdn], text=True)
     host_keys = {(r.algorithm, r.fp_type): r for r in (
         dns_from_text(IN, SSHFP, l.split(None, 3)[3])
         for l in output.splitlines()
