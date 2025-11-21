@@ -32,7 +32,10 @@ from dns.exception import DNSException
 from dns.rdata import from_text as dns_from_text
 from dns.rdataclass import IN
 from dns.rdatatype import SSHFP
-from dns.resolver import resolve as dns_resolve
+try:
+    from dns.resolver import resolve as dns_resolve
+except ImportError:
+    from dns.resolver import query as dns_resolve
 
 
 def main():
