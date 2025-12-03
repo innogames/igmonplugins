@@ -329,7 +329,7 @@ class InterfaceState:
             "carrier": self.carrier,
             "carrier_down_count": self.carrier_down_count,
             "prev_carrier_down_count": self.prev_carrier_down_count,
-            "timestamp": str(self.timestamp),
+            "timestamp": self.timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"),
         }
         # Add all stats attributes
         for attr in vars(self.stats):
