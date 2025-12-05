@@ -330,9 +330,20 @@ def check_ipmi_sel(res):
         # Normally line is split by | symbol
         # But we don't need this detail for finding substrings.
         linestr = " ".join(line)
-        if linestr.find("Log area reset/cleared") != -1:
-            continue
-        if linestr.find("SEL has no entries") != -1:
+        ignore = False
+        for ignore_str in (
+            # Cleaning the SEL.
+            "Log area reset/cleared",
+            "SEL has no entries",
+            # Booting an OS which has iDRAC agent installed.
+            "OEM record",
+            "OS Boot",
+            "OS Critical Stop OS graceful shutdown Asserted",
+        ):
+            if ignore_str in linestr:
+                ignore = True
+
+        if ignore:
             continue
 
         # Reverse order
