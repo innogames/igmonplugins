@@ -39,6 +39,11 @@ import sys
 import time
 import typing
 
+# Compiled regex for transient user/session units
+TRANSIENT_UNIT_RE = re.compile(
+    r'^(session-.*\.scope|user[@-].*\.(service|slice))$'
+)
+
 CheckResult = collections.namedtuple('CheckResult', ['code', 'msg'])
 
 logging.basicConfig(
@@ -286,9 +291,7 @@ class UnitChecker:
         # * session-*.scope
         # * user@.service
         # * user-.slice
-        if re.match(
-            r'^(session-.*\.scope|user[@-].*\.(service|slice))$', unit_id
-        ):
+        if TRANSIENT_UNIT_RE.match(unit_id):
             logger.debug(f'Ignoring transient user/session unit {unit_id}')
             return CheckResult(Codes.OK, '')
 
