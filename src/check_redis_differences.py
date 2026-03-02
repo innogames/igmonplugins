@@ -29,7 +29,7 @@
 import argparse
 import re
 import sys
-from typing import Union
+from typing import Optional, Union
 
 import redis
 
@@ -40,14 +40,19 @@ CRITICAL = 2
 UNKNOWN = 3
 
 
-def parse_redis_config(file_path: str) -> dict[str, Union[str, list[str]]]:
+def parse_redis_config(
+    file_path: str,
+    ignore_keys: Optional[list[str]] = None,
+) -> dict[str, Union[str, list[str]]]:
     """
-    Parses a Redis configuration file and returns a dictionary of key-value pairs.
+    Parses a Redis configuration file and returns a dictionary of key-value
+    pairs. Keys listed in ignore_keys are skipped.
     """
     config = {}
     # Some config values are multi-line, needs special treatment
     multi_line_keys = ['save', 'client-output-buffer-limit']
     current_key = None
+    _ignore_keys = set(ignore_keys) if ignore_keys else set()
 
     try:
         with open(file_path) as f:
@@ -57,6 +62,9 @@ def parse_redis_config(file_path: str) -> dict[str, Union[str, list[str]]]:
                     parts = line.split(maxsplit=1)
                     if len(parts) == 2:
                         key, value = parts
+                        if key in _ignore_keys:
+                            current_key = key
+                            continue
                         if key in multi_line_keys:
                             if key not in config:
                                 config[key] = []
@@ -64,7 +72,8 @@ def parse_redis_config(file_path: str) -> dict[str, Union[str, list[str]]]:
                         else:
                             config[key] = value.strip('"')
                     elif current_key in multi_line_keys:
-                        config[current_key].append(line)
+                        if current_key not in _ignore_keys:
+                            config[current_key].append(line)
                     current_key = parts[0] if parts else None
         return config
     except (FileNotFoundError, PermissionError, IOError, OSError) as error:
@@ -193,15 +202,29 @@ def main():
         '--port', type=int, default=6379, help='Redis port (default: 6379)'
     )
     parser.add_argument('--password', help='Redis password')
+    parser.add_argument(
+        '--ignore-keys',
+        nargs='+',
+        default=[],
+        help=(
+            'Config keys to ignore when comparing '
+            '(default: none)'
+        ),
+    )
 
     args = parser.parse_args()
 
     try:
-        file_config = parse_redis_config(args.config_file)
+        file_config = parse_redis_config(
+            args.config_file, ignore_keys=args.ignore_keys,
+        )
         redis_client = redis.Redis(
             host=args.host, port=args.port, password=args.password
         )
         running_config = redis_client.config_get()
+
+        for key in args.ignore_keys:
+            running_config.pop(key, None)
 
         exit_code, differences = compare_configs(file_config, running_config)
 
