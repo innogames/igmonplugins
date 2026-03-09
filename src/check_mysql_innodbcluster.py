@@ -97,6 +97,22 @@ def main():
 
             # Check critical conditions first
             critical_problems = check.get_problems(args.critical)
+
+            # Downgrade transaction queue problems to warning when
+            # a node is recovering in the cluster, since it's expected
+            recovering = db.count_members_by_state('RECOVERING')
+            if critical_problems and recovering > 0:
+                downgraded = [
+                    p for p in critical_problems
+                    if 'Transaction queue too large' in p
+                ]
+                critical_problems = [
+                    p for p in critical_problems
+                    if p not in downgraded
+                ]
+            else:
+                downgraded = []
+
             if critical_problems:
                 output = 'CRITICAL - ' + ', '.join(critical_problems)
                 if args.perfdata:
@@ -106,6 +122,8 @@ def main():
 
             # Check warning conditions
             warning_problems = check.get_problems(args.warning)
+            # Add any downgraded critical problems
+            warning_problems.extend(downgraded)
             if warning_problems:
                 output = 'WARNING - ' + ', '.join(warning_problems)
                 if args.perfdata:
