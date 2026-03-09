@@ -14,11 +14,12 @@ Configure your MySQL user with the auth_socket plugin for passwordless authentic
 Copyright (c) 2025 InnoGames GmbH
 """
 
+import re
 from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
 from contextlib import contextmanager
 from sys import exit
-from mysql.connector import connect, Error as MySQLError
-import re
+
+from mysql.connector import Error as MySQLError, connect
 
 
 def parse_args():
@@ -43,14 +44,22 @@ def parse_args():
         '--warning',
         nargs='*',
         type=ClusterFilter,
-        default=[ClusterFilter('1 offline'), ClusterFilter('lag 60s'), ClusterFilter('transaction_queue 5000')],
+        default=[
+            ClusterFilter('1 offline'),
+            ClusterFilter('lag 60s'),
+            ClusterFilter('transaction_queue 5000'),
+        ],
         help='Warning threshold (default: %(default)s)',
     )
     parser.add_argument(
         '--critical',
         nargs='*',
         type=ClusterFilter,
-        default=[ClusterFilter('no primary'), ClusterFilter('lag 120s'), ClusterFilter('transaction_queue 10000')],
+        default=[
+            ClusterFilter('no primary'),
+            ClusterFilter('lag 120s'),
+            ClusterFilter('transaction_queue 10000'),
+        ],
         help='Critical threshold (default: %(default)s)',
     )
     parser.add_argument(
@@ -97,6 +106,22 @@ def main():
 
             # Check critical conditions first
             critical_problems = check.get_problems(args.critical)
+
+            # Downgrade transaction queue problems to warning when
+            # a node is recovering in the cluster, since it's expected
+            recovering = db.count_members_by_state('RECOVERING')
+            if critical_problems and recovering > 0:
+                downgraded = [
+                    p
+                    for p in critical_problems
+                    if 'Transaction queue too large' in p
+                ]
+                critical_problems = [
+                    p for p in critical_problems if p not in downgraded
+                ]
+            else:
+                downgraded = []
+
             if critical_problems:
                 output = 'CRITICAL - ' + ', '.join(critical_problems)
                 if args.perfdata:
@@ -106,6 +131,8 @@ def main():
 
             # Check warning conditions
             warning_problems = check.get_problems(args.warning)
+            # Add any downgraded critical problems
+            warning_problems.extend(downgraded)
             if warning_problems:
                 output = 'WARNING - ' + ', '.join(warning_problems)
                 if args.perfdata:
@@ -137,7 +164,8 @@ class ExitCodes:
 
 
 class ClusterFilter:
-    pattern = re.compile(r'''
+    pattern = re.compile(
+        r"""
         \A
         (?:
             (?P<no>no)\s+(?P<no_what>primary|quorum|writer)
@@ -156,7 +184,9 @@ class ClusterFilter:
             (?:\s+for\s+(?P<duration>\d+)(?P<unit>s|min|h))?
         )
         \Z
-    ''', re.VERBOSE)
+    """,
+        re.VERBOSE,
+    )
 
     def __init__(self, arg):
         matches = self.pattern.match(arg.lower())
@@ -171,7 +201,9 @@ class ClusterFilter:
         self.transaction_queue = matches.group('transaction_queue')
         self.queue = matches.group('queue')
         # Support both 'queue X' and 'transaction_queue X' syntax
-        self.queue_size = int(matches.group('queue_size') or matches.group('queue_size_alt') or 0)
+        self.queue_size = int(
+            matches.group('queue_size') or matches.group('queue_size_alt') or 0
+        )
         self.errors = matches.group('errors')
         self.count = int(matches.group('count') or 0)
         self.percent = bool(matches.group('percent'))
@@ -183,12 +215,16 @@ class ClusterFilter:
         multipliers = {'s': 1, 'min': 60, 'h': 3600}
 
         if self.lag_duration and self.lag_unit:
-            self.lag_seconds = self.lag_duration * multipliers.get(self.lag_unit, 1)
+            self.lag_seconds = self.lag_duration * multipliers.get(
+                self.lag_unit, 1
+            )
         else:
             self.lag_seconds = 0
 
         if self.duration and self.unit:
-            self.duration_seconds = self.duration * multipliers.get(self.unit, 1)
+            self.duration_seconds = self.duration * multipliers.get(
+                self.unit, 1
+            )
         else:
             self.duration_seconds = 0
 
@@ -229,11 +265,11 @@ class ClusterDatabase:
             self.cursor.execute(statement)
             return self.cursor.fetchall()
         except MySQLError as e:
-            raise Exception(f"SQL execution failed: {e}")
+            raise Exception(f'SQL execution failed: {e}')
 
     def get_members(self):
         if self._members is None:
-            self._members = self.execute('''
+            self._members = self.execute("""
                                          SELECT MEMBER_ID,
                                                 MEMBER_HOST,
                                                 MEMBER_PORT,
@@ -241,21 +277,25 @@ class ClusterDatabase:
                                                 MEMBER_ROLE,
                                                 MEMBER_VERSION
                                          FROM performance_schema.replication_group_members
-                                         ''')
+                                         """)
             if not self._members:
-                raise Exception("No group replication members found - not part of InnoDB Cluster?")
+                raise Exception(
+                    'No group replication members found - not part of InnoDB Cluster?'
+                )
         return self._members
 
     def get_local_member_role(self):
         """Get the role of the current member (PRIMARY or SECONDARY)"""
         if self._local_member_role is None:
-            result = self.execute('''
+            result = self.execute("""
                                   SELECT MEMBER_ROLE
                                   FROM performance_schema.replication_group_members
                                   WHERE MEMBER_ID = @@server_uuid
-                                  ''')
+                                  """)
             if not result:
-                raise Exception("Cannot determine local member role - not part of group replication?")
+                raise Exception(
+                    'Cannot determine local member role - not part of group replication?'
+                )
             self._local_member_role = result[0]['MEMBER_ROLE']
         return self._local_member_role
 
@@ -264,7 +304,7 @@ class ClusterDatabase:
         if self._member_stats is None:
             self._member_stats = {}
 
-            stats = self.execute('''
+            stats = self.execute("""
                                  SELECT m.MEMBER_HOST,
                                         m.MEMBER_ID,
                                         COALESCE(s.COUNT_TRANSACTIONS_IN_QUEUE, 0)                as COUNT_TRANSACTIONS_IN_QUEUE,
@@ -277,7 +317,7 @@ class ClusterDatabase:
                                  FROM performance_schema.replication_group_members m
                                           LEFT JOIN performance_schema.replication_group_member_stats s
                                                     ON s.MEMBER_ID = m.MEMBER_ID
-                                 ''')
+                                 """)
 
             for stat in stats:
                 stat_dict = {k.lower(): v for k, v in stat.items()}
@@ -292,7 +332,7 @@ class ClusterDatabase:
 
             if local_role == 'SECONDARY':
                 # For secondaries, calculate actual replication lag
-                applier_data = self.execute('''
+                applier_data = self.execute("""
                                             SELECT PROCESSING_TRANSACTION IS NOT NULL
                                                        AND PROCESSING_TRANSACTION != '' as is_processing,
                                                    TIMESTAMPDIFF(SECOND, GREATEST(
@@ -305,7 +345,7 @@ class ClusterDatabase:
                                                 > '1970-01-01'
                                                OR LAST_PROCESSED_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP
                                                 > '1970-01-01')
-                                            ''')
+                                            """)
 
                 if applier_data:
                     status = applier_data[0]
@@ -314,72 +354,92 @@ class ClusterDatabase:
 
                     # Check if there's queue activity to determine if there is lag
                     stats = self.get_member_stats()
-                    current_host = self.execute('SELECT @@hostname as hostname')
+                    current_host = self.execute(
+                        'SELECT @@hostname as hostname'
+                    )
                     if current_host:
                         hostname = current_host[0]['hostname']
                         host_stats = stats.get(hostname, {})
 
-                        queue_size = host_stats.get('count_transactions_in_queue', 0) or 0
-                        applier_queue = host_stats.get('count_transactions_remote_in_applier_queue', 0) or 0
+                        queue_size = (
+                            host_stats.get('count_transactions_in_queue', 0)
+                            or 0
+                        )
+                        applier_queue = (
+                            host_stats.get(
+                                'count_transactions_remote_in_applier_queue', 0
+                            )
+                            or 0
+                        )
 
-                        if is_processing or queue_size > 0 or applier_queue > 0:
+                        if (
+                            is_processing
+                            or queue_size > 0
+                            or applier_queue > 0
+                        ):
                             # There's active replication - report lag
                             if lag_seconds > 0:
                                 self._replication_lag[hostname] = lag_seconds
-                        elif lag_seconds < 60:  # Only report very recent lag for idle secondaries
+                        elif (
+                            lag_seconds < 60
+                        ):  # Only report very recent lag for idle secondaries
                             self._replication_lag[hostname] = lag_seconds
 
         return self._replication_lag
 
     def has_replication_errors(self):
         """Check if there are any replication errors"""
-        errors = self.execute('''
+        errors = self.execute("""
                               SELECT LAST_ERROR_NUMBER
                               FROM performance_schema.replication_applier_status_by_coordinator
                               WHERE CHANNEL_NAME = 'group_replication_applier'
                                 AND LAST_ERROR_NUMBER > 0
-                              ''')
+                              """)
 
-        worker_errors = self.execute('''
+        worker_errors = self.execute("""
                                      SELECT LAST_ERROR_NUMBER
                                      FROM performance_schema.replication_applier_status_by_worker
                                      WHERE CHANNEL_NAME = 'group_replication_applier'
                                        AND LAST_ERROR_NUMBER > 0
-                                     ''')
+                                     """)
 
         return len(errors) > 0 or len(worker_errors) > 0
 
     def get_cluster_info(self):
         if self._cluster_info is None:
             try:
-                result = self.execute('''
+                result = self.execute("""
                                       SELECT cluster_name,
                                              primary_mode,
                                              description
                                       FROM mysql_innodb_cluster_metadata.clusters LIMIT 1
-                                      ''')
+                                      """)
                 if result:
                     self._cluster_info = result[0]
                 else:
-                    raise Exception("No InnoDB Cluster metadata found")
+                    raise Exception('No InnoDB Cluster metadata found')
             except Exception as e:
-                raise Exception(f"Cannot access cluster metadata: {e}")
+                raise Exception(f'Cannot access cluster metadata: {e}')
         return self._cluster_info
 
     def get_cluster_name(self):
         info = self.get_cluster_info()
         cluster_name = info.get('cluster_name')
         if not cluster_name:
-            raise Exception("Cluster name not found in metadata - corrupted cluster configuration?")
+            raise Exception(
+                'Cluster name not found in metadata - corrupted cluster configuration?'
+            )
         return cluster_name
 
     def count_members_by_state(self, state):
-        return sum(1 for m in self.get_members()
-                   if m['MEMBER_STATE'] == state.upper())
+        return sum(
+            1 for m in self.get_members() if m['MEMBER_STATE'] == state.upper()
+        )
 
     def count_members_by_role(self, role):
-        return sum(1 for m in self.get_members()
-                   if m['MEMBER_ROLE'] == role.upper())
+        return sum(
+            1 for m in self.get_members() if m['MEMBER_ROLE'] == role.upper()
+        )
 
     def get_total_members(self):
         return len(self.get_members())
@@ -411,7 +471,9 @@ class ClusterDatabase:
         max_queue = 0
         for host, stat in stats.items():
             queue_size = stat.get('count_transactions_in_queue', 0) or 0
-            applier_queue = stat.get('count_transactions_remote_in_applier_queue', 0) or 0
+            applier_queue = (
+                stat.get('count_transactions_remote_in_applier_queue', 0) or 0
+            )
             total_queue = queue_size + applier_queue
             if total_queue > max_queue:
                 max_queue = total_queue
@@ -423,7 +485,9 @@ class ClusterDatabase:
         large_queue_members = {}
         for host, stat in stats.items():
             queue_size = stat.get('count_transactions_in_queue', 0) or 0
-            applier_queue = stat.get('count_transactions_remote_in_applier_queue', 0) or 0
+            applier_queue = (
+                stat.get('count_transactions_remote_in_applier_queue', 0) or 0
+            )
             total_queue = queue_size + applier_queue
             if total_queue > threshold:
                 large_queue_members[host] = total_queue
@@ -474,15 +538,19 @@ class ClusterCheck:
         if filtr.transaction_queue or filtr.queue:
             local_role = self.db.get_local_member_role()
             if local_role == 'PRIMARY':
-                large_queue = self.db.get_members_with_large_transaction_queue(filtr.queue_size)
+                large_queue = self.db.get_members_with_large_transaction_queue(
+                    filtr.queue_size
+                )
                 if large_queue:
                     max_queue = max(large_queue.values())
                     return f'Transaction queue too large: {max_queue} transactions'
 
         # Check member state conditions
         if filtr.state == 'offline':
-            offline = (self.db.get_total_members() -
-                       self.db.count_members_by_state('ONLINE'))
+            offline = (
+                self.db.get_total_members()
+                - self.db.count_members_by_state('ONLINE')
+            )
             threshold = self._get_threshold(filtr)
             if offline >= threshold:
                 return f'{offline} members offline'
@@ -522,16 +590,20 @@ class ClusterCheck:
         local_role = self.db.get_local_member_role()
 
         # Clear role indication with 'self: role' format
-        role_str = f", self: {local_role.lower()}"
+        role_str = f', self: {local_role.lower()}'
 
         # Only show lag for secondaries
-        lag_str = ""
+        lag_str = ''
         if local_role == 'SECONDARY':
             max_lag = self.db.get_max_secondary_lag_seconds()
             if max_lag > 0:
-                lag_str = f", lag {max_lag}s"
+                lag_str = f', lag {max_lag}s'
 
-        transaction_queue_str = f", transaction_queue {max_transaction_queue}" if max_transaction_queue > 0 else ""
+        transaction_queue_str = (
+            f', transaction_queue {max_transaction_queue}'
+            if max_transaction_queue > 0
+            else ''
+        )
         return f'{online}/{total} online, {primary} primary{role_str}{lag_str}{transaction_queue_str}'
 
     def get_perfdata(self):
