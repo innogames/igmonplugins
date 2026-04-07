@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Grafana Alloy Check
 
-This script checks Grafana Alloy metrics to detect when logs are piling up
-instead of being shipped. It monitors the difference between encoded bytes
-(queued) and sent bytes (shipped) via Alloy's Prometheus metrics endpoint.
+This script checks Grafana Alloy metrics to detect when data is being dropped
+instead of being shipped. It automatically discovers all supported component
+instances (loki.write, pyroscope.write, otelcol.exporter.otlp,
+prometheus.remote_write) and reports on each of them.
+
+A state file is used to compute per-interval deltas so that alerts clear as
+soon as drops stop occurring.
 
 Copyright (c) 2026 InnoGames GmbH
 """
@@ -26,16 +30,56 @@ Copyright (c) 2026 InnoGames GmbH
 # THE SOFTWARE.
 
 import argparse
-import sys
-from typing import Dict, List
-
+import json
+import re
 import requests
+import sys
+
+from typing import Dict, List, Optional, Tuple
+
+
+# Mapping from component type prefix to (dropped_metric, sent_metric, unit).
+# dropped_metric may be None if the component does not expose a drop counter.
+COMPONENT_METRICS: Dict[str, Tuple[Optional[str], str, str]] = {
+    'loki.write': (
+        'loki_write_dropped_bytes_total',
+        'loki_write_sent_bytes_total',
+        'bytes',
+    ),
+    'pyroscope.write': (
+        'pyroscope_write_dropped_bytes_total',
+        'pyroscope_write_sent_bytes_total',
+        'bytes',
+    ),
+    'otelcol.exporter.otlp': (
+        'otelcol_exporter_send_failed_spans_total',
+        'otelcol_exporter_sent_spans_total',
+        'spans',
+    ),
+    'prometheus.remote_write': (
+        'prometheus_remote_storage_samples_failed_total',
+        'prometheus_remote_storage_samples_total',
+        'samples',
+    ),
+}
+
+# All metric names we care about across all component types
+ALL_METRICS = {
+    metric
+    for dropped, sent, _ in COMPONENT_METRICS.values()
+    for metric in (dropped, sent)
+    if metric is not None
+}
+
+STATUS_MAP = {0: 'OK', 1: 'WARNING', 2: 'CRITICAL'}
+
+COL_HEADERS = ('Component', 'Status', 'Dropped', 'Sent')
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(
-        description='Check Grafana Alloy metrics for log backlog'
+        description='Check Grafana Alloy metrics for dropped data across all components'
     )
 
     parser.add_argument(
@@ -44,21 +88,21 @@ def parse_args() -> argparse.Namespace:
         help='Alloy metrics endpoint URL (default: http://localhost:12345/metrics)',
     )
     parser.add_argument(
-        '--component',
-        default='loki.write.default',
-        help='Component to monitor (default: loki.write.default)',
-    )
-    parser.add_argument(
         '--warning', '-w',
         required=True,
         type=float,
-        help='Warning threshold in bytes',
+        help='Warning threshold — number of dropped units per interval',
     )
     parser.add_argument(
         '--critical', '-c',
         required=True,
         type=float,
-        help='Critical threshold in bytes',
+        help='Critical threshold — number of dropped units per interval',
+    )
+    parser.add_argument(
+        '--state-file',
+        default='/run/check_alloy_backlog.json',
+        help='Path to state file (default: /run/check_alloy_backlog.json)',
     )
 
     return parser.parse_args()
@@ -80,61 +124,65 @@ def fetch_metrics(url: str, timeout: int) -> str:
     return response.content.decode('utf-8')
 
 
-def parse_component_metrics(
-    metrics_text: str,
-    component: str,
-    metric_names: List[str]
-) -> Dict[str, float]:
-    """Parse specific Prometheus metrics for a component and stop early
+def parse_all_component_metrics(metrics_text: str) -> Dict[str, Dict[str, float]]:
+    """Parse all relevant metrics, grouped by component_id.
 
     :param metrics_text: Raw metrics text in Prometheus format
-    :param component: Component ID to filter by
-    :param metric_names: List of metric names to find
-    :return: Dictionary mapping metric names to their values
+    :return: {component_id: {metric_name: value}}
     """
-    found_metrics: Dict[str, float] = {}
-    needed_metrics = set(metric_names)
+    result: Dict[str, Dict[str, float]] = {}
 
     for line in metrics_text.split('\n'):
-        # Skip comments and empty lines
         if not line or line.startswith('#'):
             continue
 
-        # Quick check: does this line contain any metric we need?
-        line_has_needed_metric = False
-        for metric_name in needed_metrics:
-            if line.startswith(metric_name + '{'):
-                line_has_needed_metric = True
-                break
-
-        if not line_has_needed_metric:
+        # Quick pre-filter: skip lines that don't start with a metric we want
+        if not any(line.startswith(m + '{') for m in ALL_METRICS):
             continue
 
         try:
-            # Parse metric line: metric_name{label="value",...} numeric_value
-            if '{' not in line:
-                continue
-
             metric_name = line[:line.index('{')]
             labels_end = line.index('}')
             labels_str = line[line.index('{') + 1:labels_end]
             value_str = line[labels_end + 1:].strip()
 
-            # Check if this is for our component
-            if f'component_id="{component}"' in labels_str:
-                value = float(value_str)
-                found_metrics[metric_name] = value
-                needed_metrics.discard(metric_name)
-
-                # Early exit if we found all metrics
-                if not needed_metrics:
+            # Extract component_id label value
+            for part in labels_str.split(','):
+                part = part.strip()
+                if part.startswith('component_id="') and part.endswith('"'):
+                    component_id = part[len('component_id="'):-1]
+                    value = float(value_str)
+                    result.setdefault(component_id, {})[metric_name] = value
                     break
 
         except (ValueError, IndexError):
-            # Skip lines that can't be parsed
             continue
 
-    return found_metrics
+    return result
+
+
+def load_state(state_file: str) -> Dict:
+    """Load persisted counter state from disk"""
+    try:
+        with open(state_file, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_state(state_file: str, state: Dict) -> None:
+    """Persist counter state to disk"""
+    with open(state_file, 'w') as f:
+        json.dump(state, f)
+
+
+def component_type(component_id: str) -> Optional[str]:
+    """Derive component type from a fully qualified component_id.
+
+    Returns None if the component type is not in COMPONENT_METRICS.
+    """
+    prefix = component_id.rsplit('.', 1)[0]
+    return prefix if prefix in COMPONENT_METRICS else None
 
 
 def main() -> None:
@@ -142,58 +190,107 @@ def main() -> None:
     args = parse_args()
 
     try:
-        # Fetch and parse metrics
         metrics_text = fetch_metrics(args.url, timeout=10)
+        by_component = parse_all_component_metrics(metrics_text)
 
-        # Parse only the metrics we need for this component
-        metrics = parse_component_metrics(
-            metrics_text,
-            args.component,
-            ['loki_write_encoded_bytes_total', 'loki_write_sent_bytes_total']
-        )
+        state = load_state(args.state_file)
+        new_state: Dict = {}
 
-        # Verify we got both metrics
-        if 'loki_write_encoded_bytes_total' not in metrics:
-            raise KeyError(
-                f'Metric "loki_write_encoded_bytes_total" not found for component "{args.component}"'
+        # Filter to only components whose type we support
+        supported_components = {
+            cid: metrics
+            for cid, metrics in by_component.items()
+            if component_type(cid) is not None
+        }
+
+        if not supported_components:
+            print('OK - No supported components found (no data written yet)')
+            sys.exit(0)
+
+        worst_code = 0
+        perfdata_parts: List[str] = []
+        first_run_only = True
+
+        # Collect rows: (component_id, status_label, code, dropped_str, sent_str)
+        rows: List[Tuple[str, str, int, str, str]] = []
+
+        for component_id, metrics in sorted(supported_components.items()):
+            ctype = component_type(component_id)
+            if ctype is None:
+                continue
+            dropped_metric, sent_metric, unit = COMPONENT_METRICS[ctype]
+
+            dropped = metrics.get(dropped_metric, 0.0)
+            sent = metrics.get(sent_metric, 0.0)
+
+            prev = state.get(component_id, {})
+            new_state[component_id] = {'dropped': dropped, 'sent': sent}
+
+            if not prev:
+                # First time seeing this component — baseline only, no delta
+                rows.append((component_id, 'BASELINE', 0, '-', '-'))
+                continue
+
+            first_run_only = False
+            delta_dropped = max(dropped - prev.get('dropped', 0.0), 0.0)
+            delta_sent = max(sent - prev.get('sent', 0.0), 0.0)
+
+            safe_id = safe_id = re.sub(r'[^a-zA-Z0-9_]+', '_', component_id)
+            perfdata_parts.append(
+                f'{safe_id}_dropped={delta_dropped};{args.warning};{args.critical};0'
             )
-        if 'loki_write_sent_bytes_total' not in metrics:
-            raise KeyError(
-                f'Metric "loki_write_sent_bytes_total" not found for component "{args.component}"'
-            )
+            perfdata_parts.append(f'{safe_id}_sent={delta_sent}')
 
-        # Get metric values and calculate backlog
-        encoded_bytes = metrics['loki_write_encoded_bytes_total']
-        sent_bytes = metrics['loki_write_sent_bytes_total']
+            if delta_dropped >= args.critical:
+                code = 2
+            elif delta_dropped > 0:
+                code = 1
+            else:
+                code = 0
 
-        # Backlog can be negative if counters reset or roll over; treat that as zero
-        raw_backlog = encoded_bytes - sent_bytes
-        check_value = max(raw_backlog, 0.0)
-        value_label = 'backlog'
+            worst_code = max(worst_code, code)
+            rows.append((
+                component_id,
+                STATUS_MAP[code],
+                code,
+                f'{delta_dropped:.0f} {unit}',
+                f'{delta_sent:.0f} {unit}',
+            ))
 
-        # Determine status based on thresholds
-        if check_value >= args.critical:
-            status = 'CRITICAL'
-            code = 2
-        elif check_value >= args.warning:
-            status = 'WARNING'
-            code = 1
-        else:
-            status = 'OK'
-            code = 0
+        save_state(args.state_file, new_state)
 
-        # Build performance data
-        perfdata_parts = [
-            f'{value_label}={check_value};{args.warning};{args.critical};0',
-            f'encoded={encoded_bytes}',
-            f'sent={sent_bytes}'
+        if first_run_only:
+            print('OK - Collecting baseline data (first run)')
+            sys.exit(0)
+
+        overall = STATUS_MAP[worst_code]
+
+        # Build aligned table
+        col_widths = [
+            max(len(COL_HEADERS[0]), max(len(r[0]) for r in rows)),
+            max(len(COL_HEADERS[1]), max(len(r[1]) for r in rows)),
+            max(len(COL_HEADERS[2]), max(len(r[3]) for r in rows)),
+            max(len(COL_HEADERS[3]), max(len(r[4]) for r in rows)),
         ]
+
+        def fmt_row(cols: Tuple[str, str, str, str]) -> str:
+            return '  '.join(c.ljust(w) for c, w in zip(cols, col_widths))
+
+        separator = '  '.join('-' * w for w in col_widths)
+        table_lines = [
+            fmt_row(COL_HEADERS),
+            separator,
+        ] + [fmt_row((r[0], r[1], r[3], r[4])) for r in rows]
+
         perfdata = ' '.join(perfdata_parts)
+        first_line = f'{overall} - {len(rows)} component(s) checked'
+        if perfdata:
+            first_line += f' | {perfdata}'
 
-        # Output result
-        print(f'{status} - {value_label} {check_value:.0f} bytes | {perfdata}')
-
-        sys.exit(code)
+        print(first_line)
+        for line in table_lines:
+            print(line)
+        sys.exit(worst_code)
 
     except requests.exceptions.Timeout:
         print('UNKNOWN - Timeout connecting to Alloy metrics endpoint')
