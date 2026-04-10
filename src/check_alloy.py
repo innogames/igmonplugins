@@ -35,7 +35,7 @@ import re
 import requests
 import sys
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 
 # Mapping from component type prefix to (dropped_metric, sent_metric, unit).
@@ -64,16 +64,16 @@ COMPONENT_METRICS: Dict[str, Tuple[Optional[str], str, str]] = {
 }
 
 # All metric names we care about across all component types
-ALL_METRICS = {
+ALL_METRICS: Set[str] = {
     metric
     for dropped, sent, _ in COMPONENT_METRICS.values()
     for metric in (dropped, sent)
     if metric is not None
 }
 
-STATUS_MAP = {0: 'OK', 1: 'WARNING', 2: 'CRITICAL'}
+STATUS_MAP: Dict[int, str] = {0: 'OK', 1: 'WARNING', 2: 'CRITICAL'}
 
-COL_HEADERS = ('Component', 'Status', 'Dropped', 'Sent')
+COL_HEADERS: Tuple[str, str, str, str] = ('Component', 'Status', 'Dropped', 'Sent')
 
 
 def parse_args() -> argparse.Namespace:
@@ -166,14 +166,25 @@ def load_state(state_file: str) -> Dict:
     try:
         with open(state_file, 'r') as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    except FileNotFoundError:
+        return {}
+    except (json.JSONDecodeError, OSError) as e:
+        print(f'WARNING - Could not load state file: {e}', file=sys.stderr)
         return {}
 
 
 def save_state(state_file: str, state: Dict) -> None:
     """Persist counter state to disk"""
-    with open(state_file, 'w') as f:
-        json.dump(state, f)
+    try:
+        with open(state_file, 'w') as f:
+            json.dump(state, f)
+    except OSError as e:
+        print(f'WARNING - Could not save state file: {e}', file=sys.stderr)
+
+
+def fmt_row(cols: Tuple[str, str, str, str], col_widths: List[int]) -> str:
+    """Format a table row with left-justified columns of given widths"""
+    return '  '.join(c.ljust(w) for c, w in zip(cols, col_widths))
 
 
 def component_type(component_id: str) -> Optional[str]:
@@ -209,7 +220,6 @@ def main() -> None:
 
         worst_code = 0
         perfdata_parts: List[str] = []
-        first_run_only = True
 
         # Collect rows: (component_id, status_label, code, dropped_str, sent_str)
         rows: List[Tuple[str, str, int, str, str]] = []
@@ -231,11 +241,10 @@ def main() -> None:
                 rows.append((component_id, 'BASELINE', 0, '-', '-'))
                 continue
 
-            first_run_only = False
             delta_dropped = max(dropped - prev.get('dropped', 0.0), 0.0)
             delta_sent = max(sent - prev.get('sent', 0.0), 0.0)
 
-            safe_id = safe_id = re.sub(r'[^a-zA-Z0-9_]+', '_', component_id)
+            safe_id = re.sub(r'[^a-zA-Z0-9_]+', '_', component_id)
             perfdata_parts.append(
                 f'{safe_id}_dropped={delta_dropped};{args.warning};{args.critical};0'
             )
@@ -259,10 +268,6 @@ def main() -> None:
 
         save_state(args.state_file, new_state)
 
-        if first_run_only:
-            print('OK - Collecting baseline data (first run)')
-            sys.exit(0)
-
         overall = STATUS_MAP[worst_code]
 
         # Build aligned table
@@ -273,14 +278,11 @@ def main() -> None:
             max(len(COL_HEADERS[3]), max(len(r[4]) for r in rows)),
         ]
 
-        def fmt_row(cols: Tuple[str, str, str, str]) -> str:
-            return '  '.join(c.ljust(w) for c, w in zip(cols, col_widths))
-
         separator = '  '.join('-' * w for w in col_widths)
         table_lines = [
-            fmt_row(COL_HEADERS),
+            fmt_row(COL_HEADERS, col_widths),
             separator,
-        ] + [fmt_row((r[0], r[1], r[3], r[4])) for r in rows]
+        ] + [fmt_row((r[0], r[1], r[3], r[4]), col_widths) for r in rows]
 
         perfdata = ' '.join(perfdata_parts)
         first_line = f'{overall} - {len(rows)} component(s) checked'
