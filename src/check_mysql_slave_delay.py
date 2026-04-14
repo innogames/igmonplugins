@@ -65,7 +65,7 @@ def parse_args():
     parser.add_option(
         '-n',
         '--name',
-        help='Name of slave to check (for multi-source replication)',
+        help='Name of replica to check (for multi-source replication)',
         action='store',
     )
     parser.add_option(
@@ -94,9 +94,9 @@ def get_server_status(opts):
         db = connect(unix_socket=opts.unix_socket)
     cur = db.cursor()
     if opts.name:
-        cur.execute(f"SHOW SLAVE STATUS FOR CHANNEL '{opts.name}'")
+        cur.execute(f"SHOW REPLICA STATUS FOR CHANNEL '{opts.name}'")
     else:
-        cur.execute('SHOW SLAVE STATUS')
+        cur.execute('SHOW REPLICA STATUS')
     res = [dict(zip(cur.column_names, r)) for r in cur.fetchall()]
     cur.close()
     db.close()
@@ -126,7 +126,7 @@ def save_current_state(seconds_behind: int) -> None:
 def is_catching_up(
     current_seconds: int, previous_seconds: int, previous_time: float
 ) -> bool:
-    """Check if the slave is actually catching up with the master"""
+    """Check if the replica is actually catching up with the source"""
 
     if previous_time == 0:
         return False
@@ -150,17 +150,17 @@ def check_server(opts):
     except Exception as e:
         return ['CRITICAL', str(e.args)]
 
-    current_behind = s['Seconds_Behind_Master']
+    current_behind = s['Seconds_Behind_Source']
     prev_behind, prev_time = load_previous_state()
 
-    msg = 'SLAVE IO Running: ' + s['Slave_IO_Running']
-    msg += ', SLAVE SQL Running: ' + s['Slave_SQL_Running']
-    msg += ', ' + str(current_behind) + ' secs behind Master'
+    msg = 'Replica IO Running: ' + s['Replica_IO_Running']
+    msg += ', Replica SQL Running: ' + s['Replica_SQL_Running']
+    msg += ', ' + str(current_behind) + ' secs behind Source'
 
     # Save current state for next check
     save_current_state(current_behind)
 
-    if s['Slave_IO_Running'] != 'Yes' or s['Slave_SQL_Running'] != 'Yes':
+    if s['Replica_IO_Running'] != 'Yes' or s['Replica_SQL_Running'] != 'Yes':
         return ['CRITICAL', msg]
 
     # Critical threshold check with catch-up logic
