@@ -252,7 +252,7 @@ def main() -> None:
 
             if delta_dropped >= args.critical:
                 code = 2
-            elif delta_dropped > 0:
+            elif delta_dropped >= args.warning:
                 code = 1
             else:
                 code = 0
