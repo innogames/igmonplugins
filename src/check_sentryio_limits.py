@@ -188,7 +188,7 @@ def main():
                 exit = 1
                 print(f"WARNING: {team['summed_events']} "
                       f"events are configured, but {args.per_team_limit} "
-                      f"allowed for team: {team['slug']}")
+                      f"allowed for team: {team['slug']} per day")
 
     # Check if organization wide limit is reached
     if args.organization_limit:
@@ -201,7 +201,7 @@ def main():
             exit = 1
             print(f"WARNING: {organization['summed_events']} events are "
                   f"configured, but {args.organization_limit} allowed in "
-                  "total")
+                  "total per day")
         # If team limit is hit but organization limit is not
         elif exit == 1:
             print(f"{organization['summed_events']} events are configured "
@@ -210,7 +210,7 @@ def main():
     # If neither team nor organization limit is hit
     if exit == 0:
         print(f"OK: {organization['summed_events']} "
-              "events are configured in total")
+              "events are configured per day in total")
 
     sys.exit(exit)
 
