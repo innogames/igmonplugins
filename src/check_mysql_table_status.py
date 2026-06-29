@@ -30,7 +30,10 @@ Copyright (c) 2020 InnoGames GmbH
 from argparse import ArgumentParser, RawTextHelpFormatter
 from sys import exit
 
-from mysql.connector import connect
+try:
+    from pymysql import connect
+except ImportError:
+    from mysql.connector import connect
 
 DEFAULT_MODES = ['rows', 'data_length', 'index_length']
 MESSAGE_TYPES = ['ok', 'warning', 'critical', 'perf']
@@ -80,7 +83,7 @@ def main():
     if arguments.user:
         connection_kwargs['user'] = arguments.user
         if arguments.passwd:
-            connection_kwargs['passwd'] = arguments.passwd
+            connection_kwargs['password'] = arguments.passwd
     database = Database(connect(**connection_kwargs))
     output_classes = [OutputTables]
     if arguments.avg:

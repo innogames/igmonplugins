@@ -26,7 +26,10 @@ import json
 import optparse
 import time
 
-from mysql.connector import connect
+try:
+    from pymysql import connect
+except ImportError:
+    from mysql.connector import connect
 
 STATE_FILE = '/tmp/mysql_replication_state.json'
 
@@ -88,7 +91,8 @@ def parse_args():
 def get_server_status(opts):
     if opts.user:
         db = connect(
-            user=opts.user, passwd=opts.password, unix_socket=opts.unix_socket
+            user=opts.user, password=opts.password,
+            unix_socket=opts.unix_socket
         )
     else:
         db = connect(unix_socket=opts.unix_socket)
@@ -97,7 +101,8 @@ def get_server_status(opts):
         cur.execute(f"SHOW REPLICA STATUS FOR CHANNEL '{opts.name}'")
     else:
         cur.execute('SHOW REPLICA STATUS')
-    res = [dict(zip(cur.column_names, r)) for r in cur.fetchall()]
+    columns = [d[0] for d in cur.description]
+    res = [dict(zip(columns, r)) for r in cur.fetchall()]
     cur.close()
     db.close()
     return res[0]

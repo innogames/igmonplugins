@@ -19,7 +19,13 @@ from argparse import ArgumentParser, ArgumentTypeError, RawTextHelpFormatter
 from contextlib import contextmanager
 from sys import exit
 
-from mysql.connector import Error as MySQLError, connect
+try:
+    import pymysql
+    from pymysql import connect, Error as MySQLError
+    _PYMYSQL = True
+except ImportError:
+    from mysql.connector import Error as MySQLError, connect
+    _PYMYSQL = False
 
 
 def parse_args():
@@ -87,7 +93,7 @@ def main():
 
     # Build connection kwargs with timeouts
     connection_kwargs = {
-        'connection_timeout': 10,
+        ('connect_timeout' if _PYMYSQL else 'connection_timeout'): 10,
     }
 
     if args.host == 'localhost':
@@ -252,7 +258,10 @@ class ClusterFilter:
 class ClusterDatabase:
     def __init__(self, connection):
         self.connection = connection
-        self.cursor = connection.cursor(dictionary=True)
+        if _PYMYSQL:
+            self.cursor = connection.cursor(pymysql.cursors.DictCursor)
+        else:
+            self.cursor = connection.cursor(dictionary=True)
         self._members = None
         self._cluster_info = None
         self._member_stats = None

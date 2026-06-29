@@ -30,10 +30,10 @@ Copyright (c) 2020 InnoGames GmbH
 # THE SOFTWARE.
 
 from argparse import ArgumentParser
-from mysql.connector import (
-    connect,
-    DatabaseError,
-)
+try:
+    from pymysql import connect, DatabaseError
+except ImportError:
+    from mysql.connector import connect, DatabaseError
 
 
 def parse_args():

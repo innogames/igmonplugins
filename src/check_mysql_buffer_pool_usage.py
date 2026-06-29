@@ -29,10 +29,10 @@ Copyright (c) 2025 InnoGames GmbH
 from argparse import ArgumentParser, Namespace
 from contextlib import closing
 
-from mysql.connector import (
-    connect,
-    DatabaseError,
-)
+try:
+    from pymysql import connect, DatabaseError
+except ImportError:
+    from mysql.connector import connect, DatabaseError
 
 
 def parse_args() -> Namespace:

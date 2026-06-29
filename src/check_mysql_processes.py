@@ -71,7 +71,10 @@ from operator import itemgetter
 from re import compile as regexp_compile
 from sys import exit
 
-from mysql.connector import connect
+try:
+    from pymysql import connect
+except ImportError:
+    from mysql.connector import connect
 
 
 def parse_args():
@@ -334,8 +337,8 @@ class Interval:
 
 
 class Filter:
-    pattern = regexp_compile('\s*'.join([  # Allow spaces between everything
-        '\A',
+    pattern = regexp_compile(r'\s*'.join([  # Allow spaces between everything
+        r'\A',
         '(?:',  # Count clause
         '(?P<count_number>[0-9]+)',
         '(?P<count_unit>%?)',
@@ -360,7 +363,7 @@ class Filter:
         '(?:at',  # State after separator
         '(?P<command_state>[a-z; ]+?)',
         ')?',
-        '\Z',
+        r'\Z',
     ]).format(
         time_units='|'.join(k for k, v in Interval.units)
     ))

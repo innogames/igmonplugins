@@ -35,10 +35,10 @@ Copyright (c) 2019 InnoGames GmbH
 # THE SOFTWARE.
 
 from argparse import ArgumentParser
-from mysql.connector import (
-    connect,
-    DatabaseError,
-)
+try:
+    from pymysql import connect, DatabaseError
+except ImportError:
+    from mysql.connector import connect, DatabaseError
 
 class TooFewTimestampsError(Exception):
    """Raised when there are too few timestamps to compare"""
