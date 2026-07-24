@@ -2,6 +2,8 @@
 #
 # InnoGames Monitoring Plugins - Last Puppet Run Check
 #
+# Note: superseeded by check_puppet_health.py - will be removed after switch
+#
 # Copyright (c) 2018 InnoGames GmbH
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
