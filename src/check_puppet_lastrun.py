@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """InnoGames Monitoring Plugins - Puppetd Check
 
+Note: superseeded by check_puppet_health.py - will be removed after switch
+
 Copyright (c) 2021 InnoGames GmbH
 """
 # Permission is hereby granted, free of charge, to any person obtaining a copy
