@@ -62,8 +62,10 @@ def check_invalid_indexes(databases):
     for db in databases:
         try:
             result = (
+                # Keep stderr separate, so warnings like collation version
+                # mismatches after libc upgrades don't pollute the result
                 subprocess.check_output(
-                    ["psql", db, "-XqtAc", query], stderr=subprocess.STDOUT
+                    ["psql", db, "-XqtAc", query], stderr=subprocess.PIPE
                 )
                 .decode()
                 .strip()
@@ -71,7 +73,7 @@ def check_invalid_indexes(databases):
             if result != "f":
                 invalid_dbs.append(db)
         except subprocess.CalledProcessError as e:
-            print(f"Error checking database {db}: {e.output.decode().strip()}")
+            print(f"Error checking database {db}: {e.stderr.decode().strip()}")
             sys.exit(2)
 
     return invalid_dbs
