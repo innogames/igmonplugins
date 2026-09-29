@@ -170,7 +170,9 @@ def fetch_cert_info(domain, ip, port, timeout):
         timeout,
     )
 
-    conn = socket.create_connection((ip, port), timeout)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
 
     with context.wrap_socket(
         conn,
