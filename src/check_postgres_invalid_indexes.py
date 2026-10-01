@@ -40,7 +40,11 @@ def main():
 
     if invalid_indexes:
         print(
-            f"WARNING - There are invalid indexes in the following databases: {', '.join(invalid_indexes)}"
+            "WARNING - There are invalid indexes: "
+            + "; ".join(
+                f"{db}: {', '.join(indexes)}"
+                for db, indexes in invalid_indexes.items()
+            )
         )
         sys.exit(1)
     else:
@@ -52,12 +56,13 @@ def check_invalid_indexes(databases):
     """Check for invalid indexes in the specified databases
 
     :param databases: list of database names
-    :return: list of databases with invalid indexes
+    :return: dict mapping database names to lists of invalid index names
     """
     query = (
-        "SELECT exists(SELECT indexrelid FROM pg_index i WHERE i.indisvalid IS FALSE);"
+        "SELECT i.indexrelid::regclass FROM pg_index i "
+        "WHERE i.indisvalid IS FALSE ORDER BY 1;"
     )
-    invalid_dbs = []
+    invalid_dbs = {}
 
     for db in databases:
         try:
@@ -70,8 +75,8 @@ def check_invalid_indexes(databases):
                 .decode()
                 .strip()
             )
-            if result != "f":
-                invalid_dbs.append(db)
+            if result:
+                invalid_dbs[db] = result.splitlines()
         except subprocess.CalledProcessError as e:
             print(f"Error checking database {db}: {e.stderr.decode().strip()}")
             sys.exit(2)
