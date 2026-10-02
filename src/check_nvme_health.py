@@ -29,10 +29,10 @@ import json
 import os
 import sys
 from argparse import ArgumentParser
-from subprocess import CalledProcessError, STDOUT, check_output
+from subprocess import PIPE, CalledProcessError, check_output
 
 
-class ExitCodes():
+class ExitCodes:
     OK = 0
     WARNING = 1
     CRITICAL = 2
@@ -41,6 +41,10 @@ class ExitCodes():
     @classmethod
     def label(cls, code):
         return {cls.OK: 'OK', cls.WARNING: 'WARNING', cls.CRITICAL: 'CRITICAL', cls.UNKNOWN: 'UNKNOWN'}[code]
+
+
+class MissingPercentUsedError(Exception):
+    pass
 
 
 def parse_args():
@@ -73,6 +77,7 @@ def main():
     code = ExitCodes.OK
     summaries = []
     perfdata = []
+    messages = []
 
     for device in devices:
         name = os.path.basename(device)
@@ -86,20 +91,18 @@ def main():
             print(f'UNKNOWN - Error reading {device}: {e}')
             sys.exit(ExitCodes.UNKNOWN)
 
-        percent_used = smart.get('percent_used')
-        if percent_used is None:
+        try:
+            device_code, device_summaries, device_perfdata, device_messages = check_device(
+                name, smart, args.warning, args.critical,
+            )
+        except MissingPercentUsedError:
             print(f'UNKNOWN - percent_used missing in smart-log output for {device}')
             sys.exit(ExitCodes.UNKNOWN)
 
-        remaining = 100 - percent_used
-
-        if remaining <= args.critical:
-            code = max(code, ExitCodes.CRITICAL)
-        elif remaining <= args.warning:
-            code = max(code, ExitCodes.WARNING)
-
-        summaries.append(f'{name} life={remaining}%')
-        perfdata.append(f'{name}_life={remaining}%;{args.warning};{args.critical};0;100')
+        code = max(code, device_code)
+        summaries.extend(device_summaries)
+        perfdata.extend(device_perfdata)
+        messages.extend(device_messages)
 
     status = ExitCodes.label(code)
     if len(summaries) == 1:
@@ -107,6 +110,7 @@ def main():
     else:
         lines = [f'{status} | {" ".join(perfdata)}']
         lines.extend(summaries)
+    lines.extend(messages)
     print('\n'.join(lines))
     sys.exit(code)
 
@@ -123,9 +127,54 @@ def get_smart_log(device):
     """Run nvme smart-log on device and return parsed JSON dict"""
     raw = check_output(
         ['nvme', 'smart-log', '--output-format=json', device],
-        stderr=STDOUT,
+        stderr=PIPE,
     )
     return json.loads(raw.decode())
+
+
+def check_device(device, smart, warning, critical):
+    """Check selected NVMe SMART metrics for a device.
+
+    Returns a tuple of (code, summaries, perfdata, messages).
+    Raises MissingPercentUsedError if percent_used is absent.
+    """
+    code = ExitCodes.OK
+    summaries = []
+    perfdata = []
+    messages = []
+
+    percent_used = smart.get('percent_used')
+    if percent_used is None:
+        raise MissingPercentUsedError(device)
+
+    remaining = 100 - percent_used
+    if remaining <= critical:
+        code = ExitCodes.CRITICAL
+    elif remaining <= warning:
+        code = ExitCodes.WARNING
+
+    summaries.append(f'{device} life={remaining}%')
+    perfdata.append(f'{device}_life={remaining}%;{warning};{critical};0;100')
+
+    if smart.get('critical_warning', 0) != 0:
+        code = max(code, ExitCodes.CRITICAL)
+        messages.append(f'{device} has critical warning')
+
+    if smart.get('media_errors', 0) != 0:
+        code = max(code, ExitCodes.CRITICAL)
+        messages.append(f'{device} has media errors')
+
+    if smart.get('num_err_log_entries', 0) != 0:
+        code = max(code, ExitCodes.CRITICAL)
+        messages.append(f'{device} has errors logged')
+
+    avail_spare = smart.get('avail_spare')
+    spare_thresh = smart.get('spare_thresh')
+    if avail_spare is not None and spare_thresh is not None and avail_spare <= spare_thresh:
+        code = max(code, ExitCodes.CRITICAL)
+        messages.append(f'{device} available spare is below threshold: {avail_spare}%<={spare_thresh}%')
+
+    return code, summaries, perfdata, messages
 
 
 if __name__ == '__main__':
