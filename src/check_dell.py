@@ -31,16 +31,16 @@ import traceback
 from subprocess import check_output, CalledProcessError, PIPE
 
 racadm_commands = {
-    'sel':           'getsel -o',
-    'active_errors': 'getactiveerrors',
-    'redundancy':    'getredundancymode',
-    'fans':          'getfanreqinfo',
-    'sensors':       'getsensorinfo',
+    "sel": "getsel -o",
+    "active_errors": "getactiveerrors",
+    "redundancy": "getredundancymode",
+    "fans": "getfanreqinfo",
+    "sensors": "getsensorinfo",
 }
 
 ipmi_commands = {
-    'sel':     'sel elist',
-    'sensors': 'sdr list',
+    "sel": "sel elist",
+    "sensors": "sdr list",
 }
 
 
@@ -54,24 +54,24 @@ class NagiosCodes:
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--host',
-        default='localhost',
-        help='Hostname or IP of DRAC/CMC to scan.',
+        "--host",
+        default="localhost",
+        help="Hostname or IP of DRAC/CMC to scan.",
     )
     parser.add_argument(
-        '--command',
+        "--command",
         required=True,
-        choices=list(racadm_commands) + ['ipmi_' + c for c in ipmi_commands],
-        help='Command to run via idracadm.',
+        choices=list(racadm_commands) + ["ipmi_" + c for c in ipmi_commands],
+        help="Command to run via idracadm.",
     )
     parser.add_argument(
-        '--user',
-        default='nagios',
-        help='IPMI/DRAC username',
+        "--user",
+        default="nagios",
+        help="IPMI/DRAC username",
     )
     parser.add_argument(
-        '--password',
-        help='IPMI/DRAC password',
+        "--password",
+        help="IPMI/DRAC password",
     )
 
     return parser.parse_args()
@@ -81,9 +81,9 @@ def main():
     args = parse_args()
     func = check_hardware
     command = args.command
-    if command.startswith('ipmi_'):
+    if command.startswith("ipmi_"):
         func = check_ipmi
-        command = command[len('ipmi_'):]
+        command = command[len("ipmi_") :]
     ret, out, timeout = func(args.host, args.user, args.password, command)
     print(out)
     sys.exit(ret)
@@ -97,51 +97,49 @@ def check_hardware(host, user, password, command):
     try:
         res = idrac_command(host, user, password, racadm_commands[command])
     except OSError:
-        return (NagiosCodes.unknown, 'UNKNOWN: unable to run racadm.', False)
+        return (NagiosCodes.unknown, "UNKNOWN: unable to run racadm.", False)
     except CalledProcessError as e:
-        return (NagiosCodes.unknown, f'UNKNOWN: {e.stderr}', False)
+        return (NagiosCodes.unknown, f"UNKNOWN: {e.stderr}", False)
     else:
         try:
             if len(res):
-                if res[0].find('Invalid subcommand specified.') != -1:
+                if res[0].find("Invalid subcommand specified.") != -1:
                     return (
                         NagiosCodes.unknown,
-                        'UNKNOWN: Invalid subcommand specified to DRAC/CMC.',
+                        "UNKNOWN: Invalid subcommand specified to DRAC/CMC.",
                         False,
                     )
                 if (
-                    res[0].find(
-                        'Unable to connect to RAC at specified IP address'
-                    ) != -1
-                    or res[0].find(
-                        'Unable to login to RAC using the specified address'
-                    ) != -1
+                    res[0].find("Unable to connect to RAC at specified IP address")
+                    != -1
+                    or res[0].find("Unable to login to RAC using the specified address")
+                    != -1
                 ):
                     return (
                         NagiosCodes.warning,
-                        'WARNING: Unable to connect to RAC!',
+                        "WARNING: Unable to connect to RAC!",
                         False,
                     )
-            if command == 'active_errors':
+            if command == "active_errors":
                 out = check_getactiveerrors(res)
-            elif command == 'fans':
+            elif command == "fans":
                 out = check_fans(res)
-            elif command == 'redundancy':
+            elif command == "redundancy":
                 out = check_redundancy(res)
-            elif command == 'sensors':
+            elif command == "sensors":
                 out = check_sensors(res)
-            elif command == 'sel':
+            elif command == "sel":
                 out = check_racadm_sel(host, user, password, res)
             else:
                 out = (
                     NagiosCodes.unknown,
-                    'UNKNOWN: Invalid subcommand specified to check.',
+                    "UNKNOWN: Invalid subcommand specified to check.",
                 )
         except Exception:
             out = (
                 NagiosCodes.unknown,
-                'UNKNOWN: Caught exception while parsing results.\n' +
-                traceback.format_exc(),
+                "UNKNOWN: Caught exception while parsing results.\n"
+                + traceback.format_exc(),
             )
 
     return out[0], out[1], False
@@ -155,46 +153,39 @@ def check_ipmi(host, user, password, command):
     try:
         res = ipmi_command(host, user, password, ipmi_commands[command])
     except OSError:
-        return (
-            NagiosCodes.unknown, 'UNKNOWN: unable to run ipmitool.', False
-        )
+        return (NagiosCodes.unknown, "UNKNOWN: unable to run ipmitool.", False)
     except CalledProcessError as e:
-        return (
-            NagiosCodes.unknown, f'UNKNOWN: {e.stderr}', False
-        )
+        return (NagiosCodes.unknown, f"UNKNOWN: {e.stderr}", False)
 
     for r1 in res:
         for r2 in r1:
-            if r2.find('Insufficient privilege level') != -1:
+            if r2.find("Insufficient privilege level") != -1:
                 return (
                     NagiosCodes.ok,
-                    'Ignoring check on this device because of wrong '
-                    'privileges: {}'.format(r2),
+                    "Ignoring check on this device because of wrong "
+                    "privileges: {}".format(r2),
                     False,
                 )
-            if (
-                r2.find('Invalid user name') != -1 or
-                r2.find('command failed') != -1
-            ):
-                return NagiosCodes.unknown, '{}'.format(r2), False
-            if r2.find('Unable to establish IPMI') != -1:
-                return NagiosCodes.unknown, '{}'.format(r2), True
+            if r2.find("Invalid user name") != -1 or r2.find("command failed") != -1:
+                return NagiosCodes.unknown, "{}".format(r2), False
+            if r2.find("Unable to establish IPMI") != -1:
+                return NagiosCodes.unknown, "{}".format(r2), True
 
     try:
-        if command == 'sel':
+        if command == "sel":
             out = check_ipmi_sel(res)
-        elif command == 'sensors':
+        elif command == "sensors":
             out = check_ipmi_sensors(res)
         else:
             out = (
                 NagiosCodes.unknown,
-                'UNKNOWN: Invalid subcommand specified to check.'
+                "UNKNOWN: Invalid subcommand specified to check.",
             )
     except Exception:
         out = (
             NagiosCodes.unknown,
-            'UNKNOWN: Caught exception while parsing results.\n' +
-            traceback.format_exc(),
+            "UNKNOWN: Caught exception while parsing results.\n"
+            + traceback.format_exc(),
         )
 
     return out[0], out[1], False
@@ -207,7 +198,7 @@ def check_getactiveerrors(msgs):
 
     error = {}
     for msg in msgs:
-        msg = list(map(str.strip, msg.split('=')))
+        msg = list(map(str.strip, msg.split("=")))
         if len(msg) != 2:
             continue
 
@@ -219,20 +210,22 @@ def check_getactiveerrors(msgs):
         error[msg[0]] = msg[1]
     errors.append(error)
 
-    output = ''
+    output = ""
     for error in errors:
         if error == {}:
             continue
-        output += 'module: {}, severity: {}, message: {}\n'.format(
-            error['Module ID'], error['Severity'], error['Message'],
+        output += "module: {}, severity: {}, message: {}\n".format(
+            error["Module ID"],
+            error["Severity"],
+            error["Message"],
         )
 
-    if output == '':
+    if output == "":
         exit_code = NagiosCodes.ok
-        output = 'OK: CMC reports no errors'
+        output = "OK: CMC reports no errors"
     else:
         exit_code = NagiosCodes.critical
-        output = 'CRITICAL: CMC reports the following errors:\n' + output
+        output = "CRITICAL: CMC reports the following errors:\n" + output
 
     return (exit_code, output)
 
@@ -242,20 +235,20 @@ def check_fans(res):
     try:
         fan_req = int(res[1].strip())
     except:
-        return NagiosCodes.unknown, 'UNKNOWN: Unable to read fan information.'
+        return NagiosCodes.unknown, "UNKNOWN: Unable to read fan information."
 
     if fan_req > 70:
-        return (NagiosCodes.warning, 'WARNING: Fan request: %s%%' % (fan_req))
+        return (NagiosCodes.warning, "WARNING: Fan request: %s%%" % (fan_req))
     if fan_req > 90:
-        return NagiosCodes.critical, 'CRITICAL: Fan request: %s%%' % (fan_req)
-    return NagiosCodes.ok, 'OK: Fan request: %s%%' % fan_req
+        return NagiosCodes.critical, "CRITICAL: Fan request: %s%%" % (fan_req)
+    return NagiosCodes.ok, "OK: Fan request: %s%%" % fan_req
 
 
 def check_redundancy(res):
     """Check the response for redundancy"""
-    if res[0].strip() == 'Redundant':
-        return NagiosCodes.ok, 'OK: BladeCenter is redundant.'
-    return NagiosCodes.warning, 'WARNING: Redundancy lost! %s' % res[0].strip
+    if res[0].strip() == "Redundant":
+        return NagiosCodes.ok, "OK: BladeCenter is redundant."
+    return NagiosCodes.warning, "WARNING: Redundancy lost! %s" % res[0].strip
 
 
 def check_sensors(res):
@@ -263,24 +256,25 @@ def check_sensors(res):
     errors = []
     st_pos = 0
     for line in res:
-        line = re.split(r'\s+', line.strip())
-        st_pos = list(filter(lambda d: d.strip().lower() == '<status>', line))
+        line = re.split(r"\s+", line.strip())
+        st_pos = list(filter(lambda d: d.strip().lower() == "<status>", line))
         if not st_pos:
             continue
         st_pos = line.index(st_pos[0].strip())
 
-        if (
-            len(line) >= st_pos and
-            line[st_pos].lower() not in ('ok', 'online', '<status>')
+        if len(line) >= st_pos and line[st_pos].lower() not in (
+            "ok",
+            "online",
+            "<status>",
         ):
-            errors.append('%s: %s' % (line[0], line[2]))
+            errors.append("%s: %s" % (line[0], line[2]))
 
     if not len(errors):
-        return (NagiosCodes.ok, 'OK: All sensors are fine')
+        return (NagiosCodes.ok, "OK: All sensors are fine")
     else:
         return (
             NagiosCodes.warning,
-            'WARNING: Malfunctioned sensors: %s' % ', '.join(errors),
+            "WARNING: Malfunctioned sensors: %s" % ", ".join(errors),
         )
 
 
@@ -289,73 +283,84 @@ def check_racadm_sel(host, user, password, res):
     if len(res):
         crit = False
         msgs = []
-        head = ''
+        head = ""
         for line in res:
-            linet = line.split(' ')
-            if linet[5].lower() == 'critical':
+            linet = line.split(" ")
+            if linet[5].lower() == "critical":
                 crit = True
                 head = line
 
             # reverse order
             msgs.insert(0, line)
 
-        multiline = '\n'.join(msgs)[:2048]
+        multiline = "\n".join(msgs)[:2048]
 
-        if head == '':
+        if head == "":
             head = msgs[0]
 
         if crit:
-            return NagiosCodes.warning, 'WARNING: %s\n\n%s' % (head, multiline)
+            return NagiosCodes.warning, "WARNING: %s\n\n%s" % (head, multiline)
         else:
-            return NagiosCodes.ok, 'OK: %s\n\n%s' % (head, multiline)
+            return NagiosCodes.ok, "OK: %s\n\n%s" % (head, multiline)
 
     # SEL seems too empty.  There should be at least message saying that it
     # was cleared.  DRACs >= 7 return no SEL at all.  Check size of SEL and
     # complain, if there is more than 1 message.
     try:
-        out = idrac_command(host, user, password, 'getsel -i')
+        out = idrac_command(host, user, password, "getsel -i")
     except CalledProcessError as e:
-        return NagiosCodes.unknown, f'UNKNOWN: {e.stderr}'
+        return NagiosCodes.unknown, f"UNKNOWN: {e.stderr}"
 
-    numerrors = int(out[0].split(':')[1])
+    numerrors = int(out[0].split(":")[1])
     if numerrors > 1:
         return (
             NagiosCodes.warning,
-            'WARNING: SEL contains %d messages which I can not read from '
-            'this version of DRAC' % (numerrors),
+            "WARNING: SEL contains %d messages which I can not read from "
+            "this version of DRAC" % (numerrors),
         )
-    return NagiosCodes.ok, 'OK: SEL is truly empty'
+    return NagiosCodes.ok, "OK: SEL is truly empty"
 
 
 def check_ipmi_sel(res):
     """Check the response for the IPMI SEL"""
     entries = []
     code = NagiosCodes.ok
-    msg = 'OK'
+    msg = "OK"
     for line in res:
         # Normally line is split by | symbol
         # But we don't need this detail for finding substrings.
         linestr = " ".join(line)
-        if linestr.find('Log area reset/cleared') != -1:
-            continue
-        if linestr.find('SEL has no entries') != -1:
+        ignore = False
+        for ignore_str in (
+            # Cleaning the SEL.
+            "Log area reset/cleared",
+            "SEL has no entries",
+            # Booting an OS which has iDRAC agent installed.
+            "OEM record",
+            "OS Boot",
+            "OS Critical Stop OS graceful shutdown Asserted",
+        ):
+            if ignore_str in linestr:
+                ignore = True
+
+        if ignore:
             continue
 
         # Reverse order
-        entries.insert(0, ' '.join(line[1:]))
+        entries.insert(0, " ".join(line[1:]))
 
         # If a CMOS battery is complaining, we add the message, but return OK,
         # as we don't replace CMOS batteries anymore.
-        if 'CMOS Battery' not in linestr:
+        if "CMOS Battery" not in linestr:
             code = NagiosCodes.warning
-            msg = 'WARNING'
+            msg = "WARNING"
 
     # Naemon has a limit on the output length.
-    multiline = '\n'.join(entries)[:2048]
+    multiline = "\n".join(entries)[:2048]
 
     if len(entries):
-        return (code, '%s: %s\n\n%s' % (msg, entries[0], multiline))
-    return (NagiosCodes.ok, 'OK: SEL is empty')
+        return (code, "%s: %s\n\n%s" % (msg, entries[0], multiline))
+    return (NagiosCodes.ok, "OK: SEL is empty")
 
 
 def check_ipmi_sensors(res):
@@ -363,14 +368,14 @@ def check_ipmi_sensors(res):
     crit = False
     msgs = []
     for line in res:
-        if line[2] not in ('ok', 'ns'):
+        if line[2] not in ("ok", "ns"):
             crit = True
-            msgs.append(' '.join(line[0:]))
+            msgs.append(" ".join(line[0:]))
 
     if crit:
-        return NagiosCodes.warning, 'WARNING: %s' % ', '.join(msgs)
+        return NagiosCodes.warning, "WARNING: %s" % ", ".join(msgs)
     else:
-        return NagiosCodes.ok, 'OK: All sensors OK'
+        return NagiosCodes.ok, "OK: All sensors OK"
 
 
 def idrac_command(host, user, password, command):
@@ -380,20 +385,26 @@ def idrac_command(host, user, password, command):
 
     res = check_output(
         [
-            '/opt/dell/srvadmin/bin/idracadm7',
-            '-r', host,
-            '-u', user,
-            '-p', password,
-        ] + command.split(' '),
-        close_fds=False, universal_newlines=True, stderr=PIPE
+            "/opt/dell/srvadmin/bin/idracadm7",
+            "-r",
+            host,
+            "-u",
+            user,
+            "-p",
+            password,
+        ]
+        + command.split(" "),
+        close_fds=False,
+        universal_newlines=True,
+        stderr=PIPE,
     )
 
     for line in res.splitlines():
         line = line.strip()
         if (
-            'Certificate is invalid' in line or
-            'Use -S option for racadm' in line or
-            line == ''
+            "Certificate is invalid" in line
+            or "Use -S option for racadm" in line
+            or line == ""
         ):
             continue
         ret.append(line)
@@ -405,35 +416,41 @@ def ipmi_command(host, user, password, command):
     """Execute IPMI command"""
 
     # It must be an array afterwards!
-    command = command.split(' ')
+    command = command.split(" ")
 
     ipmi_cmd = [
-        '/usr/bin/ipmitool',
-        '-I', 'lanplus',
-        '-H', host,
-        '-L', 'USER',
-        '-U', user,
-        '-P', password,
+        "/usr/bin/ipmitool",
+        "-I",
+        "lanplus",
+        "-H",
+        host,
+        "-L",
+        "USER",
+        "-U",
+        user,
+        "-P",
+        password,
     ]
 
     res = check_output(
-        ipmi_cmd + ['-I', 'lanplus'] + command,
-        close_fds=False, universal_newlines=True, stderr=PIPE
+        ipmi_cmd + ["-I", "lanplus"] + command,
+        close_fds=False,
+        universal_newlines=True,
+        stderr=PIPE,
     )
 
-    if res.find('0xd4 Insufficient privilege level') != -1:
+    if res.find("0xd4 Insufficient privilege level") != -1:
         res = check_output(
-            ipmi_cmd + command,
-            close_fds=False, universal_newlines=True, stderr=PIPE
+            ipmi_cmd + command, close_fds=False, universal_newlines=True, stderr=PIPE
         )
 
     ret = []
     for line in res.splitlines():
-        line = list(map(str.strip, line.split('|')))
+        line = list(map(str.strip, line.split("|")))
         ret.append(line)
 
     return ret
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
