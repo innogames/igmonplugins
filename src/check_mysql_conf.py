@@ -60,6 +60,18 @@ def parse_args():
 
     return parser.parse_args()
 
+def check_config_file(conf_fd):
+    """Check if the given config file is not empty and has a [mysqld] section"""
+    found_mysqld = False
+    for line in conf_fd:
+        if line.strip() == '[mysqld]':
+            found_mysqld = True
+            break
+    if found_mysqld:
+        for line in conf_fd:
+            if line.strip():
+                return True
+    return False
 
 def main():
     args = parse_args()
@@ -79,13 +91,9 @@ def main():
     check_procs = []
     for conf_file in args.conf_files:
         with open(conf_file) as conf_fd:
-            for line in conf_fd:
-                if line.strip() == '[mysqld]':
-                    break
-            else:
-                continue
-        proc = Popen(command + [conf_file], stdout=PIPE)
-        check_procs.append(proc)
+            if check_config_file(conf_fd):
+                proc = Popen(command + [conf_file], stdout=PIPE)
+                check_procs.append(proc)
 
     # Wait for all check processes to finish
     exit_code = max(p.wait() for p in check_procs)
