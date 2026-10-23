@@ -80,7 +80,6 @@ component_health = ExitCodes.OK
 if 'components' in health_status:
     for component, status in health_status['components'].items():
         component_status = status['status']
-        message += f'({component}={component_status}) '
         if component_status.lower() == 'critical':
             component_health = ExitCodes.CRITICAL
         if (
@@ -92,13 +91,26 @@ if 'components' in health_status:
         # a plain presence marker, not a real perfdata value.
         details += f'{component}={component_status} '
 
-        if 'details' in status:
-            for detail, value in status['details'].items():
-                try:
-                    int(value)
-                    details += f"'{component}:{detail}'={value} "
-                except (ValueError, TypeError):
-                    details += f"'{component}:{detail}->{value}'=0 "
+        component_details = status.get('details', {})
+        for detail, value in component_details.items():
+            try:
+                int(value)
+                details += f"'{component}:{detail}'={value} "
+            except (ValueError, TypeError):
+                details += f"'{component}:{detail}->{value}'=0 "
+
+        # Repeat the details of unhealthy components in the human readable part.
+        # Application specific indicators report the counters that drove their status
+        # there (e.g. if businessProcess exposes failedRuns/failedSales),
+        # Apps without these details simply render as before.
+        if component_details and component_status.lower() != 'up':
+            shown = ', '.join(
+                f'{detail}={value}'
+                for detail, value in component_details.items()
+            )
+            message += f'({component}={component_status} [{shown}]) '
+        else:
+            message += f'({component}={component_status}) '
 
 
 print(f'{message}|{details}')
