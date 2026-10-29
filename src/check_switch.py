@@ -30,12 +30,14 @@ from argparse import ArgumentParser
 from pysnmp.entity.rfc3413.oneliner.cmdgen import (
     CommandGenerator,
     CommunityData,
+    Udp6TransportTarget,
     UdpTransportTarget,
     UsmUserData,
     usmAesCfb128Protocol,
     usmDESPrivProtocol,
     usmHMACSHAAuthProtocol,
 )
+from pysnmp.error import PySnmpError
 from pysnmp.proto.rfc1902 import Integer, Counter32, Counter64
 import re
 import sys
@@ -163,7 +165,11 @@ def get_snmp_connection(args):
             privProtocol=priv_proto,
         )
 
-    transport_target = UdpTransportTarget((args.switch, 161))
+    try:
+        transport_target = Udp6TransportTarget((args.switch, 161))
+    except PySnmpError:
+        # IPv4 address or hostname without an AAAA record
+        transport_target = UdpTransportTarget((args.switch, 161))
 
     return {
         'auth_data': auth_data,
