@@ -23,6 +23,8 @@ Copyright (c) 2020 InnoGames GmbH
 
 from builtins import str
 from OpenSSL import crypto
+from cryptography import x509
+from cryptography.x509.oid import ExtensionOID, NameOID
 from argparse import ArgumentParser, FileType
 from datetime import datetime, timedelta
 from dateutil.tz import tzutc
@@ -146,8 +148,7 @@ def interval(arg):
 
 def verify_domains(cert, names):
     cert_domains = {get_issued_to(cert)}
-    for alt_domain in decode_san(get_extension_value(cert, b'subjectAltName')):
-        cert_domains.add(alt_domain)
+    cert_domains.update(get_san(cert))
 
     cert_domains = set(map(expand_ip, cert_domains))
 
@@ -165,26 +166,24 @@ def verify_domains(cert, names):
 
 
 def get_issued_to(cert):
-    for components in cert.get_subject().get_components():
-        if components[0] == b'CN':
-            return components[1].decode()
+    cn = cert.to_cryptography().subject.get_attributes_for_oid(
+        NameOID.COMMON_NAME)
+    if cn:
+        return cn[0].value
 
 
-def get_extension_value(cert, short_name):
-    for ext_num in range(cert.get_extension_count()):
-        if cert.get_extension(ext_num).get_short_name() == short_name:
-            return str(cert.get_extension(ext_num))
-
-
-def decode_san(san_string):
-    if not san_string:
+def get_san(cert):
+    try:
+        ext = cert.to_cryptography().extensions.get_extension_for_oid(
+            ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
+    except x509.ExtensionNotFound:
         return
 
-    for item in san_string.split(','):
-        key, value = item.split(':', 1)
-        key = key.strip().lower()
-        if key == 'dns' or key == 'ip address':
-            yield value.strip()
+    for name in ext.value:
+        if isinstance(name, x509.DNSName):
+            yield name.value
+        elif isinstance(name, x509.IPAddress):
+            yield str(name.value)
 
 
 def expand_ip(name):
